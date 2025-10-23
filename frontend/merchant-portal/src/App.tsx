@@ -46,9 +46,12 @@ function App() {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { token } = useAuthStore()
+  const { token, merchant } = useAuthStore()
+
+  console.log('ProtectedRoute check:', { token: token ? 'exists' : 'null', merchant })
 
   if (!token) {
+    console.log('No token found, redirecting to login')
     return <Navigate to="/login" replace />
   }
 

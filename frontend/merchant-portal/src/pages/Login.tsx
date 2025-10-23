@@ -23,8 +23,12 @@ const Login = () => {
       if (response.data?.data) {
         const { token, merchant } = response.data.data
 
+        console.log('Saving auth:', { token: token ? 'exists' : 'null', merchant })
+
         // 保存登录信息到 store
         setAuth(token, '', merchant)
+
+        console.log('Auth saved, checking store...')
 
         message.success('登录成功')
 

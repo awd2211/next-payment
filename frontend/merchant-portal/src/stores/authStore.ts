@@ -4,11 +4,15 @@ import { persist } from 'zustand/middleware'
 interface Merchant {
   id: string
   name: string
-  code: string
-  contact_email: string
-  contact_phone: string
+  email: string
+  phone?: string
+  company_name?: string
+  business_type?: string
+  country?: string
+  website?: string
   status: string
-  balance: number
+  kyc_status?: string
+  is_test_mode?: boolean
 }
 
 interface AuthState {
