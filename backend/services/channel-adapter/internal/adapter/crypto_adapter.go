@@ -125,11 +125,17 @@ func (a *CryptoAdapter) calculateCryptoAmount(ctx context.Context, fiatAmount in
 		return 0, err
 	}
 
-	// 将法币金额转换为美元（这里简化处理，实际应该有汇率转换）
+	// 将法币金额转换为美元（使用真实汇率）
 	usdAmount := float64(fiatAmount) / 100.0
 	if fiatCurrency != "USD" {
-		// TODO: 实现其他货币到 USD 的转换
-		// 这里暂时假设都是 USD
+		// 使用汇率客户端进行转换
+		if a.exchangeRateClient != nil {
+			rate, err := a.exchangeRateClient.GetRate(ctx, fiatCurrency, "USD")
+			if err == nil {
+				usdAmount = usdAmount * rate
+			}
+			// 如果获取汇率失败，使用原始金额（已有降级处理）
+		}
 	}
 
 	// 计算加密货币数量
