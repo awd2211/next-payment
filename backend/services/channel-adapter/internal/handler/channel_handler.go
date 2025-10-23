@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/channel-adapter/internal/service"
 )
 
@@ -32,14 +34,20 @@ func NewChannelHandler(channelService service.ChannelService) *ChannelHandler {
 func (h *ChannelHandler) CreatePayment(c *gin.Context) {
 	var req service.CreatePaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 从上下文获取商户ID（通常由认证中间件设置）
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, response)
 		return
 	}
 	req.MerchantID = merchantID.(uuid.UUID)
@@ -47,11 +55,21 @@ func (h *ChannelHandler) CreatePayment(c *gin.Context) {
 	// 创建支付
 	resp, err := h.channelService.CreatePayment(c.Request.Context(), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建支付失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(resp).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // QueryPayment 查询支付
@@ -65,18 +83,31 @@ func (h *ChannelHandler) CreatePayment(c *gin.Context) {
 func (h *ChannelHandler) QueryPayment(c *gin.Context) {
 	paymentNo := c.Param("payment_no")
 	if paymentNo == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "支付流水号不能为空"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "支付流水号不能为空", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 查询支付
 	resp, err := h.channelService.QueryPayment(c.Request.Context(), paymentNo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询支付失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(resp).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // QueryPaymentCompat 查询支付（兼容 Payment-Gateway 的请求格式）
@@ -94,25 +125,41 @@ func (h *ChannelHandler) QueryPaymentCompat(c *gin.Context) {
 		Channel        string `json:"channel"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 优先使用 payment_no
 	paymentNo := req.PaymentNo
 	if paymentNo == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "支付流水号不能为空"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "支付流水号不能为空", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 查询支付
 	resp, err := h.channelService.QueryPayment(c.Request.Context(), paymentNo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询支付失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(resp).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // CancelPayment 取消支付
@@ -126,17 +173,30 @@ func (h *ChannelHandler) QueryPaymentCompat(c *gin.Context) {
 func (h *ChannelHandler) CancelPayment(c *gin.Context) {
 	paymentNo := c.Param("payment_no")
 	if paymentNo == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "支付流水号不能为空"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "支付流水号不能为空", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 取消支付
 	if err := h.channelService.CancelPayment(c.Request.Context(), paymentNo); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "取消支付失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "取消成功"})
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(gin.H{"message": "取消成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // CreateRefund 创建退款
@@ -150,14 +210,20 @@ func (h *ChannelHandler) CancelPayment(c *gin.Context) {
 func (h *ChannelHandler) CreateRefund(c *gin.Context) {
 	var req service.CreateRefundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, response)
 		return
 	}
 	req.MerchantID = merchantID.(uuid.UUID)
@@ -165,11 +231,21 @@ func (h *ChannelHandler) CreateRefund(c *gin.Context) {
 	// 创建退款
 	resp, err := h.channelService.CreateRefund(c.Request.Context(), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建退款失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(resp).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // QueryRefund 查询退款
@@ -183,18 +259,31 @@ func (h *ChannelHandler) CreateRefund(c *gin.Context) {
 func (h *ChannelHandler) QueryRefund(c *gin.Context) {
 	refundNo := c.Param("refund_no")
 	if refundNo == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "退款流水号不能为空"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "退款流水号不能为空", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 查询退款
 	resp, err := h.channelService.QueryRefund(c.Request.Context(), refundNo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询退款失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(resp).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // HandleStripeWebhook 处理 Stripe Webhook
@@ -208,14 +297,20 @@ func (h *ChannelHandler) HandleStripeWebhook(c *gin.Context) {
 	// 读取请求体
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "读取请求体失败"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "读取请求体失败", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 获取签名
 	signature := c.GetHeader("Stripe-Signature")
 	if signature == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少签名"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "缺少签名", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
@@ -229,11 +324,21 @@ func (h *ChannelHandler) HandleStripeWebhook(c *gin.Context) {
 
 	// 处理 Webhook
 	if err := h.channelService.HandleWebhook(c.Request.Context(), "stripe", signature, body, headers); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "处理Stripe回调失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"received": true})
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(gin.H{"received": true}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // HandlePayPalWebhook 处理 PayPal Webhook
@@ -247,14 +352,20 @@ func (h *ChannelHandler) HandlePayPalWebhook(c *gin.Context) {
 	// 读取请求体
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "读取请求体失败"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "读取请求体失败", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 获取签名（PayPal 使用不同的签名头）
 	signature := c.GetHeader("PAYPAL-TRANSMISSION-SIG")
 	if signature == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少签名"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "缺少签名", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
@@ -268,11 +379,21 @@ func (h *ChannelHandler) HandlePayPalWebhook(c *gin.Context) {
 
 	// 处理 Webhook
 	if err := h.channelService.HandleWebhook(c.Request.Context(), "paypal", signature, body, headers); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "处理PayPal回调失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"received": true})
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(gin.H{"received": true}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // GetChannelConfig 获取渠道配置
@@ -286,29 +407,48 @@ func (h *ChannelHandler) HandlePayPalWebhook(c *gin.Context) {
 func (h *ChannelHandler) GetChannelConfig(c *gin.Context) {
 	channel := c.Param("channel")
 	if channel == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "渠道名称不能为空"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "渠道名称不能为空", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, response)
 		return
 	}
 
 	// 获取配置
 	config, err := h.channelService.GetChannelConfig(c.Request.Context(), merchantID.(uuid.UUID), channel)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取渠道配置失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 	if config == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeResourceNotFound, "配置不存在", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusNotFound, response)
 		return
 	}
 
-	c.JSON(http.StatusOK, config)
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(config).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // ListChannelConfigs 列出所有渠道配置
@@ -322,18 +462,31 @@ func (h *ChannelHandler) ListChannelConfigs(c *gin.Context) {
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, response)
 		return
 	}
 
 	// 列出配置
 	configs, err := h.channelService.ListChannelConfigs(c.Request.Context(), merchantID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			response := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), response)
+		} else {
+			response := errors.NewErrorResponse(errors.ErrCodeInternalError, "列出渠道配置失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, response)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, configs)
+	traceID := middleware.GetRequestID(c)
+	response := errors.NewSuccessResponse(configs).WithTraceID(traceID)
+	c.JSON(http.StatusOK, response)
 }
 
 // RegisterRoutes 注册路由

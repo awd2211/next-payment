@@ -20,6 +20,9 @@ import (
 	"payment-platform/channel-adapter/internal/model"
 	"payment-platform/channel-adapter/internal/repository"
 	"payment-platform/channel-adapter/internal/service"
+	grpcServer "payment-platform/channel-adapter/internal/grpc"
+	pb "github.com/payment-platform/proto/channel"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -232,7 +235,20 @@ func main() {
 	// 注册渠道路由
 	channelHandler.RegisterRoutes(r)
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50005)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	channelGrpcServer := grpcServer.NewChannelServer(channelService)
+	pb.RegisterChannelServiceServer(gRPCServer, channelGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40005)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Channel Adapter Service 正在监听 %s", addr))
