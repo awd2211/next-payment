@@ -59,17 +59,31 @@ func (h *PaymentHandler) RegisterRoutes(router *gin.Engine) {
 func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	var input service.CreatePaymentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	payment, err := h.paymentService.CreatePayment(c.Request.Context(), &input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		// 检查是否为业务错误
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "内部服务错误", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(payment))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(payment).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetPayment 获取支付详情
@@ -78,11 +92,21 @@ func (h *PaymentHandler) GetPayment(c *gin.Context) {
 
 	payment, err := h.paymentService.GetPayment(c.Request.Context(), paymentNo)
 	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeResourceNotFound, "支付记录不存在", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusNotFound, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(payment))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(payment).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // QueryPayments 查询支付列表
@@ -98,7 +122,10 @@ func (h *PaymentHandler) QueryPayments(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
@@ -135,16 +162,26 @@ func (h *PaymentHandler) QueryPayments(c *gin.Context) {
 
 	payments, total, err := h.paymentService.QueryPayment(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询支付列表失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(PageResponse{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(PageResponse{
 		List:     payments,
 		Total:    total,
 		Page:     query.Page,
 		PageSize: query.PageSize,
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CancelPayment 取消支付
@@ -153,33 +190,59 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 
 	var req CancelPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.paymentService.CancelPayment(c.Request.Context(), paymentNo, req.Reason); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "取消支付失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CreateRefund 创建退款
 func (h *PaymentHandler) CreateRefund(c *gin.Context) {
 	var input service.CreateRefundInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	refund, err := h.paymentService.CreateRefund(c.Request.Context(), &input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建退款失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(refund))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(refund).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetRefund 获取退款详情
@@ -188,11 +251,21 @@ func (h *PaymentHandler) GetRefund(c *gin.Context) {
 
 	refund, err := h.paymentService.GetRefund(c.Request.Context(), refundNo)
 	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeResourceNotFound, "退款记录不存在", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusNotFound, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(refund))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(refund).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // QueryRefunds 查询退款列表
@@ -204,7 +277,10 @@ func (h *PaymentHandler) QueryRefunds(c *gin.Context) {
 	if paymentIDStr := c.Query("payment_id"); paymentIDStr != "" {
 		paymentID, err := uuid.Parse(paymentIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse("无效的支付ID"))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的支付ID", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.PaymentID = &paymentID
@@ -213,7 +289,10 @@ func (h *PaymentHandler) QueryRefunds(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
@@ -237,48 +316,84 @@ func (h *PaymentHandler) QueryRefunds(c *gin.Context) {
 
 	refunds, total, err := h.paymentService.QueryRefunds(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询退款列表失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(PageResponse{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(PageResponse{
 		List:     refunds,
 		Total:    total,
 		Page:     query.Page,
 		PageSize: query.PageSize,
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // HandleStripeWebhook 处理Stripe回调
 func (h *PaymentHandler) HandleStripeWebhook(c *gin.Context) {
 	var data map[string]interface{}
 	if err := c.ShouldBindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.paymentService.HandleCallback(c.Request.Context(), "stripe", data); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "处理Stripe回调失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // HandlePayPalWebhook 处理PayPal回调
 func (h *PaymentHandler) HandlePayPalWebhook(c *gin.Context) {
 	var data map[string]interface{}
 	if err := c.ShouldBindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.paymentService.HandleCallback(c.Request.Context(), "paypal", data); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "处理PayPal回调失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Request/Response structures

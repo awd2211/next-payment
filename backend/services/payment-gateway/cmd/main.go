@@ -21,6 +21,9 @@ import (
 	"payment-platform/payment-gateway/internal/model"
 	"payment-platform/payment-gateway/internal/repository"
 	"payment-platform/payment-gateway/internal/service"
+	grpcServer "payment-platform/payment-gateway/internal/grpc"
+	pb "github.com/payment-platform/proto/payment"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -239,7 +242,20 @@ func main() {
 		}
 	}
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50003)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	paymentGrpcServer := grpcServer.NewPaymentServer(paymentService)
+	pb.RegisterPaymentServiceServer(gRPCServer, paymentGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40003)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Payment Gateway Service 正在监听 %s", addr))
