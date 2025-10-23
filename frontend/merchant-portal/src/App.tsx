@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { App as AntdApp } from 'antd'
 import { useAuthStore } from './stores/authStore'
 import Layout from './components/Layout'
 import WebSocketProvider from './components/WebSocketProvider'
@@ -15,7 +16,7 @@ import ApiKeys from './pages/ApiKeys'
 
 function App() {
   return (
-    <>
+    <AntdApp>
       <PWAUpdatePrompt />
       <BrowserRouter>
       <Routes>
@@ -40,7 +41,7 @@ function App() {
         </Route>
       </Routes>
       </BrowserRouter>
-    </>
+    </AntdApp>
   )
 }
 
