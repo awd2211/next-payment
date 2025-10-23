@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"payment-platform/accounting-service/internal/model"
 	"payment-platform/accounting-service/internal/repository"
 )
@@ -70,12 +71,14 @@ type AccountService interface {
 }
 
 type accountService struct {
+	db          *gorm.DB                      // 添加数据库连接，用于事务支持
 	accountRepo repository.AccountRepository
 }
 
 // NewAccountService 创建账户服务实例
-func NewAccountService(accountRepo repository.AccountRepository) AccountService {
+func NewAccountService(db *gorm.DB, accountRepo repository.AccountRepository) AccountService {
 	return &accountService{
+		db:          db,
 		accountRepo: accountRepo,
 	}
 }
@@ -505,83 +508,94 @@ func (s *accountService) ListSettlements(ctx context.Context, query *repository.
 	return s.accountRepo.ListSettlements(ctx, query)
 }
 
-// ProcessSettlement 处理结算
+// ProcessSettlement 处理结算（带事务保护）
 func (s *accountService) ProcessSettlement(ctx context.Context, settlementNo string) error {
+	// 1. 获取结算记录
 	settlement, err := s.GetSettlement(ctx, settlementNo)
 	if err != nil {
-		return err
+		return fmt.Errorf("获取结算记录失败: %w", err)
 	}
 
+	// 2. 检查结算状态
 	if settlement.Status != model.SettlementStatusPending {
-		return fmt.Errorf("结算状态不正确: %s", settlement.Status)
+		return fmt.Errorf("结算状态不正确: %s，只能处理pending状态的结算", settlement.Status)
 	}
 
-	settlement.Status = model.SettlementStatusProcessing
-	if err := s.accountRepo.UpdateSettlement(ctx, settlement); err != nil {
-		return err
-	}
-
-	// 执行结算逻辑
-
-	// 1. 获取账户信息
+	// 3. 获取账户信息（提前验证）
 	account, err := s.GetAccount(ctx, settlement.AccountID)
 	if err != nil {
-		settlement.Status = model.SettlementStatusFailed
-		s.accountRepo.UpdateSettlement(ctx, settlement)
 		return fmt.Errorf("获取账户失败: %w", err)
 	}
 
-	// 2. 检查账户状态
+	// 4. 检查账户状态（提前验证）
 	if account.Status != model.AccountStatusActive {
-		settlement.Status = model.SettlementStatusFailed
-		s.accountRepo.UpdateSettlement(ctx, settlement)
-		return fmt.Errorf("账户状态异常: %s", account.Status)
+		return fmt.Errorf("账户状态异常: %s，无法进行结算", account.Status)
 	}
 
-	// 3. 创建结算交易记录（手续费扣除）
-	if settlement.FeeAmount > 0 {
-		feeInput := &CreateTransactionInput{
+	// 5. 使用数据库事务执行结算操作（确保原子性）
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 5.1 更新结算状态为processing
+		settlement.Status = model.SettlementStatusProcessing
+		if err := s.accountRepo.UpdateSettlement(ctx, settlement); err != nil {
+			return fmt.Errorf("更新结算状态失败: %w", err)
+		}
+
+		// 5.2 创建手续费交易（如果有手续费）
+		if settlement.FeeAmount > 0 {
+			feeInput := &CreateTransactionInput{
+				AccountID:       settlement.AccountID,
+				TransactionType: model.TransactionTypeFee,
+				Amount:          -settlement.FeeAmount,
+				RelatedID:       settlement.ID,
+				RelatedNo:       settlement.SettlementNo,
+				Description:     fmt.Sprintf("结算手续费: %s", settlement.SettlementNo),
+			}
+
+			_, err := s.CreateTransaction(ctx, feeInput)
+			if err != nil {
+				return fmt.Errorf("创建手续费交易失败: %w", err)
+			}
+		}
+
+		// 5.3 创建结算交易（净额）
+		settlementInput := &CreateTransactionInput{
 			AccountID:       settlement.AccountID,
-			TransactionType: model.TransactionTypeFee,
-			Amount:          -settlement.FeeAmount,
+			TransactionType: "settlement",
+			Amount:          settlement.NetAmount,
 			RelatedID:       settlement.ID,
 			RelatedNo:       settlement.SettlementNo,
-			Description:     fmt.Sprintf("结算手续费: %s", settlement.SettlementNo),
+			Description:     fmt.Sprintf("结算: %s (周期: %s - %s)",
+				settlement.SettlementNo,
+				settlement.PeriodStart.Format("2006-01-02"),
+				settlement.PeriodEnd.Format("2006-01-02")),
 		}
 
-		_, err = s.CreateTransaction(ctx, feeInput)
+		_, err := s.CreateTransaction(ctx, settlementInput)
 		if err != nil {
-			settlement.Status = model.SettlementStatusFailed
-			s.accountRepo.UpdateSettlement(ctx, settlement)
-			return fmt.Errorf("创建手续费交易失败: %w", err)
+			return fmt.Errorf("创建结算交易失败: %w", err)
 		}
-	}
 
-	// 4. 创建结算交易记录（净额结算）
-	settlementInput := &CreateTransactionInput{
-		AccountID:       settlement.AccountID,
-		TransactionType: "settlement",
-		Amount:          settlement.NetAmount,
-		RelatedID:       settlement.ID,
-		RelatedNo:       settlement.SettlementNo,
-		Description:     fmt.Sprintf("结算: %s (周期: %s - %s)",
-			settlement.SettlementNo,
-			settlement.PeriodStart.Format("2006-01-02"),
-			settlement.PeriodEnd.Format("2006-01-02")),
-	}
+		// 5.4 完成结算（更新状态和时间）
+		now := time.Now()
+		settlement.Status = model.SettlementStatusCompleted
+		settlement.SettledAt = &now
+		if err := s.accountRepo.UpdateSettlement(ctx, settlement); err != nil {
+			return fmt.Errorf("完成结算失败: %w", err)
+		}
 
-	_, err = s.CreateTransaction(ctx, settlementInput)
+		return nil
+	})
+
 	if err != nil {
+		// 事务回滚后，尝试标记结算为失败状态（尽力而为）
 		settlement.Status = model.SettlementStatusFailed
-		s.accountRepo.UpdateSettlement(ctx, settlement)
-		return fmt.Errorf("创建结算交易失败: %w", err)
+		if updateErr := s.accountRepo.UpdateSettlement(ctx, settlement); updateErr != nil {
+			fmt.Printf("警告：事务失败后无法更新结算状态: %v\n", updateErr)
+		}
+		return fmt.Errorf("结算处理失败: %w", err)
 	}
 
-	// 5. 完成结算
-	now := time.Now()
-	settlement.Status = model.SettlementStatusCompleted
-	settlement.SettledAt = &now
-	return s.accountRepo.UpdateSettlement(ctx, settlement)
+	return nil
 }
 
 // 工具函数

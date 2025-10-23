@@ -96,8 +96,8 @@ func main() {
 	// 初始化Repository
 	accountRepo := repository.NewAccountRepository(database)
 
-	// 初始化Service
-	accountService := service.NewAccountService(accountRepo)
+	// 初始化Service（传入database用于事务支持）
+	accountService := service.NewAccountService(database, accountRepo)
 
 	// 初始化Handler
 	accountHandler := handler.NewAccountHandler(accountService)
