@@ -17,15 +17,23 @@ const Login = () => {
     setLoading(true)
     try {
       const response = await merchantService.login(values)
+      console.log('Login response:', response)
 
-      if (response.data) {
-        const { token, merchant } = response.data
+      // 后端返回的数据结构是 {data: {data: {token, merchant}}}
+      if (response.data?.data) {
+        const { token, merchant } = response.data.data
 
         // 保存登录信息到 store
         setAuth(token, '', merchant)
 
         message.success('登录成功')
-        navigate('/dashboard')
+
+        // 延迟跳转，确保 message 显示
+        setTimeout(() => {
+          navigate('/dashboard')
+        }, 500)
+      } else {
+        message.error('登录响应数据格式错误')
       }
     } catch (error: any) {
       console.error('登录失败:', error)
