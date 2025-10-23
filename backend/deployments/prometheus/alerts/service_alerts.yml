@@ -1,0 +1,176 @@
+# 服务告警规则
+# 用于监控支付平台微服务的健康状态和性能
+
+groups:
+  # ========================================
+  # 服务可用性告警
+  # ========================================
+  - name: service_availability
+    interval: 30s
+    rules:
+      # 服务下线告警
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "服务 {{ $labels.job }} 已下线"
+          description: "服务 {{ $labels.job }} ({{ $labels.instance }}) 已经下线超过 1 分钟"
+
+      # 关键服务下线（立即告警）
+      - alert: CriticalServiceDown
+        expr: up{critical="true"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "关键服务 {{ $labels.job }} 已下线"
+          description: "关键服务 {{ $labels.job }} ({{ $labels.instance }}) 已下线，需要立即处理"
+
+  # ========================================
+  # 数据库告警
+  # ========================================
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # PostgreSQL 连接数过高
+      - alert: PostgreSQLConnectionsHigh
+        expr: pg_stat_database_numbackends > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL 连接数过高"
+          description: "数据库连接数为 {{ $value }}，超过阈值"
+
+      # PostgreSQL 慢查询
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_database_tup_returned[5m]) < 100
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL 查询性能下降"
+          description: "数据库查询性能显著下降"
+
+  # ========================================
+  # Redis 告警
+  # ========================================
+  - name: redis_alerts
+    interval: 30s
+    rules:
+      # Redis 内存使用率过高
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "Redis 内存使用率过高"
+          description: "Redis 内存使用率达到 {{ $value | humanizePercentage }}，需要注意"
+
+      # Redis 连接数异常
+      - alert: RedisConnectionsHigh
+        expr: redis_connected_clients > 1000
+        for: 5m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "Redis 连接数过高"
+          description: "Redis 当前连接数为 {{ $value }}，超过正常范围"
+
+  # ========================================
+  # 应用性能告警
+  # ========================================
+  - name: application_performance
+    interval: 30s
+    rules:
+      # HTTP 请求错误率过高
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "服务 {{ $labels.job }} 错误率过高"
+          description: "服务 {{ $labels.job }} 的错误率为 {{ $value | humanizePercentage }}，超过 5%"
+
+      # HTTP 请求响应时间过长
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "服务 {{ $labels.job }} 响应时间过长"
+          description: "服务 {{ $labels.job }} 的 P95 响应时间为 {{ $value }}s，超过 1 秒"
+
+      # CPU 使用率过高
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: resource
+        annotations:
+          summary: "服务 {{ $labels.job }} CPU 使用率过高"
+          description: "服务 {{ $labels.job }} 的 CPU 使用率为 {{ $value | humanizePercentage }}"
+
+      # 内存使用率过高
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / process_virtual_memory_max_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          category: resource
+        annotations:
+          summary: "服务 {{ $labels.job }} 内存使用率过高"
+          description: "服务 {{ $labels.job }} 的内存使用率达到 {{ $value | humanizePercentage }}"
+
+  # ========================================
+  # 业务指标告警
+  # ========================================
+  - name: business_metrics
+    interval: 1m
+    rules:
+      # 支付失败率过高
+      - alert: HighPaymentFailureRate
+        expr: rate(payment_failed_total[5m]) / rate(payment_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          category: business
+        annotations:
+          summary: "支付失败率过高"
+          description: "支付失败率为 {{ $value | humanizePercentage }}，超过 10%"
+
+      # 订单取消率过高
+      - alert: HighOrderCancellationRate
+        expr: rate(order_cancelled_total[10m]) / rate(order_created_total[10m]) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "订单取消率过高"
+          description: "订单取消率为 {{ $value | humanizePercentage }}，超过 20%"
+
+      # 风控拦截率异常
+      - alert: AbnormalRiskBlockRate
+        expr: rate(risk_blocked_total[5m]) / rate(risk_checked_total[5m]) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "风控拦截率异常"
+          description: "风控拦截率为 {{ $value | humanizePercentage }}，超过 30%，可能需要检查规则"

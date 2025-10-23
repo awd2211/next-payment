@@ -1,0 +1,193 @@
+# Prometheus 配置文件
+# 用于支付平台微服务监控
+
+global:
+  scrape_interval: 15s      # 默认抓取间隔
+  evaluation_interval: 15s  # 评估规则间隔
+  scrape_timeout: 10s       # 抓取超时时间
+
+  # 添加外部标签
+  external_labels:
+    cluster: 'payment-platform'
+    environment: 'development'
+
+# 告警管理器配置（可选）
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# 规则文件
+rule_files:
+  - 'alerts/*.yml'
+
+# 抓取配置
+scrape_configs:
+  # ========================================
+  # Prometheus 自身监控
+  # ========================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          tier: 'monitoring'
+
+  # ========================================
+  # PostgreSQL 数据库监控
+  # ========================================
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+          tier: 'infrastructure'
+
+  # ========================================
+  # Redis 缓存监控
+  # ========================================
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          tier: 'infrastructure'
+
+  # ========================================
+  # Kafka 消息队列监控
+  # ========================================
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+        labels:
+          service: 'kafka'
+          tier: 'infrastructure'
+
+  # ========================================
+  # 核心业务服务监控（本地运行，使用 host.docker.internal）
+  # ========================================
+
+  # Admin Service - 运营管理服务
+  - job_name: 'admin-service'
+    static_configs:
+      - targets: ['host.docker.internal:40000']
+        labels:
+          service: 'admin-service'
+          tier: 'backend'
+          type: 'microservice'
+    metrics_path: '/metrics'
+
+  # Merchant Service - 商户管理服务
+  - job_name: 'merchant-service'
+    static_configs:
+      - targets: ['host.docker.internal:40001']
+        labels:
+          service: 'merchant-service'
+          tier: 'backend'
+          type: 'microservice'
+    metrics_path: '/metrics'
+
+  # Payment Gateway - 支付网关
+  - job_name: 'payment-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:40002']
+        labels:
+          service: 'payment-gateway'
+          tier: 'backend'
+          type: 'microservice'
+          critical: 'true'
+    metrics_path: '/metrics'
+
+  # Channel Adapter - 渠道适配器
+  - job_name: 'channel-adapter'
+    static_configs:
+      - targets: ['host.docker.internal:40003']
+        labels:
+          service: 'channel-adapter'
+          tier: 'backend'
+          type: 'microservice'
+          critical: 'true'
+    metrics_path: '/metrics'
+
+  # Order Service - 订单服务
+  - job_name: 'order-service'
+    static_configs:
+      - targets: ['host.docker.internal:40004']
+        labels:
+          service: 'order-service'
+          tier: 'backend'
+          type: 'microservice'
+    metrics_path: '/metrics'
+
+  # Accounting Service - 账务服务
+  - job_name: 'accounting-service'
+    static_configs:
+      - targets: ['host.docker.internal:40005']
+        labels:
+          service: 'accounting-service'
+          tier: 'backend'
+          type: 'microservice'
+          critical: 'true'
+    metrics_path: '/metrics'
+
+  # Risk Service - 风控服务
+  - job_name: 'risk-service'
+    static_configs:
+      - targets: ['host.docker.internal:40006']
+        labels:
+          service: 'risk-service'
+          tier: 'backend'
+          type: 'microservice'
+          critical: 'true'
+    metrics_path: '/metrics'
+
+  # Notification Service - 通知服务
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['host.docker.internal:40007']
+        labels:
+          service: 'notification-service'
+          tier: 'backend'
+          type: 'microservice'
+    metrics_path: '/metrics'
+
+  # Analytics Service - 分析服务
+  - job_name: 'analytics-service'
+    static_configs:
+      - targets: ['host.docker.internal:40008']
+        labels:
+          service: 'analytics-service'
+          tier: 'backend'
+          type: 'microservice'
+    metrics_path: '/metrics'
+
+  # Config Service - 配置中心
+  - job_name: 'config-service'
+    static_configs:
+      - targets: ['host.docker.internal:40009']
+        labels:
+          service: 'config-service'
+          tier: 'backend'
+          type: 'microservice'
+    metrics_path: '/metrics'
+
+  # ========================================
+  # 容器和系统监控
+  # ========================================
+
+  # cAdvisor - 容器监控
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+          tier: 'monitoring'
+
+  # Node Exporter - 主机监控
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node-exporter'
+          tier: 'monitoring'

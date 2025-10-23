@@ -1,0 +1,250 @@
+syntax = "proto3";
+
+package merchant;
+
+option go_package = "github.com/payment-platform/proto/merchant;merchant";
+
+import "google/protobuf/timestamp.proto";
+
+// Merchant Service - 商户管理服务
+service MerchantService {
+  // 商户管理
+  rpc RegisterMerchant(RegisterMerchantRequest) returns (MerchantResponse);
+  rpc GetMerchant(GetMerchantRequest) returns (MerchantResponse);
+  rpc ListMerchants(ListMerchantsRequest) returns (ListMerchantsResponse);
+  rpc UpdateMerchant(UpdateMerchantRequest) returns (MerchantResponse);
+  rpc UpdateMerchantStatus(UpdateMerchantStatusRequest) returns (MerchantResponse);
+  rpc MerchantLogin(MerchantLoginRequest) returns (MerchantLoginResponse);
+
+  // API密钥管理
+  rpc GenerateAPIKey(GenerateAPIKeyRequest) returns (APIKeyResponse);
+  rpc ListAPIKeys(ListAPIKeysRequest) returns (ListAPIKeysResponse);
+  rpc RevokeAPIKey(RevokeAPIKeyRequest) returns (RevokeAPIKeyResponse);
+  rpc RotateAPISecret(RotateAPISecretRequest) returns (APIKeyResponse);
+
+  // Webhook配置
+  rpc UpdateWebhookConfig(UpdateWebhookConfigRequest) returns (WebhookConfigResponse);
+  rpc GetWebhookConfig(GetWebhookConfigRequest) returns (WebhookConfigResponse);
+  rpc TestWebhook(TestWebhookRequest) returns (TestWebhookResponse);
+
+  // 商户渠道配置
+  rpc ConfigureChannel(ConfigureChannelRequest) returns (ChannelConfigResponse);
+  rpc GetChannelConfig(GetChannelConfigRequest) returns (ChannelConfigResponse);
+  rpc ListChannelConfigs(ListChannelConfigsRequest) returns (ListChannelConfigsResponse);
+  rpc DisableChannel(DisableChannelRequest) returns (DisableChannelResponse);
+}
+
+// 商户相关消息
+message Merchant {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  string phone = 4;
+  string company_name = 5;
+  string business_type = 6;  // individual, company
+  string country = 7;
+  string website = 8;
+  string status = 9;  // pending, active, suspended, rejected
+  string kyc_status = 10;  // pending, verified, rejected
+  bool is_test_mode = 11;
+  map<string, string> metadata = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+message RegisterMerchantRequest {
+  string name = 1;
+  string email = 2;
+  string password = 3;
+  string phone = 4;
+  string company_name = 5;
+  string business_type = 6;
+  string country = 7;
+  string website = 8;
+}
+
+message GetMerchantRequest {
+  string id = 1;
+}
+
+message ListMerchantsRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string status = 3;
+  string kyc_status = 4;
+  string keyword = 5;
+}
+
+message ListMerchantsResponse {
+  repeated Merchant merchants = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message UpdateMerchantRequest {
+  string id = 1;
+  string name = 2;
+  string phone = 3;
+  string company_name = 4;
+  string website = 5;
+  map<string, string> metadata = 6;
+}
+
+message UpdateMerchantStatusRequest {
+  string id = 1;
+  string status = 2;
+  string reason = 3;
+}
+
+message MerchantResponse {
+  Merchant merchant = 1;
+}
+
+message MerchantLoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message MerchantLoginResponse {
+  string token = 1;
+  string refresh_token = 2;
+  Merchant merchant = 3;
+  int64 expires_in = 4;
+}
+
+// API密钥相关消息
+message APIKey {
+  string id = 1;
+  string merchant_id = 2;
+  string api_key = 3;
+  string api_secret = 4;  // 仅在生成时返回一次
+  string name = 5;
+  string environment = 6;  // test, production
+  bool is_active = 7;
+  google.protobuf.Timestamp last_used_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message GenerateAPIKeyRequest {
+  string merchant_id = 1;
+  string name = 2;
+  string environment = 3;
+  int32 expires_in_days = 4;  // 0 = never expires
+}
+
+message ListAPIKeysRequest {
+  string merchant_id = 1;
+  string environment = 2;
+}
+
+message ListAPIKeysResponse {
+  repeated APIKey api_keys = 1;
+}
+
+message RevokeAPIKeyRequest {
+  string merchant_id = 1;
+  string api_key_id = 2;
+}
+
+message RevokeAPIKeyResponse {
+  bool success = 1;
+}
+
+message RotateAPISecretRequest {
+  string merchant_id = 1;
+  string api_key_id = 2;
+}
+
+message APIKeyResponse {
+  APIKey api_key = 1;
+}
+
+// Webhook配置相关消息
+message WebhookConfig {
+  string id = 1;
+  string merchant_id = 2;
+  string url = 3;
+  repeated string events = 4;  // payment.success, payment.failed, refund.completed
+  string secret = 5;  // 用于签名验证
+  bool is_enabled = 6;
+  int32 max_retries = 7;
+  int32 timeout_seconds = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message UpdateWebhookConfigRequest {
+  string merchant_id = 1;
+  string url = 2;
+  repeated string events = 3;
+  bool is_enabled = 4;
+  int32 max_retries = 5;
+  int32 timeout_seconds = 6;
+}
+
+message GetWebhookConfigRequest {
+  string merchant_id = 1;
+}
+
+message WebhookConfigResponse {
+  WebhookConfig config = 1;
+}
+
+message TestWebhookRequest {
+  string merchant_id = 1;
+  string event_type = 2;
+}
+
+message TestWebhookResponse {
+  bool success = 1;
+  int32 status_code = 2;
+  string response_body = 3;
+  string error = 4;
+}
+
+// 渠道配置相关消息
+message ChannelConfig {
+  string id = 1;
+  string merchant_id = 2;
+  string channel = 3;  // stripe, paypal, crypto
+  map<string, string> config = 4;  // 渠道配置参数（加密存储）
+  bool is_enabled = 5;
+  bool is_test_mode = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message ConfigureChannelRequest {
+  string merchant_id = 1;
+  string channel = 2;
+  map<string, string> config = 3;
+  bool is_test_mode = 4;
+}
+
+message GetChannelConfigRequest {
+  string merchant_id = 1;
+  string channel = 2;
+}
+
+message ListChannelConfigsRequest {
+  string merchant_id = 1;
+}
+
+message ListChannelConfigsResponse {
+  repeated ChannelConfig configs = 1;
+}
+
+message DisableChannelRequest {
+  string merchant_id = 1;
+  string channel = 2;
+}
+
+message DisableChannelResponse {
+  bool success = 1;
+}
+
+message ChannelConfigResponse {
+  ChannelConfig config = 1;
+}

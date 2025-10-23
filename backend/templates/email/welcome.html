@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>欢迎加入 Payment Platform</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1890ff;
+        }
+        h1 {
+            color: #1890ff;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 30px;
+            background-color: #1890ff;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e8e8e8;
+            font-size: 12px;
+            color: #999;
+        }
+        .info-box {
+            background-color: #f0f8ff;
+            border-left: 4px solid #1890ff;
+            padding: 15px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">💳 Payment Platform</div>
+        </div>
+
+        <h1>欢迎加入，{{.Name}}！</h1>
+
+        <div class="content">
+            <p>您好！</p>
+            <p>感谢您注册 Payment Platform。我们很高兴为您提供全球领先的支付解决方案。</p>
+
+            <div class="info-box">
+                <strong>您的账号信息：</strong><br>
+                用户名：{{.Username}}<br>
+                邮箱：{{.Email}}<br>
+                注册时间：{{.CreatedAt}}
+            </div>
+
+            <p>现在您可以：</p>
+            <ul>
+                <li>配置支付渠道（Stripe、PayPal、加密货币）</li>
+                <li>生成API密钥集成到您的应用</li>
+                <li>查看实时交易数据和报表</li>
+                <li>配置Webhook接收支付通知</li>
+            </ul>
+
+            <div style="text-align: center;">
+                <a href="{{.DashboardURL}}" class="button">进入控制台</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>如有任何问题，请联系我们的客服团队</p>
+            <p>邮箱：support@payment-platform.com</p>
+            <p>© 2025 Payment Platform. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

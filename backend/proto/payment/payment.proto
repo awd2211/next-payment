@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package payment;
+
+option go_package = "github.com/payment-platform/proto/payment;payment";
+
+import "google/protobuf/timestamp.proto";
+
+// Payment Service - 支付网关服务
+service PaymentService {
+  // 支付操作
+  rpc CreatePayment(CreatePaymentRequest) returns (PaymentResponse);
+  rpc GetPayment(GetPaymentRequest) returns (PaymentResponse);
+  rpc ListPayments(ListPaymentsRequest) returns (ListPaymentsResponse);
+  rpc CancelPayment(CancelPaymentRequest) returns (PaymentResponse);
+
+  // 退款操作
+  rpc CreateRefund(CreateRefundRequest) returns (RefundResponse);
+  rpc GetRefund(GetRefundRequest) returns (RefundResponse);
+  rpc ListRefunds(ListRefundsRequest) returns (ListRefundsResponse);
+
+  // Webhook处理
+  rpc HandleWebhook(HandleWebhookRequest) returns (HandleWebhookResponse);
+}
+
+// 支付相关消息
+message Payment {
+  string id = 1;
+  string order_id = 2;
+  string merchant_id = 3;
+  string customer_id = 4;
+  int64 amount = 5;  // 金额（最小单位，如分）
+  string currency = 6;  // USD, EUR, BTC, ETH
+  string channel = 7;  // stripe, paypal, crypto
+  string payment_method = 8;  // card, wallet, crypto
+  string status = 9;  // pending, processing, success, failed, cancelled
+  string failure_code = 10;
+  string failure_message = 11;
+  string channel_payment_id = 12;  // 渠道侧支付ID
+  string client_ip = 13;
+  string return_url = 14;
+  string cancel_url = 15;
+  string idempotency_key = 16;  // 幂等键
+  map<string, string> metadata = 17;
+  google.protobuf.Timestamp paid_at = 18;
+  google.protobuf.Timestamp expires_at = 19;
+  google.protobuf.Timestamp created_at = 20;
+  google.protobuf.Timestamp updated_at = 21;
+}
+
+message CreatePaymentRequest {
+  string merchant_id = 1;
+  string order_id = 2;
+  string customer_id = 3;
+  int64 amount = 4;
+  string currency = 5;
+  string channel = 6;  // 指定渠道或自动路由
+  string payment_method = 7;
+  string description = 8;
+  string client_ip = 9;
+  string return_url = 10;
+  string cancel_url = 11;
+  string idempotency_key = 12;
+  map<string, string> metadata = 13;
+}
+
+message GetPaymentRequest {
+  string id = 1;
+  string merchant_id = 2;
+}
+
+message ListPaymentsRequest {
+  string merchant_id = 1;
+  string customer_id = 2;
+  string status = 3;
+  string channel = 4;
+  google.protobuf.Timestamp start_time = 5;
+  google.protobuf.Timestamp end_time = 6;
+  int32 page = 7;
+  int32 page_size = 8;
+}
+
+message ListPaymentsResponse {
+  repeated Payment payments = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message CancelPaymentRequest {
+  string id = 1;
+  string merchant_id = 2;
+  string reason = 3;
+}
+
+message PaymentResponse {
+  Payment payment = 1;
+  string checkout_url = 2;  // 支付页面URL（如需跳转）
+}
+
+// 退款相关消息
+message Refund {
+  string id = 1;
+  string payment_id = 2;
+  string merchant_id = 3;
+  int64 amount = 4;
+  string currency = 5;
+  string reason = 6;
+  string status = 7;  // pending, processing, success, failed
+  string failure_code = 8;
+  string failure_message = 9;
+  string channel_refund_id = 10;
+  map<string, string> metadata = 11;
+  google.protobuf.Timestamp refunded_at = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+message CreateRefundRequest {
+  string payment_id = 1;
+  string merchant_id = 2;
+  int64 amount = 3;  // 0 = 全额退款
+  string reason = 4;
+  string idempotency_key = 5;
+  map<string, string> metadata = 6;
+}
+
+message GetRefundRequest {
+  string id = 1;
+  string merchant_id = 2;
+}
+
+message ListRefundsRequest {
+  string merchant_id = 1;
+  string payment_id = 2;
+  string status = 3;
+  int32 page = 4;
+  int32 page_size = 5;
+}
+
+message ListRefundsResponse {
+  repeated Refund refunds = 1;
+  int32 total = 2;
+}
+
+message RefundResponse {
+  Refund refund = 1;
+}
+
+// Webhook相关消息
+message HandleWebhookRequest {
+  string channel = 1;  // stripe, paypal
+  bytes payload = 2;
+  map<string, string> headers = 3;
+}
+
+message HandleWebhookResponse {
+  bool success = 1;
+  string message = 2;
+}
