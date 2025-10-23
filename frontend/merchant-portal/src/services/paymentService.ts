@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Payment {
   id: string
@@ -57,27 +57,27 @@ export interface ListPaymentsResponse {
 
 export const paymentService = {
   list: (params: ListPaymentsParams) => {
-    return api.get<any, ListPaymentsResponse>('/payments', { params })
+    return request.get<ListPaymentsResponse>('/payments', { params })
   },
 
   getById: (id: string) => {
-    return api.get(`/payments/${id}`)
+    return request.get(`/payments/${id}`)
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return api.get<any, { data: PaymentStats }>('/payments/stats', { params })
+    return request.get<{ data: PaymentStats }>('/payments/stats', { params })
   },
 
   refund: (id: string, data: { amount?: number; reason: string }) => {
-    return api.post(`/payments/${id}/refund`, data)
+    return request.post(`/payments/${id}/refund`, data)
   },
 
   cancel: (id: string, reason: string) => {
-    return api.post(`/payments/${id}/cancel`, { reason })
+    return request.post(`/payments/${id}/cancel`, { reason })
   },
 
   export: (params: ListPaymentsParams) => {
-    return api.get('/payments/export', {
+    return request.get('/payments/export', {
       params,
       responseType: 'blob',
     })

@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface SystemConfig {
   id: string
@@ -40,34 +40,34 @@ export interface GroupedConfigsResponse {
 
 export const systemConfigService = {
   list: (params: ListConfigsParams) => {
-    return api.get<any, ListConfigsResponse>('/system-configs', { params })
+    return request.get<ListConfigsResponse>('/system-configs', { params })
   },
 
   listGrouped: () => {
-    return api.get<any, GroupedConfigsResponse>('/system-configs/grouped')
+    return request.get<GroupedConfigsResponse>('/system-configs/grouped')
   },
 
   getById: (id: string) => {
-    return api.get(`/system-configs/${id}`)
+    return request.get(`/system-configs/${id}`)
   },
 
   getByKey: (key: string) => {
-    return api.get(`/system-configs/key/${key}`)
+    return request.get(`/system-configs/key/${key}`)
   },
 
   create: (data: Partial<SystemConfig>) => {
-    return api.post('/system-configs', data)
+    return request.post('/system-configs', data)
   },
 
   update: (id: string, data: Partial<SystemConfig>) => {
-    return api.put(`/system-configs/${id}`, data)
+    return request.put(`/system-configs/${id}`, data)
   },
 
   delete: (id: string) => {
-    return api.delete(`/system-configs/${id}`)
+    return request.delete(`/system-configs/${id}`)
   },
 
   batchUpdate: (configs: Array<{ id: string; value: string; description?: string }>) => {
-    return api.post('/system-configs/batch', { configs })
+    return request.post('/system-configs/batch', { configs })
   },
 }

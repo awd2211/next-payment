@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface RiskRule {
   id: string
@@ -88,54 +88,54 @@ export interface ListResponse<T> {
 export const riskService = {
   // 风险规则管理
   listRules: (params: RiskRuleListParams) => {
-    return api.get<ListResponse<RiskRule>>('/risk/rules', { params })
+    return request.get<ListResponse<RiskRule>>('/risk/rules', { params })
   },
 
   createRule: (data: Partial<RiskRule>) => {
-    return api.post<RiskRule>('/risk/rules', data)
+    return request.post<RiskRule>('/risk/rules', data)
   },
 
   updateRule: (id: string, data: Partial<RiskRule>) => {
-    return api.put<RiskRule>(`/risk/rules/${id}`, data)
+    return request.put<RiskRule>(`/risk/rules/${id}`, data)
   },
 
   deleteRule: (id: string) => {
-    return api.delete(`/risk/rules/${id}`)
+    return request.delete(`/risk/rules/${id}`)
   },
 
   toggleRule: (id: string, enabled: boolean) => {
-    return api.put(`/risk/rules/${id}/toggle`, { enabled })
+    return request.put(`/risk/rules/${id}/toggle`, { enabled })
   },
 
   // 风险告警管理
   listAlerts: (params: RiskAlertListParams) => {
-    return api.get<ListResponse<RiskAlert>>('/risk/alerts', { params })
+    return request.get<ListResponse<RiskAlert>>('/risk/alerts', { params })
   },
 
   getAlert: (id: string) => {
-    return api.get<RiskAlert>(`/risk/alerts/${id}`)
+    return request.get<RiskAlert>(`/risk/alerts/${id}`)
   },
 
   handleAlert: (id: string, action: string, remark: string) => {
-    return api.post(`/risk/alerts/${id}/handle`, { action, remark })
+    return request.post(`/risk/alerts/${id}/handle`, { action, remark })
   },
 
   // 黑名单管理
   listBlacklist: (params: BlacklistListParams) => {
-    return api.get<ListResponse<BlacklistItem>>('/risk/blacklist', { params })
+    return request.get<ListResponse<BlacklistItem>>('/risk/blacklist', { params })
   },
 
   addBlacklist: (data: Partial<BlacklistItem>) => {
-    return api.post<BlacklistItem>('/risk/blacklist', data)
+    return request.post<BlacklistItem>('/risk/blacklist', data)
   },
 
   removeBlacklist: (id: string) => {
-    return api.delete(`/risk/blacklist/${id}`)
+    return request.delete(`/risk/blacklist/${id}`)
   },
 
   // 风险统计
   getStats: () => {
-    return api.get<{ data: RiskStats }>('/risk/stats')
+    return request.get<{ data: RiskStats }>('/risk/stats')
   },
 }
 

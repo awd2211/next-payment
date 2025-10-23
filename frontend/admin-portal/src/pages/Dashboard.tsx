@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   Row,
   Col,
@@ -10,8 +10,8 @@ import {
   List,
   Button,
   Tag,
-  Divider,
   Avatar,
+  message,
 } from 'antd'
 import {
   UserOutlined,
@@ -19,7 +19,6 @@ import {
   DollarOutlined,
   SafetyOutlined,
   RiseOutlined,
-  FallOutlined,
   ShopOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -30,17 +29,10 @@ import { Line, Pie, Column } from '@ant-design/charts'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
+import { useRequest } from '@payment/shared/hooks'
+import { getDashboardData } from '../services/dashboard'
 
 const { Title } = Typography
-
-interface Activity {
-  id: string
-  type: 'payment' | 'merchant' | 'order' | 'risk'
-  title: string
-  description: string
-  timestamp: string
-  status: 'success' | 'warning' | 'error' | 'info'
-}
 
 interface QuickAction {
   key: string
@@ -54,122 +46,34 @@ const Dashboard = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [timePeriod, setTimePeriod] = useState<'today' | '7days' | '30days'>('today')
-  const [loading, setLoading] = useState(false)
 
-  // 统计数据
-  const [stats, setStats] = useState({
-    totalAdmins: 25,
-    totalMerchants: 156,
-    activeMerchants: 142,
-    totalTransactions: 1234,
-    totalAmount: 5678900,
-    successRate: 98.5,
-    pendingOrders: 23,
-    todayGrowth: 12.5,
-  })
+  // 使用 useRequest Hook 获取 Dashboard 数据
+  const { data: dashboardData, loading } = useRequest(
+    () => getDashboardData(timePeriod),
+    {
+      onError: (err) => {
+        console.error('Failed to fetch dashboard data:', err)
+        message.error(t('dashboard.fetchError') || '获取Dashboard数据失败')
+      },
+    },
+  )
 
-  // 交易趋势数据
-  const [trendData, setTrendData] = useState<Array<{ date: string; value: number }>>([])
-
-  // 支付渠道分布
-  const [channelData, setChannelData] = useState<Array<{ type: string; value: number }>>([])
-
-  // 商户排行
-  const [merchantRankData, setMerchantRankData] = useState<
-    Array<{ merchant: string; amount: number }>
-  >([])
-
-  // 近期活动
-  const [recentActivities, setRecentActivities] = useState<Activity[]>([])
-
-  useEffect(() => {
-    fetchDashboardData()
-  }, [timePeriod])
-
-  const fetchDashboardData = async () => {
-    setLoading(true)
-    try {
-      // Mock data - 根据时间段生成不同的数据
-      const days = timePeriod === 'today' ? 24 : timePeriod === '7days' ? 7 : 30
-      const isHourly = timePeriod === 'today'
-
-      // 交易趋势
-      const trend = Array.from({ length: days }, (_, i) => ({
-        date: isHourly
-          ? `${i}:00`
-          : dayjs()
-              .subtract(days - i - 1, 'day')
-              .format('MM-DD'),
-        value: Math.floor(Math.random() * 100000) + 50000,
-      }))
-      setTrendData(trend)
-
-      // 支付渠道分布
-      setChannelData([
-        { type: 'Stripe', value: 45 },
-        { type: 'PayPal', value: 30 },
-        { type: '支付宝', value: 15 },
-        { type: '微信支付', value: 10 },
-      ])
-
-      // 商户排行
-      setMerchantRankData([
-        { merchant: '商户A', amount: 125000 },
-        { merchant: '商户B', amount: 98000 },
-        { merchant: '商户C', amount: 87000 },
-        { merchant: '商户D', amount: 76000 },
-        { merchant: '商户E', amount: 65000 },
-      ])
-
-      // 近期活动
-      setRecentActivities([
-        {
-          id: '1',
-          type: 'payment',
-          title: '支付成功',
-          description: '商户A 完成支付 ¥12,500.00',
-          timestamp: dayjs().subtract(5, 'minute').toISOString(),
-          status: 'success',
-        },
-        {
-          id: '2',
-          type: 'merchant',
-          title: '新商户注册',
-          description: '商户XYZ 提交注册申请',
-          timestamp: dayjs().subtract(15, 'minute').toISOString(),
-          status: 'info',
-        },
-        {
-          id: '3',
-          type: 'risk',
-          title: '风险预警',
-          description: '检测到异常交易行为',
-          timestamp: dayjs().subtract(30, 'minute').toISOString(),
-          status: 'warning',
-        },
-        {
-          id: '4',
-          type: 'order',
-          title: '订单取消',
-          description: '订单 #ORD123456 已取消',
-          timestamp: dayjs().subtract(1, 'hour').toISOString(),
-          status: 'error',
-        },
-        {
-          id: '5',
-          type: 'payment',
-          title: '退款完成',
-          description: '订单 #ORD123455 退款 ¥5,600.00',
-          timestamp: dayjs().subtract(2, 'hour').toISOString(),
-          status: 'info',
-        },
-      ])
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error)
-    } finally {
-      setLoading(false)
-    }
+  // 从API响应中提取数据，如果没有数据则使用默认值
+  const stats = dashboardData?.stats || {
+    total_merchants: 0,
+    active_merchants: 0,
+    total_transactions: 0,
+    total_amount: 0,
+    success_rate: 0,
+    pending_orders: 0,
+    today_growth: 0,
+    total_admins: 0,
   }
+
+  const trendData = dashboardData?.trend_data || []
+  const channelData = dashboardData?.channel_distribution || []
+  const merchantRankData = dashboardData?.merchant_ranks || []
+  const recentActivities = dashboardData?.recent_activities || []
 
   const quickActions: QuickAction[] = [
     {
@@ -314,12 +218,12 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.totalTransactions')}
-              value={stats.totalTransactions}
+              value={stats.total_transactions}
               prefix={<ShoppingOutlined />}
               valueStyle={{ color: '#3f8600' }}
               suffix={
                 <span style={{ fontSize: 14 }}>
-                  <RiseOutlined style={{ color: '#3f8600' }} /> {stats.todayGrowth}%
+                  <RiseOutlined style={{ color: '#3f8600' }} /> {stats.today_growth}%
                 </span>
               }
             />
@@ -330,7 +234,7 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.totalAmount')}
-              value={stats.totalAmount / 100}
+              value={stats.total_amount / 100}
               precision={2}
               prefix="¥"
               valueStyle={{ color: '#1890ff' }}
@@ -342,7 +246,7 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.successRate')}
-              value={stats.successRate}
+              value={stats.success_rate}
               precision={1}
               suffix="%"
               prefix={<CheckCircleOutlined />}
@@ -355,7 +259,7 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.pendingOrders')}
-              value={stats.pendingOrders}
+              value={stats.pending_orders}
               prefix={<ClockCircleOutlined />}
               valueStyle={{ color: '#faad14' }}
             />
@@ -368,7 +272,7 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.totalMerchants')}
-              value={stats.totalMerchants}
+              value={stats.total_merchants}
               prefix={<ShopOutlined />}
               valueStyle={{ color: '#722ed1' }}
             />
@@ -379,7 +283,7 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.activeMerchants')}
-              value={stats.activeMerchants}
+              value={stats.active_merchants}
               prefix={<ShopOutlined />}
               valueStyle={{ color: '#13c2c2' }}
             />
@@ -390,7 +294,7 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.totalAdmins')}
-              value={stats.totalAdmins}
+              value={stats.total_admins}
               prefix={<UserOutlined />}
               valueStyle={{ color: '#eb2f96' }}
             />
@@ -401,7 +305,9 @@ const Dashboard = () => {
           <Card loading={loading}>
             <Statistic
               title={t('dashboard.avgTransactionAmount')}
-              value={(stats.totalAmount / stats.totalTransactions / 100).toFixed(2)}
+              value={stats.total_transactions > 0
+                ? (stats.total_amount / stats.total_transactions / 100).toFixed(2)
+                : '0.00'}
               prefix="¥"
               valueStyle={{ color: '#fa8c16' }}
             />

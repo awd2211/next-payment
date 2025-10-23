@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface LoginRequest {
   username: string
@@ -14,18 +14,18 @@ export interface LoginResponse {
 
 export const authService = {
   login: (data: LoginRequest) => {
-    return api.post<any, LoginResponse>('/admin/login', data)
+    return request.post<LoginResponse>('/admin/login', data)
   },
 
   logout: () => {
-    return api.post('/admin/logout')
+    return request.post('/admin/logout')
   },
 
   changePassword: (data: { old_password: string; new_password: string }) => {
-    return api.post('/admin/change-password', data)
+    return request.post('/admin/change-password', data)
   },
 
   getCurrentAdmin: () => {
-    return api.get('/admin/me')
+    return request.get('/admin/me')
   },
 }

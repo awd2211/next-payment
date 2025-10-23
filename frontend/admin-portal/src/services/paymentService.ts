@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Payment {
   id: string
@@ -57,27 +57,27 @@ export interface PaymentStatsParams {
 export const paymentService = {
   // 获取支付列表
   list: (params: PaymentListParams) => {
-    return api.get<PaymentListResponse>('/payments', { params })
+    return request.get<PaymentListResponse>('/payments', { params })
   },
 
   // 获取支付详情
   get: (id: string) => {
-    return api.get<Payment>(`/payments/${id}`)
+    return request.get<Payment>(`/payments/${id}`)
   },
 
   // 获取支付统计
   getStats: (params: PaymentStatsParams) => {
-    return api.get<{ data: PaymentStats }>('/payments/stats', { params })
+    return request.get<{ data: PaymentStats }>('/payments/stats', { params })
   },
 
   // 取消支付
   cancel: (id: string, reason: string) => {
-    return api.post(`/payments/${id}/cancel`, { reason })
+    return request.post(`/payments/${id}/cancel`, { reason })
   },
 
   // 重试支付
   retry: (id: string) => {
-    return api.post(`/payments/${id}/retry`)
+    return request.post(`/payments/${id}/retry`)
   },
 }
 

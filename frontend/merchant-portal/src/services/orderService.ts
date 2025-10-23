@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Order {
   id: string
@@ -97,22 +97,22 @@ export interface CreateOrderRequest {
 
 export const orderService = {
   list: (params: ListOrdersParams) => {
-    return api.get<any, ListOrdersResponse>('/orders', { params })
+    return request.get<ListOrdersResponse>('/orders', { params })
   },
 
   getById: (id: string) => {
-    return api.get(`/orders/${id}`)
+    return request.get(`/orders/${id}`)
   },
 
   create: (data: CreateOrderRequest) => {
-    return api.post('/orders', data)
+    return request.post('/orders', data)
   },
 
   cancel: (id: string, reason: string) => {
-    return api.post(`/orders/${id}/cancel`, { reason })
+    return request.post(`/orders/${id}/cancel`, { reason })
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return api.get<any, { data: OrderStats }>('/orders/stats', { params })
+    return request.get<{ data: OrderStats }>('/orders/stats', { params })
   },
 }

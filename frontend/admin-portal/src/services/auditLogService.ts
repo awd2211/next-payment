@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface AuditLog {
   id: string
@@ -55,19 +55,19 @@ export interface AuditLogStats {
 
 export const auditLogService = {
   list: (params: ListAuditLogsParams) => {
-    return api.get<any, ListAuditLogsResponse>('/audit-logs', { params })
+    return request.get<ListAuditLogsResponse>('/audit-logs', { params })
   },
 
   getById: (id: string) => {
-    return api.get(`/audit-logs/${id}`)
+    return request.get(`/audit-logs/${id}`)
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return api.get<any, { data: AuditLogStats }>('/audit-logs/stats', { params })
+    return request.get<{ data: AuditLogStats }>('/audit-logs/stats', { params })
   },
 
   export: (params: ListAuditLogsParams) => {
-    return api.get('/audit-logs/export', {
+    return request.get('/audit-logs/export', {
       params,
       responseType: 'blob',
     })

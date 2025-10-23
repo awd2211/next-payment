@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Merchant {
   id: string
@@ -83,26 +83,26 @@ export interface RegenerateApiKeyResponse {
 
 export const merchantService = {
   getProfile: () => {
-    return api.get<any, { data: Merchant }>('/merchant/profile')
+    return request.get<{ data: Merchant }>('/merchant/profile')
   },
 
   updateProfile: (data: UpdateMerchantRequest) => {
-    return api.put('/merchant/profile', data)
+    return request.put('/merchant/profile', data)
   },
 
   getBalance: () => {
-    return api.get<any, { data: MerchantBalance }>('/merchant/balance')
+    return request.get<{ data: MerchantBalance }>('/merchant/balance')
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return api.get<any, { data: MerchantStats }>('/merchant/stats', { params })
+    return request.get<{ data: MerchantStats }>('/merchant/stats', { params })
   },
 
   regenerateApiKey: () => {
-    return api.post<any, { data: RegenerateApiKeyResponse }>('/merchant/regenerate-api-key')
+    return request.post<{ data: RegenerateApiKeyResponse }>('/merchant/regenerate-api-key')
   },
 
   changePassword: (data: { old_password: string; new_password: string }) => {
-    return api.post('/merchant/change-password', data)
+    return request.post('/merchant/change-password', data)
   },
 }

@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Admin {
   id: string
@@ -56,30 +56,30 @@ export interface UpdateAdminRequest {
 
 export const adminService = {
   list: (params: ListAdminsParams) => {
-    return api.get<any, ListAdminsResponse>('/admin', { params })
+    return request.get<ListAdminsResponse>('/admin', { params })
   },
 
   getById: (id: string) => {
-    return api.get(`/admin/${id}`)
+    return request.get(`/admin/${id}`)
   },
 
   create: (data: CreateAdminRequest) => {
-    return api.post('/admin', data)
+    return request.post('/admin', data)
   },
 
   update: (id: string, data: UpdateAdminRequest) => {
-    return api.put(`/admin/${id}`, data)
+    return request.put(`/admin/${id}`, data)
   },
 
   delete: (id: string) => {
-    return api.delete(`/admin/${id}`)
+    return request.delete(`/admin/${id}`)
   },
 
   changePassword: (data: { old_password: string; new_password: string }) => {
-    return api.post('/admin/change-password', data)
+    return request.post('/admin/change-password', data)
   },
 
   resetPassword: (id: string, new_password: string) => {
-    return api.post(`/admin/${id}/reset-password`, { new_password })
+    return request.post(`/admin/${id}/reset-password`, { new_password })
   },
 }

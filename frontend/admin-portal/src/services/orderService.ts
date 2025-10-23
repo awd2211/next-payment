@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Order {
   id: string
@@ -59,22 +59,22 @@ export interface OrderStatsParams {
 export const orderService = {
   // 获取订单列表
   list: (params: OrderListParams) => {
-    return api.get<OrderListResponse>('/orders', { params })
+    return request.get<OrderListResponse>('/orders', { params })
   },
 
   // 获取订单详情
   get: (id: string) => {
-    return api.get<Order>(`/orders/${id}`)
+    return request.get<Order>(`/orders/${id}`)
   },
 
   // 获取订单统计
   getStats: (params: OrderStatsParams) => {
-    return api.get<{ data: OrderStats }>('/orders/stats', { params })
+    return request.get<{ data: OrderStats }>('/orders/stats', { params })
   },
 
   // 取消订单
   cancel: (id: string, reason: string) => {
-    return api.post(`/orders/${id}/cancel`, { reason })
+    return request.post(`/orders/${id}/cancel`, { reason })
   },
 }
 

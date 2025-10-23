@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Merchant {
   id: string
@@ -56,30 +56,30 @@ export interface UpdateMerchantRequest {
 
 export const merchantService = {
   list: (params: ListMerchantsParams) => {
-    return api.get<any, ListMerchantsResponse>('/merchant', { params })
+    return request.get<ListMerchantsResponse>('/merchant', { params })
   },
 
   getById: (id: string) => {
-    return api.get(`/merchant/${id}`)
+    return request.get(`/merchant/${id}`)
   },
 
   create: (data: CreateMerchantRequest) => {
-    return api.post('/merchant', data)
+    return request.post('/merchant', data)
   },
 
   update: (id: string, data: UpdateMerchantRequest) => {
-    return api.put(`/merchant/${id}`, data)
+    return request.put(`/merchant/${id}`, data)
   },
 
   delete: (id: string) => {
-    return api.delete(`/merchant/${id}`)
+    return request.delete(`/merchant/${id}`)
   },
 
   updateStatus: (id: string, status: string) => {
-    return api.put(`/merchant/${id}/status`, { status })
+    return request.put(`/merchant/${id}/status`, { status })
   },
 
   updateKYCStatus: (id: string, kyc_status: string) => {
-    return api.put(`/merchant/${id}/kyc-status`, { kyc_status })
+    return request.put(`/merchant/${id}/kyc-status`, { kyc_status })
   },
 }

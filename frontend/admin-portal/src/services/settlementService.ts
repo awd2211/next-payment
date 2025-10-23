@@ -1,4 +1,4 @@
-import api from './api'
+import request from './request'
 
 export interface Settlement {
   id: string
@@ -57,47 +57,47 @@ export interface SettlementStatsParams {
 export const settlementService = {
   // 获取结算列表
   list: (params: SettlementListParams) => {
-    return api.get<SettlementListResponse>('/settlements', { params })
+    return request.get<SettlementListResponse>('/settlements', { params })
   },
 
   // 获取结算详情
   get: (id: string) => {
-    return api.get<Settlement>(`/settlements/${id}`)
+    return request.get<Settlement>(`/settlements/${id}`)
   },
 
   // 获取结算统计
   getStats: (params: SettlementStatsParams) => {
-    return api.get<{ data: SettlementStats }>('/settlements/stats', { params })
+    return request.get<{ data: SettlementStats }>('/settlements/stats', { params })
   },
 
   // 创建结算单
   create: (data: Partial<Settlement>) => {
-    return api.post<Settlement>('/settlements', data)
+    return request.post<Settlement>('/settlements', data)
   },
 
   // 更新结算单
   update: (id: string, data: Partial<Settlement>) => {
-    return api.put<Settlement>(`/settlements/${id}`, data)
+    return request.put<Settlement>(`/settlements/${id}`, data)
   },
 
   // 确认结算
   confirm: (id: string) => {
-    return api.post(`/settlements/${id}/confirm`)
+    return request.post(`/settlements/${id}/confirm`)
   },
 
   // 完成结算
   complete: (id: string, remark: string) => {
-    return api.post(`/settlements/${id}/complete`, { remark })
+    return request.post(`/settlements/${id}/complete`, { remark })
   },
 
   // 取消结算
   cancel: (id: string, reason: string) => {
-    return api.post(`/settlements/${id}/cancel`, { reason })
+    return request.post(`/settlements/${id}/cancel`, { reason })
   },
 
   // 导出结算数据
   export: (params: SettlementListParams) => {
-    return api.get('/settlements/export', { params, responseType: 'blob' })
+    return request.get('/settlements/export', { params, responseType: 'blob' })
   },
 }
 

@@ -282,3 +282,26 @@ export interface ChannelDistribution {
   value: number
 }
 
+export interface MerchantRank {
+  merchant: string
+  merchant_id: string
+  amount: number
+}
+
+export interface Activity {
+  id: string
+  type: 'payment' | 'merchant' | 'order' | 'risk'
+  title: string
+  description: string
+  timestamp: string
+  status: 'success' | 'warning' | 'error' | 'info'
+}
+
+export interface DashboardData {
+  stats: DashboardStats
+  trend_data: ChartData[]
+  channel_distribution: ChannelDistribution[]
+  merchant_ranks: MerchantRank[]
+  recent_activities: Activity[]
+}
+
