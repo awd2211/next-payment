@@ -136,5 +136,12 @@
     "markAllRead": "Mark all as read",
     "clearAll": "Clear all",
     "empty": "No notifications"
+  },
+  "pwa": {
+    "offlineReady": "App is ready",
+    "offlineReadyDesc": "App is cached and ready to work offline",
+    "newVersionAvailable": "New version available",
+    "newVersionDesc": "New version detected, click update button to refresh",
+    "update": "Update"
   }
 }

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import Layout from './components/Layout'
 import WebSocketProvider from './components/WebSocketProvider'
+import PWAUpdatePrompt from './components/PWAUpdatePrompt'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
@@ -10,7 +11,9 @@ import Account from './pages/Account'
 
 function App() {
   return (
-    <BrowserRouter>
+    <>
+      <PWAUpdatePrompt />
+      <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
@@ -28,7 +31,8 @@ function App() {
           <Route path="account" element={<Account />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </>
   )
 }
 

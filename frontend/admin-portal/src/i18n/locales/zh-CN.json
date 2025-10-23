@@ -136,5 +136,12 @@
     "markAllRead": "全部已读",
     "clearAll": "清空",
     "empty": "暂无通知"
+  },
+  "pwa": {
+    "offlineReady": "应用已就绪",
+    "offlineReadyDesc": "应用已缓存,可离线使用",
+    "newVersionAvailable": "新版本可用",
+    "newVersionDesc": "检测到新版本,点击更新按钮刷新应用",
+    "update": "更新"
   }
 }
