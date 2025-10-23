@@ -10,6 +10,7 @@ import Admins from './pages/Admins'
 import Roles from './pages/Roles'
 import AuditLogs from './pages/AuditLogs'
 import Merchants from './pages/Merchants'
+import Payments from './pages/Payments'
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
           <Route path="roles" element={<Roles />} />
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="merchants" element={<Merchants />} />
+          <Route path="payments" element={<Payments />} />
         </Route>
       </Routes>
       </BrowserRouter>

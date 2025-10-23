@@ -130,6 +130,27 @@
     "statusSuspended": "Suspended",
     "statusRejected": "Rejected"
   },
+  "payments": {
+    "title": "Payment Management",
+    "paymentNo": "Payment No",
+    "orderNo": "Order No",
+    "merchantName": "Merchant Name",
+    "amount": "Amount",
+    "channel": "Channel",
+    "status": "Status",
+    "paymentMethod": "Payment Method",
+    "clientIp": "Client IP",
+    "statusPending": "Pending",
+    "statusSuccess": "Success",
+    "statusFailed": "Failed",
+    "statusRefunded": "Refunded",
+    "viewDetail": "View Detail",
+    "paymentDetail": "Payment Detail",
+    "refund": "Refund",
+    "refundConfirm": "Confirm Refund",
+    "refundConfirmMessage": "Are you sure you want to refund this payment? This action cannot be undone.",
+    "refundSuccess": "Refund successful"
+  },
   "notifications": {
     "title": "Notifications",
     "unread": "{{count}} unread",

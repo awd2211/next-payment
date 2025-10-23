@@ -20,6 +20,7 @@ import {
   LogoutOutlined,
   KeyOutlined,
   ShopOutlined,
+  DollarOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -67,6 +68,11 @@ const Layout = () => {
       key: '/merchants',
       icon: <ShopOutlined />,
       label: t('menu.merchants'),
+    },
+    hasPermission('payment.view') && {
+      key: '/payments',
+      icon: <DollarOutlined />,
+      label: t('menu.payments'),
     },
     hasPermission('audit.view') && {
       key: '/audit-logs',
