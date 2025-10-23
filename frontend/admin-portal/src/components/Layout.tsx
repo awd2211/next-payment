@@ -24,6 +24,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
 import LanguageSwitcher from './LanguageSwitcher'
+import ThemeSwitcher from './ThemeSwitcher'
 
 const { Header, Sider, Content } = AntLayout
 const { Text } = Typography
@@ -148,6 +149,7 @@ const Layout = () => {
         >
           <div />
           <Space size="large">
+            <ThemeSwitcher />
             <LanguageSwitcher />
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }}>
               <Space style={{ cursor: 'pointer' }}>

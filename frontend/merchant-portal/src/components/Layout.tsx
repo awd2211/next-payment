@@ -21,6 +21,8 @@ import {
   WalletOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
+import LanguageSwitcher from './LanguageSwitcher'
+import ThemeSwitcher from './ThemeSwitcher'
 
 const { Header, Sider, Content } = AntLayout
 const { Text } = Typography
@@ -127,6 +129,8 @@ const Layout = () => {
         >
           <div />
           <Space size="large">
+            <ThemeSwitcher />
+            <LanguageSwitcher />
             <Badge count={0}>
               <BellOutlined style={{ fontSize: 20, cursor: 'pointer' }} />
             </Badge>
