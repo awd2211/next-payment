@@ -11,7 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/metrics"
+	"github.com/payment-platform/pkg/tracing"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"gorm.io/gorm"
 	"payment-platform/payment-gateway/internal/client"
 	"payment-platform/payment-gateway/internal/model"
@@ -137,6 +140,14 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 
 	// 3. 风控检查
 	if s.riskClient != nil {
+		// 创建 span 追踪风控检查
+		ctx, riskSpan := tracing.StartSpan(ctx, "payment-gateway", "RiskCheck")
+		tracing.AddSpanTags(ctx, map[string]interface{}{
+			"merchant_id": input.MerchantID.String(),
+			"amount":      input.Amount,
+			"currency":    input.Currency,
+		})
+
 		riskResult, err := s.riskClient.CheckRisk(ctx, &client.RiskCheckRequest{
 			MerchantID:    input.MerchantID,
 			PaymentNo:     "", // 此时还没有生成
@@ -151,18 +162,29 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		})
 		if err != nil {
 			// 风控服务失败不阻塞支付，只记录日志
+			riskSpan.SetStatus(codes.Error, err.Error())
+			riskSpan.RecordError(err)
 			fmt.Printf("风控检查失败: %v\n", err)
 		} else if riskResult != nil {
+			riskSpan.SetAttributes(
+				attribute.String("risk.decision", riskResult.Decision),
+				attribute.Int("risk.score", riskResult.Score),
+			)
 			// 如果风控拒绝，直接返回错误
 			if riskResult.Decision == "reject" {
+				riskSpan.SetStatus(codes.Error, "Risk rejected")
+				riskSpan.End()
 				finalStatus = "risk_rejected"
 				return nil, fmt.Errorf("风控拒绝: %s", strings.Join(riskResult.Reasons, ", "))
 			}
 			// 如果需要人工审核，标记支付状态
 			if riskResult.Decision == "review" {
+				riskSpan.AddEvent("Manual review required")
 				fmt.Printf("风控需要审核: score=%d, reasons=%v\n", riskResult.Score, riskResult.Reasons)
 			}
+			riskSpan.SetStatus(codes.Ok, "")
 		}
+		riskSpan.End()
 	}
 
 	// 4. 生成支付流水号
@@ -232,6 +254,13 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 	// 10. 调用Order-Service创建订单（事务外，使用补偿机制）
 	var orderCreated bool
 	if s.orderClient != nil {
+		// 创建 span 追踪订单创建
+		ctx, orderSpan := tracing.StartSpan(ctx, "payment-gateway", "CreateOrder")
+		tracing.AddSpanTags(ctx, map[string]interface{}{
+			"payment_no": payment.PaymentNo,
+			"order_no":   payment.OrderNo,
+		})
+
 		_, err := s.orderClient.CreateOrder(ctx, &client.CreateOrderRequest{
 			MerchantID:    payment.MerchantID,
 			OrderNo:       payment.OrderNo,
@@ -249,6 +278,10 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		})
 		if err != nil {
 			// 订单创建失败，标记支付为失败状态（而非直接删除）
+			orderSpan.SetStatus(codes.Error, err.Error())
+			orderSpan.RecordError(err)
+			orderSpan.End()
+
 			payment.Status = model.PaymentStatusFailed
 			payment.ErrorMsg = fmt.Sprintf("创建订单失败: %v", err)
 			if updateErr := s.paymentRepo.Update(ctx, payment); updateErr != nil {
@@ -257,6 +290,8 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			finalStatus = "failed"
 			return nil, fmt.Errorf("创建订单失败: %w", err)
 		}
+		orderSpan.SetStatus(codes.Ok, "")
+		orderSpan.End()
 		orderCreated = true
 	}
 

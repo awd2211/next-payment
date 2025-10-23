@@ -1,0 +1,90 @@
+.docs-page {
+  padding-top: 64px;
+  min-height: 100vh;
+}
+
+.docs-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  padding: 80px 24px 60px;
+  text-align: center;
+}
+
+.docs-container {
+  max-width: 1200px;
+  margin: -40px auto 80px;
+  padding: 0 24px;
+}
+
+.doc-card {
+  height: 100%;
+  text-align: center;
+  border-radius: 12px;
+  transition: all 0.3s;
+}
+
+.doc-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.doc-icon {
+  font-size: 48px;
+  color: #1890ff;
+  margin-bottom: 16px;
+}
+
+.doc-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+.doc-description {
+  color: #595959;
+  margin: 0;
+}
+
+.doc-content {
+  margin-top: 48px;
+}
+
+.doc-content h2 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 32px 0 16px 0;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.doc-content h2:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+.doc-content p {
+  line-height: 1.8;
+  color: #595959;
+}
+
+.doc-content ul {
+  line-height: 2;
+  color: #595959;
+}
+
+.code-block {
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .code-block {
+    font-size: 12px;
+  }
+}

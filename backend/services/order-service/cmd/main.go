@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"payment-platform/order-service/internal/handler"
 	"payment-platform/order-service/internal/model"
@@ -94,6 +96,23 @@ func main() {
 	httpMetrics := metrics.NewHTTPMetrics("order_service")
 	logger.Info("Prometheus 指标初始化完成")
 
+	// 初始化 Jaeger 分布式追踪
+	jaegerEndpoint := config.GetEnv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
+	samplingRate := float64(config.GetEnvInt("JAEGER_SAMPLING_RATE", 100)) / 100.0
+	tracerShutdown, err := tracing.InitTracer(tracing.Config{
+		ServiceName:    "order-service",
+		ServiceVersion: "1.0.0",
+		Environment:    env,
+		JaegerEndpoint: jaegerEndpoint,
+		SamplingRate:   samplingRate,
+	})
+	if err != nil {
+		logger.Error(fmt.Sprintf("Jaeger 初始化失败: %v", err))
+	} else {
+		logger.Info("Jaeger 追踪初始化完成")
+		defer tracerShutdown(context.Background())
+	}
+
 	// 初始化Repository
 	orderRepo := repository.NewOrderRepository(database)
 
@@ -112,6 +131,7 @@ func main() {
 	// 全局中间件
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
+	r.Use(tracing.TracingMiddleware("order-service"))
 	r.Use(middleware.Logger(logger.Log))
 	r.Use(metrics.PrometheusMiddleware(httpMetrics)) // Prometheus HTTP 指标收集
 

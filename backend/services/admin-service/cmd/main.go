@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -11,7 +12,10 @@ import (
 	"github.com/payment-platform/pkg/db"
 	"github.com/payment-platform/pkg/email"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
@@ -96,6 +100,27 @@ func main() {
 	}
 	logger.Info("Redis连接成功")
 
+	// 初始化 Prometheus 指标
+	httpMetrics := metrics.NewHTTPMetrics("admin_service")
+	logger.Info("Prometheus 指标初始化完成")
+
+	// 初始化 Jaeger 分布式追踪
+	jaegerEndpoint := config.GetEnv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
+	samplingRate := float64(config.GetEnvInt("JAEGER_SAMPLING_RATE", 100)) / 100.0
+	tracerShutdown, err := tracing.InitTracer(tracing.Config{
+		ServiceName:    "admin-service",
+		ServiceVersion: "1.0.0",
+		Environment:    env,
+		JaegerEndpoint: jaegerEndpoint,
+		SamplingRate:   samplingRate,
+	})
+	if err != nil {
+		logger.Error(fmt.Sprintf("Jaeger 初始化失败: %v", err))
+	} else {
+		logger.Info("Jaeger 追踪初始化完成")
+		defer tracerShutdown(context.Background())
+	}
+
 	// 初始化JWT Manager
 	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
@@ -154,11 +179,16 @@ func main() {
 	// 全局中间件
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
+	r.Use(tracing.TracingMiddleware("admin-service"))
 	r.Use(middleware.Logger(logger.Log))
+	r.Use(metrics.PrometheusMiddleware(httpMetrics))
 
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
+
+	// Prometheus 指标端点
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {

@@ -1,0 +1,156 @@
+{
+  "nav": {
+    "home": "首页",
+    "products": "产品",
+    "docs": "文档",
+    "pricing": "定价",
+    "login": "登录",
+    "register": "立即开始"
+  },
+  "home": {
+    "hero": {
+      "title": "全球支付平台",
+      "subtitle": "企业级支付网关，支持 Stripe、PayPal 和加密货币",
+      "description": "多租户支付平台，提供全面的监控、安全和扩展能力",
+      "cta": {
+        "primary": "免费开始",
+        "secondary": "查看文档"
+      }
+    },
+    "features": {
+      "title": "平台特性",
+      "subtitle": "满足您所有的支付处理需求",
+      "items": {
+        "microservices": {
+          "title": "微服务架构",
+          "description": "15个独立服务，使用 Go 构建，提供高性能和可扩展性"
+        },
+        "multiChannel": {
+          "title": "多渠道支持",
+          "description": "集成 Stripe、PayPal 和加密货币支付渠道"
+        },
+        "monitoring": {
+          "title": "完整可观测性",
+          "description": "Prometheus 指标、Jaeger 追踪和 Grafana 仪表板实时监控"
+        },
+        "security": {
+          "title": "企业级安全",
+          "description": "JWT 认证、RBAC、交易保护和审计日志"
+        },
+        "multiTenant": {
+          "title": "多租户 SaaS",
+          "description": "完整的商户隔离，独立数据库和配置"
+        },
+        "international": {
+          "title": "全球化支持",
+          "description": "支持 32+ 种货币，实时汇率转换"
+        }
+      }
+    },
+    "stats": {
+      "services": "微服务",
+      "channels": "支付渠道",
+      "currencies": "支持货币",
+      "uptime": "可用性 SLA"
+    },
+    "cta": {
+      "title": "准备好开始了吗？",
+      "description": "加入数百家使用我们支付平台的企业",
+      "button": "开始集成"
+    }
+  },
+  "products": {
+    "title": "产品功能",
+    "subtitle": "全面的支付处理能力",
+    "gateway": {
+      "title": "支付网关",
+      "description": "统一支付接口，智能路由和幂等性保护",
+      "features": ["多渠道路由", "重复检测", "Webhook 回调", "重试机制"]
+    },
+    "risk": {
+      "title": "风险管理",
+      "description": "实时欺诈检测和风险评估",
+      "features": ["风险评分", "规则引擎", "黑名单管理", "人工审核"]
+    },
+    "settlement": {
+      "title": "结算与账务",
+      "description": "自动结算，复式记账",
+      "features": ["T+1 结算", "对账", "财务报表", "提现处理"]
+    },
+    "monitoring": {
+      "title": "监控与告警",
+      "description": "实时系统监控和告警",
+      "features": ["Prometheus 指标", "Jaeger 追踪", "Grafana 仪表板", "自定义告警"]
+    }
+  },
+  "docs": {
+    "title": "API 文档",
+    "subtitle": "集成我们支付平台所需的一切",
+    "quickStart": {
+      "title": "快速开始",
+      "description": "几分钟内开始使用我们的 API"
+    },
+    "apiReference": {
+      "title": "API 参考",
+      "description": "完整的 API 文档和示例"
+    },
+    "sdks": {
+      "title": "SDK 与库",
+      "description": "多种语言的官方 SDK"
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "description": "实时事件通知"
+    }
+  },
+  "pricing": {
+    "title": "价格方案",
+    "subtitle": "选择适合您业务的方案",
+    "starter": {
+      "name": "入门版",
+      "price": "免费",
+      "description": "适合测试和小型项目",
+      "features": ["每月最多 100 笔交易", "Stripe 集成", "基础支持", "邮件通知"]
+    },
+    "professional": {
+      "name": "专业版",
+      "price": "¥699",
+      "period": "/月",
+      "description": "适合成长型企业",
+      "features": ["每月最多 10,000 笔交易", "所有支付渠道", "优先支持", "高级分析", "自定义 Webhook"]
+    },
+    "enterprise": {
+      "name": "企业版",
+      "price": "定制",
+      "description": "适合大规模运营",
+      "features": ["无限交易量", "专属支持", "定制集成", "SLA 保障", "私有化部署"]
+    },
+    "cta": "立即开始"
+  },
+  "footer": {
+    "company": {
+      "title": "公司",
+      "about": "关于我们",
+      "careers": "招聘",
+      "contact": "联系我们"
+    },
+    "product": {
+      "title": "产品",
+      "features": "功能特性",
+      "pricing": "价格方案",
+      "security": "安全保障"
+    },
+    "resources": {
+      "title": "资源",
+      "docs": "文档",
+      "api": "API 参考",
+      "support": "技术支持"
+    },
+    "legal": {
+      "title": "法律",
+      "privacy": "隐私政策",
+      "terms": "服务条款"
+    },
+    "copyright": "© 2025 支付平台. 保留所有权利."
+  }
+}

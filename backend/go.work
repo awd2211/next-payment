@@ -15,8 +15,8 @@ use (
 	./services/order-service
 	./services/payment-gateway
 	./services/risk-service
-// ./services/settlement-service
-// ./services/withdrawal-service
-// ./services/kyc-service
+	./services/settlement-service
+	./services/withdrawal-service
+	./services/kyc-service
 // ./services/merchant-config-service
 )

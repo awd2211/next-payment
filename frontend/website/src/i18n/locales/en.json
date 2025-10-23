@@ -1,0 +1,156 @@
+{
+  "nav": {
+    "home": "Home",
+    "products": "Products",
+    "docs": "Documentation",
+    "pricing": "Pricing",
+    "login": "Login",
+    "register": "Get Started"
+  },
+  "home": {
+    "hero": {
+      "title": "Global Payment Platform",
+      "subtitle": "Enterprise-grade payment gateway supporting Stripe, PayPal, and cryptocurrency",
+      "description": "Multi-tenant payment platform with comprehensive monitoring, security, and scalability",
+      "cta": {
+        "primary": "Get Started Free",
+        "secondary": "View Documentation"
+      }
+    },
+    "features": {
+      "title": "Platform Features",
+      "subtitle": "Everything you need for payment processing",
+      "items": {
+        "microservices": {
+          "title": "Microservices Architecture",
+          "description": "15 independent services built with Go for high performance and scalability"
+        },
+        "multiChannel": {
+          "title": "Multi-Channel Support",
+          "description": "Integrated with Stripe, PayPal, and cryptocurrency payment channels"
+        },
+        "monitoring": {
+          "title": "Full Observability",
+          "description": "Prometheus metrics, Jaeger tracing, and Grafana dashboards for real-time monitoring"
+        },
+        "security": {
+          "title": "Enterprise Security",
+          "description": "JWT authentication, RBAC, transaction protection, and audit logging"
+        },
+        "multiTenant": {
+          "title": "Multi-Tenant SaaS",
+          "description": "Complete merchant isolation with independent databases and configurations"
+        },
+        "international": {
+          "title": "Global Support",
+          "description": "Support for 32+ currencies with real-time exchange rates"
+        }
+      }
+    },
+    "stats": {
+      "services": "Microservices",
+      "channels": "Payment Channels",
+      "currencies": "Supported Currencies",
+      "uptime": "Uptime SLA"
+    },
+    "cta": {
+      "title": "Ready to Get Started?",
+      "description": "Join hundreds of businesses using our payment platform",
+      "button": "Start Integration"
+    }
+  },
+  "products": {
+    "title": "Product Features",
+    "subtitle": "Comprehensive payment processing capabilities",
+    "gateway": {
+      "title": "Payment Gateway",
+      "description": "Unified payment interface with smart routing and idempotency protection",
+      "features": ["Multi-channel routing", "Duplicate detection", "Webhook callbacks", "Retry mechanism"]
+    },
+    "risk": {
+      "title": "Risk Management",
+      "description": "Real-time fraud detection and risk assessment",
+      "features": ["Risk scoring", "Rule engine", "Blacklist management", "Manual review"]
+    },
+    "settlement": {
+      "title": "Settlement & Accounting",
+      "description": "Automated settlement with double-entry bookkeeping",
+      "features": ["T+1 settlement", "Reconciliation", "Financial reports", "Withdrawal processing"]
+    },
+    "monitoring": {
+      "title": "Monitoring & Alerts",
+      "description": "Real-time system monitoring and alerting",
+      "features": ["Prometheus metrics", "Jaeger tracing", "Grafana dashboards", "Custom alerts"]
+    }
+  },
+  "docs": {
+    "title": "API Documentation",
+    "subtitle": "Everything you need to integrate our payment platform",
+    "quickStart": {
+      "title": "Quick Start",
+      "description": "Get started with our API in minutes"
+    },
+    "apiReference": {
+      "title": "API Reference",
+      "description": "Complete API documentation and examples"
+    },
+    "sdks": {
+      "title": "SDKs & Libraries",
+      "description": "Official SDKs for multiple languages"
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "description": "Real-time event notifications"
+    }
+  },
+  "pricing": {
+    "title": "Pricing Plans",
+    "subtitle": "Choose the plan that fits your business",
+    "starter": {
+      "name": "Starter",
+      "price": "Free",
+      "description": "Perfect for testing and small projects",
+      "features": ["Up to 100 transactions/month", "Stripe integration", "Basic support", "Email notifications"]
+    },
+    "professional": {
+      "name": "Professional",
+      "price": "$99",
+      "period": "/month",
+      "description": "For growing businesses",
+      "features": ["Up to 10,000 transactions/month", "All payment channels", "Priority support", "Advanced analytics", "Custom webhooks"]
+    },
+    "enterprise": {
+      "name": "Enterprise",
+      "price": "Custom",
+      "description": "For large-scale operations",
+      "features": ["Unlimited transactions", "Dedicated support", "Custom integrations", "SLA guarantee", "On-premise deployment"]
+    },
+    "cta": "Get Started"
+  },
+  "footer": {
+    "company": {
+      "title": "Company",
+      "about": "About Us",
+      "careers": "Careers",
+      "contact": "Contact"
+    },
+    "product": {
+      "title": "Product",
+      "features": "Features",
+      "pricing": "Pricing",
+      "security": "Security"
+    },
+    "resources": {
+      "title": "Resources",
+      "docs": "Documentation",
+      "api": "API Reference",
+      "support": "Support"
+    },
+    "legal": {
+      "title": "Legal",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service"
+    },
+    "copyright": "© 2025 Payment Platform. All rights reserved."
+  }
+}

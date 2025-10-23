@@ -1,0 +1,98 @@
+.pricing-page {
+  padding-top: 64px;
+  min-height: 100vh;
+}
+
+.pricing-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  padding: 80px 24px 60px;
+  text-align: center;
+}
+
+.pricing-container {
+  max-width: 1200px;
+  margin: -40px auto 80px;
+  padding: 0 24px;
+}
+
+.pricing-card {
+  height: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
+  position: relative;
+}
+
+.pricing-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.pricing-card.popular {
+  border: 2px solid #1890ff;
+}
+
+.popular-badge {
+  position: absolute;
+  top: -12px;
+  right: 24px;
+  background: #1890ff;
+  color: #fff;
+  padding: 4px 16px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.plan-name {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  text-align: center;
+}
+
+.plan-price {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.price-amount {
+  font-size: 48px;
+  font-weight: 700;
+  color: #1890ff;
+}
+
+.price-period {
+  font-size: 18px;
+  color: #8c8c8c;
+  margin-left: 4px;
+}
+
+.plan-description {
+  text-align: center;
+  color: #595959;
+  margin: 0 0 24px 0;
+  min-height: 48px;
+}
+
+.plan-button {
+  margin-bottom: 24px;
+}
+
+.plan-features .ant-list-item {
+  border: none;
+  padding: 12px 0;
+}
+
+@media (max-width: 968px) {
+  .pricing-card {
+    margin-bottom: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .price-amount {
+    font-size: 36px;
+  }
+}

@@ -13,7 +13,10 @@ import (
 	"github.com/payment-platform/pkg/db"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"payment-platform/notification-service/internal/handler"
 	"payment-platform/notification-service/internal/model"
 	"payment-platform/notification-service/internal/provider"
@@ -94,6 +97,27 @@ func main() {
 		log.Fatalf("Error: %v", err)
 	}
 	logger.Info("Redis连接成功")
+
+	// 初始化 Prometheus 指标
+	httpMetrics := metrics.NewHTTPMetrics("notification_service")
+	logger.Info("Prometheus 指标初始化完成")
+
+	// 初始化 Jaeger 分布式追踪
+	jaegerEndpoint := config.GetEnv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
+	samplingRate := float64(config.GetEnvInt("JAEGER_SAMPLING_RATE", 100)) / 100.0
+	tracerShutdown, err := tracing.InitTracer(tracing.Config{
+		ServiceName:    "notification-service",
+		ServiceVersion: "1.0.0",
+		Environment:    env,
+		JaegerEndpoint: jaegerEndpoint,
+		SamplingRate:   samplingRate,
+	})
+	if err != nil {
+		logger.Error(fmt.Sprintf("Jaeger 初始化失败: %v", err))
+	} else {
+		logger.Info("Jaeger 追踪初始化完成")
+		defer tracerShutdown(context.Background())
+	}
 
 	// 创建邮件提供商工厂
 	emailFactory := provider.NewEmailProviderFactory()
@@ -237,11 +261,16 @@ func main() {
 	// 全局中间件
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
+	r.Use(tracing.TracingMiddleware("notification-service"))
 	r.Use(middleware.Logger(logger.Log))
+	r.Use(metrics.PrometheusMiddleware(httpMetrics))
 
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
+
+	// Prometheus 指标端点
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 健康检查（公开接口）
 	r.GET("/health", func(c *gin.Context) {

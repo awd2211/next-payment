@@ -1,0 +1,144 @@
+.home-page {
+  min-height: 100vh;
+}
+
+/* Hero Section */
+.hero-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  padding: 120px 24px 80px;
+  text-align: center;
+}
+
+.hero-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.hero-title {
+  font-size: 56px;
+  font-weight: 700;
+  margin: 0 0 24px 0;
+  line-height: 1.2;
+}
+
+.hero-subtitle {
+  font-size: 24px;
+  margin: 0 0 16px 0;
+  opacity: 0.95;
+}
+
+.hero-description {
+  font-size: 18px;
+  margin: 0 0 40px 0;
+  opacity: 0.9;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Stats Section */
+.stats-section {
+  padding: 60px 24px;
+  background: #f8f9fa;
+}
+
+/* Features Section */
+.features-section {
+  padding: 80px 24px;
+}
+
+.section-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.section-title {
+  font-size: 40px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.section-subtitle {
+  font-size: 18px;
+  color: #8c8c8c;
+  margin: 0;
+}
+
+.feature-card {
+  height: 100%;
+  text-align: center;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.feature-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+.feature-icon {
+  font-size: 48px;
+  color: #1890ff;
+  margin-bottom: 16px;
+}
+
+.feature-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+.feature-description {
+  color: #595959;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* CTA Section */
+.cta-section {
+  padding: 80px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  text-align: center;
+}
+
+.cta-title {
+  font-size: 36px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: #fff;
+}
+
+.cta-description {
+  font-size: 18px;
+  margin: 0 0 32px 0;
+  opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 36px;
+  }
+
+  .hero-subtitle {
+    font-size: 18px;
+  }
+
+  .section-title {
+    font-size: 28px;
+  }
+
+  .cta-title {
+    font-size: 28px;
+  }
+}
