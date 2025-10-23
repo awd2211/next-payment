@@ -18,6 +18,9 @@ import (
 	"payment-platform/settlement-service/internal/model"
 	"payment-platform/settlement-service/internal/repository"
 	"payment-platform/settlement-service/internal/service"
+	grpcServer "payment-platform/settlement-service/internal/grpc"
+	pb "github.com/payment-platform/proto/settlement"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -156,7 +159,20 @@ func main() {
 	// 注册结算路由
 	settlementHandler.RegisterRoutes(r)
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50013)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	settlementGrpcServer := grpcServer.NewSettlementServer(settlementService)
+	pb.RegisterSettlementServiceServer(gRPCServer, settlementGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40013)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Settlement Service 正在监听 %s", addr))

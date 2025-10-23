@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/settlement-service/internal/model"
 	"payment-platform/settlement-service/internal/service"
 )
@@ -70,25 +72,33 @@ type TransactionItemRequest struct {
 func (h *SettlementHandler) CreateSettlement(c *gin.Context) {
 	var req CreateSettlementRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(req.MerchantID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	startDate, err := time.Parse("2006-01-02", req.StartDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的开始日期"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的开始日期", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	endDate, err := time.Parse("2006-01-02", req.EndDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的结束日期"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的结束日期", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -96,13 +106,17 @@ func (h *SettlementHandler) CreateSettlement(c *gin.Context) {
 	for _, tx := range req.Transactions {
 		txID, err := uuid.Parse(tx.TransactionID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的交易ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的交易ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 
 		txTime, err := time.Parse(time.RFC3339, tx.TransactionAt)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的交易时间"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的交易时间", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 
@@ -126,14 +140,20 @@ func (h *SettlementHandler) CreateSettlement(c *gin.Context) {
 
 	settlement, err := h.settlementService.CreateSettlement(c.Request.Context(), input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建结算单失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": settlement,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(settlement).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetSettlement 获取结算单详情
@@ -148,20 +168,28 @@ func (h *SettlementHandler) GetSettlement(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的结算单ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的结算单ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	detail, err := h.settlementService.GetSettlement(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取结算单详情失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": detail,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(detail).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListSettlements 结算单列表
@@ -181,7 +209,9 @@ func (h *SettlementHandler) ListSettlements(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		id, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		merchantID = &id
@@ -221,16 +251,22 @@ func (h *SettlementHandler) ListSettlements(c *gin.Context) {
 		PageSize:   pageSize,
 	}
 
-	resp, err := h.settlementService.ListSettlements(c.Request.Context(), query)
+	result, err := h.settlementService.ListSettlements(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取结算单列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": resp,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(result).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ApproveSettlementRequest 审批结算单请求
@@ -253,32 +289,44 @@ func (h *SettlementHandler) ApproveSettlement(c *gin.Context) {
 	idStr := c.Param("id")
 	settlementID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的结算单ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的结算单ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var req ApproveSettlementRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	approverID, err := uuid.Parse(req.ApproverID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审批人ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的审批人ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.settlementService.ApproveSettlement(c.Request.Context(), settlementID, approverID, req.ApproverName, req.Comments)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "审批结算单失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "审批通过",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "审批通过"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RejectSettlement 拒绝结算单
@@ -294,32 +342,44 @@ func (h *SettlementHandler) RejectSettlement(c *gin.Context) {
 	idStr := c.Param("id")
 	settlementID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的结算单ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的结算单ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var req ApproveSettlementRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	approverID, err := uuid.Parse(req.ApproverID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审批人ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的审批人ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.settlementService.RejectSettlement(c.Request.Context(), settlementID, approverID, req.ApproverName, req.Comments)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "拒绝结算单失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "已拒绝",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "已拒绝"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ExecuteSettlement 执行结算
@@ -334,20 +394,28 @@ func (h *SettlementHandler) ExecuteSettlement(c *gin.Context) {
 	idStr := c.Param("id")
 	settlementID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的结算单ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的结算单ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.settlementService.ExecuteSettlement(c.Request.Context(), settlementID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "执行结算失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "结算执行成功",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "结算执行成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetSettlementReport 获取结算报表
@@ -363,13 +431,17 @@ func (h *SettlementHandler) ExecuteSettlement(c *gin.Context) {
 func (h *SettlementHandler) GetSettlementReport(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "商户ID不能为空"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "商户ID不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -378,24 +450,34 @@ func (h *SettlementHandler) GetSettlementReport(c *gin.Context) {
 
 	startDate, err := time.Parse("2006-01-02", startDateStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的开始日期"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的开始日期", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	endDate, err := time.Parse("2006-01-02", endDateStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的结束日期"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的结束日期", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	report, err := h.settlementService.GetSettlementReport(c.Request.Context(), merchantID, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取结算报表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": report,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(report).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
