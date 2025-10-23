@@ -9,7 +9,9 @@ import (
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"payment-platform/order-service/internal/handler"
 	"payment-platform/order-service/internal/model"
 	"payment-platform/order-service/internal/repository"
@@ -88,6 +90,10 @@ func main() {
 	}
 	logger.Info("Redis连接成功")
 
+	// 初始化 Prometheus 指标
+	httpMetrics := metrics.NewHTTPMetrics("order_service")
+	logger.Info("Prometheus 指标初始化完成")
+
 	// 初始化Repository
 	orderRepo := repository.NewOrderRepository(database)
 
@@ -107,10 +113,14 @@ func main() {
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger(logger.Log))
+	r.Use(metrics.PrometheusMiddleware(httpMetrics)) // Prometheus HTTP 指标收集
 
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
+
+	// Prometheus 指标端点
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
@@ -119,10 +129,10 @@ func main() {
 			"service": "order-service",
 			"time":    time.Now().Unix(),
 		})
+	})
+
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
-	})
 
 	// 注册订单路由
 	orderHandler.RegisterRoutes(r)

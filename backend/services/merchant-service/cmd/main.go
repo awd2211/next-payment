@@ -10,6 +10,7 @@ import (
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
 	pkggrpc "github.com/payment-platform/pkg/grpc"
+	"github.com/payment-platform/pkg/health"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
 	pb "github.com/payment-platform/proto/merchant"
@@ -157,6 +158,12 @@ func main() {
 	businessHandler := handler.NewBusinessHandler(businessService)
 	dashboardHandler := handler.NewDashboardHandler(dashboardService)
 
+	// 初始化健康检查器
+	healthChecker := health.NewHealthChecker()
+	healthChecker.Register(health.NewDBChecker("database", database))
+	healthChecker.Register(health.NewRedisChecker("redis", redisClient))
+	healthHandler := health.NewGinHandler(healthChecker)
+
 	// 初始化Gin
 	if env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -172,14 +179,10 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
 
-	// 健康检查
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":  "ok",
-			"service": "merchant-service",
-			"time":    time.Now().Unix(),
-		})
-	})
+	// 健康检查端点
+	r.GET("/health", healthHandler.Handle)                     // 完整健康检查
+	r.GET("/health/live", healthHandler.HandleLiveness)        // 存活探针
+	r.GET("/health/ready", healthHandler.HandleReadiness)      // 就绪探针
 
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

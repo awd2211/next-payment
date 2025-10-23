@@ -10,7 +10,9 @@ import (
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"payment-platform/channel-adapter/internal/adapter"
 	"payment-platform/channel-adapter/internal/handler"
 	"payment-platform/channel-adapter/internal/model"
@@ -88,6 +90,10 @@ func main() {
 		log.Fatalf("Error: %v", err)
 	}
 	logger.Info("Redis连接成功")
+
+	// 初始化 Prometheus 指标
+	httpMetrics := metrics.NewHTTPMetrics("channel_adapter")
+	logger.Info("Prometheus 指标初始化完成")
 
 	// 创建适配器工厂
 	adapterFactory := adapter.NewAdapterFactory()
@@ -182,10 +188,14 @@ func main() {
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger(logger.Log))
+	r.Use(metrics.PrometheusMiddleware(httpMetrics)) // Prometheus HTTP 指标收集
 
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
+
+	// Prometheus 指标端点
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
@@ -194,10 +204,10 @@ func main() {
 			"service": "channel-adapter",
 			"time":    time.Now().Unix(),
 		})
+	})
+
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
-	})
 
 	// 注册渠道路由
 	channelHandler.RegisterRoutes(r)
