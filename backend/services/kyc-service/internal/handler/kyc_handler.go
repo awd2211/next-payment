@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/kyc-service/internal/model"
 	"payment-platform/kyc-service/internal/service"
 )
@@ -87,13 +89,17 @@ type SubmitDocumentRequest struct {
 func (h *KYCHandler) SubmitDocument(c *gin.Context) {
 	var req SubmitDocumentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(req.MerchantID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -123,14 +129,20 @@ func (h *KYCHandler) SubmitDocument(c *gin.Context) {
 
 	document, err := h.kycService.SubmitDocument(c.Request.Context(), input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "提交文档失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": document,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(document).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetDocument 获取文档详情
@@ -145,20 +157,28 @@ func (h *KYCHandler) GetDocument(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的文档ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的文档ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	document, err := h.kycService.GetDocument(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取文档失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": document,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(document).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListDocuments 文档列表
@@ -178,7 +198,9 @@ func (h *KYCHandler) ListDocuments(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		id, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		merchantID = &id
@@ -218,16 +240,22 @@ func (h *KYCHandler) ListDocuments(c *gin.Context) {
 		PageSize:     pageSize,
 	}
 
-	resp, err := h.kycService.ListDocuments(c.Request.Context(), query)
+	result, err := h.kycService.ListDocuments(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取文档列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": resp,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(result).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ReviewRequest 审核请求
@@ -251,32 +279,44 @@ func (h *KYCHandler) ApproveDocument(c *gin.Context) {
 	idStr := c.Param("id")
 	documentID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的文档ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的文档ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	reviewerID, err := uuid.Parse(req.ReviewerID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核人ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的审核人ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.kycService.ApproveDocument(c.Request.Context(), documentID, reviewerID, req.ReviewerName, req.Comments)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "审批失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "审批通过",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "审批通过"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RejectDocument 拒绝文档
@@ -292,32 +332,44 @@ func (h *KYCHandler) RejectDocument(c *gin.Context) {
 	idStr := c.Param("id")
 	documentID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的文档ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的文档ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	reviewerID, err := uuid.Parse(req.ReviewerID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核人ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的审核人ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.kycService.RejectDocument(c.Request.Context(), documentID, reviewerID, req.ReviewerName, req.Reason)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "拒绝失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "已拒绝",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "已拒绝"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Qualification Handlers
@@ -353,13 +405,17 @@ type SubmitQualificationRequest struct {
 func (h *KYCHandler) SubmitQualification(c *gin.Context) {
 	var req SubmitQualificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(req.MerchantID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -390,14 +446,20 @@ func (h *KYCHandler) SubmitQualification(c *gin.Context) {
 
 	qualification, err := h.kycService.SubmitQualification(c.Request.Context(), input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "提交企业资质失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": qualification,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(qualification).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetQualification 获取企业资质
@@ -412,20 +474,28 @@ func (h *KYCHandler) GetQualification(c *gin.Context) {
 	merchantIDStr := c.Param("merchant_id")
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	qualification, err := h.kycService.GetQualification(c.Request.Context(), merchantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取企业资质失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": qualification,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(qualification).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListQualifications 企业资质列表
@@ -472,16 +542,22 @@ func (h *KYCHandler) ListQualifications(c *gin.Context) {
 		PageSize: pageSize,
 	}
 
-	resp, err := h.kycService.ListQualifications(c.Request.Context(), query)
+	result, err := h.kycService.ListQualifications(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取企业资质列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": resp,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(result).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ApproveQualification 审批通过企业资质
@@ -497,32 +573,44 @@ func (h *KYCHandler) ApproveQualification(c *gin.Context) {
 	idStr := c.Param("id")
 	qualID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的资质ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的资质ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	reviewerID, err := uuid.Parse(req.ReviewerID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核人ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的审核人ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.kycService.ApproveQualification(c.Request.Context(), qualID, reviewerID, req.ReviewerName, req.Comments)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "审批失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "审批通过",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "审批通过"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RejectQualification 拒绝企业资质
@@ -538,32 +626,44 @@ func (h *KYCHandler) RejectQualification(c *gin.Context) {
 	idStr := c.Param("id")
 	qualID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的资质ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的资质ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	reviewerID, err := uuid.Parse(req.ReviewerID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核人ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的审核人ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.kycService.RejectQualification(c.Request.Context(), qualID, reviewerID, req.ReviewerName, req.Reason)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "拒绝失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "已拒绝",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "已拒绝"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Level Handlers
@@ -580,20 +680,28 @@ func (h *KYCHandler) GetMerchantLevel(c *gin.Context) {
 	merchantIDStr := c.Param("merchant_id")
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	level, err := h.kycService.GetMerchantLevel(c.Request.Context(), merchantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取KYC级别失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": level,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(level).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CheckMerchantEligibility 检查商户资格
@@ -608,20 +716,28 @@ func (h *KYCHandler) CheckMerchantEligibility(c *gin.Context) {
 	merchantIDStr := c.Param("merchant_id")
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	eligibility, err := h.kycService.CheckMerchantEligibility(c.Request.Context(), merchantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "检查资格失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": eligibility,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(eligibility).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Alert Handlers
@@ -644,7 +760,9 @@ func (h *KYCHandler) ListAlerts(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		id, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		merchantID = &id
@@ -688,16 +806,22 @@ func (h *KYCHandler) ListAlerts(c *gin.Context) {
 		PageSize:   pageSize,
 	}
 
-	resp, err := h.kycService.ListAlerts(c.Request.Context(), query)
+	result, err := h.kycService.ListAlerts(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取预警列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": resp,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(result).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ResolveAlertRequest 处理预警请求
@@ -718,32 +842,44 @@ func (h *KYCHandler) ResolveAlert(c *gin.Context) {
 	idStr := c.Param("id")
 	alertID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的预警ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的预警ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var req ResolveAlertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	resolverID, err := uuid.Parse(req.ResolverID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的处理人ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的处理人ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err = h.kycService.ResolveAlert(c.Request.Context(), alertID, resolverID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "处理预警失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "预警已处理",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "预警已处理"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Statistics Handler
@@ -761,7 +897,9 @@ func (h *KYCHandler) GetKYCStatistics(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		id, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		merchantID = &id
@@ -769,12 +907,18 @@ func (h *KYCHandler) GetKYCStatistics(c *gin.Context) {
 
 	stats, err := h.kycService.GetKYCStatistics(c.Request.Context(), merchantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取KYC统计失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": stats,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(stats).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }

@@ -5,6 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/merchant-service/internal/service"
 )
 
@@ -40,19 +42,28 @@ func (h *DashboardHandler) RegisterRoutes(r *gin.RouterGroup, authMiddleware gin
 func (h *DashboardHandler) GetDashboard(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	dashboard, err := h.dashboardService.GetDashboard(c.Request.Context(), merchantID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取Dashboard失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": dashboard,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(dashboard).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetTransactionSummary 获取交易汇总
@@ -66,7 +77,9 @@ func (h *DashboardHandler) GetDashboard(c *gin.Context) {
 func (h *DashboardHandler) GetTransactionSummary(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
@@ -75,13 +88,20 @@ func (h *DashboardHandler) GetTransactionSummary(c *gin.Context) {
 
 	summary, err := h.dashboardService.GetTransactionSummary(c.Request.Context(), merchantID.(uuid.UUID), startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取交易汇总失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": summary,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(summary).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetBalanceInfo 获取余额信息
@@ -93,17 +113,26 @@ func (h *DashboardHandler) GetTransactionSummary(c *gin.Context) {
 func (h *DashboardHandler) GetBalanceInfo(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	balanceInfo, err := h.dashboardService.GetBalanceInfo(c.Request.Context(), merchantID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取余额信息失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": balanceInfo,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(balanceInfo).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }

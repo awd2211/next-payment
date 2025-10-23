@@ -18,6 +18,9 @@ import (
 	"payment-platform/withdrawal-service/internal/model"
 	"payment-platform/withdrawal-service/internal/repository"
 	"payment-platform/withdrawal-service/internal/service"
+	grpcServer "payment-platform/withdrawal-service/internal/grpc"
+	pb "github.com/payment-platform/proto/withdrawal"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -157,7 +160,20 @@ func main() {
 	// 注册提现路由
 	withdrawalHandler.RegisterRoutes(r)
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50014)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	withdrawalGrpcServer := grpcServer.NewWithdrawalServer(withdrawalService)
+	pb.RegisterWithdrawalServiceServer(gRPCServer, withdrawalGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40014)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Withdrawal Service 正在监听 %s", addr))

@@ -18,6 +18,9 @@ import (
 	"payment-platform/kyc-service/internal/model"
 	"payment-platform/kyc-service/internal/repository"
 	"payment-platform/kyc-service/internal/service"
+	grpcServer "payment-platform/kyc-service/internal/grpc"
+	pb "github.com/payment-platform/proto/kyc"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -158,7 +161,20 @@ func main() {
 	// 注册KYC路由
 	kycHandler.RegisterRoutes(r)
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50015)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	kycGrpcServer := grpcServer.NewKYCServer(kycService)
+	pb.RegisterKYCServiceServer(gRPCServer, kycGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40015)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("KYC Service 正在监听 %s", addr))

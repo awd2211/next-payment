@@ -97,3 +97,4 @@ replace github.com/payment-platform/pkg => ../../pkg
 replace github.com/payment-platform/proto => ../../proto
 
 exclude google.golang.org/genproto v0.0.0-20190306203927-b5d61aea6440
+replace github.com/payment-platform/pkg => ../../pkg
