@@ -23,6 +23,9 @@ import (
 	"payment-platform/notification-service/internal/repository"
 	"payment-platform/notification-service/internal/service"
 	"payment-platform/notification-service/internal/worker"
+	grpcServer "payment-platform/notification-service/internal/grpc"
+	pb "github.com/payment-platform/proto/notification"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -294,10 +297,23 @@ func main() {
 	// 注册通知路由（带认证）
 	notificationHandler.RegisterRoutes(r, authMiddleware)
 
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50008)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	notificationGrpcServer := grpcServer.NewNotificationServer(notificationService)
+	pb.RegisterNotificationServiceServer(gRPCServer, notificationGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
 	// 启动后台任务
 	go startBackgroundWorkers(notificationService)
 
-	// 启动服务器
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40008)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Notification Service 正在监听 %s", addr))

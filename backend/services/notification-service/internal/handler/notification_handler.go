@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/notification-service/internal/model"
 	"payment-platform/notification-service/internal/repository"
 	"payment-platform/notification-service/internal/service"
@@ -34,25 +36,38 @@ func NewNotificationHandler(notificationService service.NotificationService) *No
 func (h *NotificationHandler) SendEmail(c *gin.Context) {
 	var req service.SendEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 	req.MerchantID = merchantID.(uuid.UUID)
 
 	// 发送邮件
 	if err := h.notificationService.SendEmail(c.Request.Context(), &req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "邮件发送失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "邮件发送成功"})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "邮件发送成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // SendSMS 发送短信
@@ -66,25 +81,38 @@ func (h *NotificationHandler) SendEmail(c *gin.Context) {
 func (h *NotificationHandler) SendSMS(c *gin.Context) {
 	var req service.SendSMSRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 	req.MerchantID = merchantID.(uuid.UUID)
 
 	// 发送短信
 	if err := h.notificationService.SendSMS(c.Request.Context(), &req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "短信发送失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "短信发送成功"})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "短信发送成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // SendWebhook 发送 Webhook
@@ -98,25 +126,38 @@ func (h *NotificationHandler) SendSMS(c *gin.Context) {
 func (h *NotificationHandler) SendWebhook(c *gin.Context) {
 	var req service.SendWebhookRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 	req.MerchantID = merchantID.(uuid.UUID)
 
 	// 发送 Webhook
 	if err := h.notificationService.SendWebhook(c.Request.Context(), &req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "Webhook 发送失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Webhook 发送成功"})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "Webhook 发送成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // SendEmailByTemplate 使用模板发送邮件
@@ -130,25 +171,38 @@ func (h *NotificationHandler) SendWebhook(c *gin.Context) {
 func (h *NotificationHandler) SendEmailByTemplate(c *gin.Context) {
 	var req service.SendEmailByTemplateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 	req.MerchantID = merchantID.(uuid.UUID)
 
 	// 发送邮件
 	if err := h.notificationService.SendEmailByTemplate(c.Request.Context(), &req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "模板邮件发送失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "邮件发送成功"})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "邮件发送成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetNotification 获取通知详情
@@ -163,22 +217,35 @@ func (h *NotificationHandler) GetNotification(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的通知ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的通知ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	notification, err := h.notificationService.GetNotification(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取通知失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
 	if notification == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "通知不存在"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "通知不存在", "").WithTraceID(traceID)
+		c.JSON(http.StatusNotFound, resp)
 		return
 	}
 
-	c.JSON(http.StatusOK, notification)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(notification).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListNotifications 列出通知
@@ -201,7 +268,9 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
@@ -228,16 +297,25 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 	// 查询通知列表
 	notifications, total, err := h.notificationService.ListNotifications(c.Request.Context(), &query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询通知列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
 		"data":      notifications,
 		"total":     total,
 		"page":      query.Page,
 		"page_size": query.PageSize,
-	})
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CreateTemplate 创建通知模板
@@ -251,7 +329,9 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 	var template model.NotificationTemplate
 	if err := c.ShouldBindJSON(&template); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -262,11 +342,20 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 	}
 
 	if err := h.notificationService.CreateTemplate(c.Request.Context(), &template); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建模板失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, template)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(template).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetTemplate 获取通知模板
@@ -280,7 +369,9 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 func (h *NotificationHandler) GetTemplate(c *gin.Context) {
 	code := c.Param("code")
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "模板编码不能为空"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "模板编码不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -292,16 +383,27 @@ func (h *NotificationHandler) GetTemplate(c *gin.Context) {
 
 	template, err := h.notificationService.GetTemplate(c.Request.Context(), code, merchantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取模板失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
 	if template == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "模板不存在"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "模板不存在", "").WithTraceID(traceID)
+		c.JSON(http.StatusNotFound, resp)
 		return
 	}
 
-	c.JSON(http.StatusOK, template)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(template).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListTemplates 列出通知模板
@@ -320,11 +422,20 @@ func (h *NotificationHandler) ListTemplates(c *gin.Context) {
 
 	templates, err := h.notificationService.ListTemplates(c.Request.Context(), merchantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询模板列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, templates)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(templates).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // UpdateTemplate 更新通知模板
@@ -340,24 +451,37 @@ func (h *NotificationHandler) UpdateTemplate(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的模板ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的模板ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var template model.NotificationTemplate
 	if err := c.ShouldBindJSON(&template); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	template.ID = id
 
 	if err := h.notificationService.UpdateTemplate(c.Request.Context(), &template); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "更新模板失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, template)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(template).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // DeleteTemplate 删除通知模板
@@ -372,16 +496,27 @@ func (h *NotificationHandler) DeleteTemplate(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的模板ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的模板ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.notificationService.DeleteTemplate(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "删除模板失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "模板删除成功"})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "模板删除成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CreateWebhookEndpoint 创建 Webhook 端点
@@ -395,24 +530,37 @@ func (h *NotificationHandler) DeleteTemplate(c *gin.Context) {
 func (h *NotificationHandler) CreateWebhookEndpoint(c *gin.Context) {
 	var endpoint model.WebhookEndpoint
 	if err := c.ShouldBindJSON(&endpoint); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 	endpoint.MerchantID = merchantID.(uuid.UUID)
 
 	if err := h.notificationService.CreateWebhookEndpoint(c.Request.Context(), &endpoint); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建 Webhook 端点失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, endpoint)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(endpoint).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListWebhookEndpoints 列出 Webhook 端点
@@ -426,18 +574,29 @@ func (h *NotificationHandler) ListWebhookEndpoints(c *gin.Context) {
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	// 列出端点
 	endpoints, err := h.notificationService.ListWebhookEndpoints(c.Request.Context(), merchantID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询 Webhook 端点列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, endpoints)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(endpoints).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // UpdateWebhookEndpoint 更新 Webhook 端点
@@ -453,13 +612,17 @@ func (h *NotificationHandler) UpdateWebhookEndpoint(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的端点ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的端点ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var endpoint model.WebhookEndpoint
 	if err := c.ShouldBindJSON(&endpoint); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -468,17 +631,28 @@ func (h *NotificationHandler) UpdateWebhookEndpoint(c *gin.Context) {
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 	endpoint.MerchantID = merchantID.(uuid.UUID)
 
 	if err := h.notificationService.UpdateWebhookEndpoint(c.Request.Context(), &endpoint); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "更新 Webhook 端点失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, endpoint)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(endpoint).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // DeleteWebhookEndpoint 删除 Webhook 端点
@@ -493,16 +667,27 @@ func (h *NotificationHandler) DeleteWebhookEndpoint(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的端点ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的端点ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.notificationService.DeleteWebhookEndpoint(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "删除 Webhook 端点失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "端点删除成功"})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "端点删除成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListWebhookDeliveries 列出 Webhook 投递记录
@@ -525,7 +710,9 @@ func (h *NotificationHandler) ListWebhookDeliveries(c *gin.Context) {
 	if endpointIDStr := c.Query("endpoint_id"); endpointIDStr != "" {
 		endpointID, err := uuid.Parse(endpointIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的端点ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的端点ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.EndpointID = &endpointID
@@ -534,7 +721,9 @@ func (h *NotificationHandler) ListWebhookDeliveries(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
@@ -566,16 +755,25 @@ func (h *NotificationHandler) ListWebhookDeliveries(c *gin.Context) {
 	// 查询投递记录列表
 	deliveries, total, err := h.notificationService.ListWebhookDeliveries(c.Request.Context(), &query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询 Webhook 投递记录失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
 		"data":      deliveries,
 		"total":     total,
 		"page":      query.Page,
 		"page_size": query.PageSize,
-	})
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CreatePreference 创建通知偏好
@@ -589,24 +787,37 @@ func (h *NotificationHandler) ListWebhookDeliveries(c *gin.Context) {
 func (h *NotificationHandler) CreatePreference(c *gin.Context) {
 	var preference model.NotificationPreference
 	if err := c.ShouldBindJSON(&preference); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 	preference.MerchantID = merchantID.(uuid.UUID)
 
 	if err := h.notificationService.CreatePreference(c.Request.Context(), &preference); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建通知偏好失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, preference)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(preference).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetPreference 获取通知偏好详情
@@ -621,22 +832,35 @@ func (h *NotificationHandler) GetPreference(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的偏好ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的偏好ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	preference, err := h.notificationService.GetPreference(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取通知偏好失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
 	if preference == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "偏好设置不存在"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "偏好设置不存在", "").WithTraceID(traceID)
+		c.JSON(http.StatusNotFound, resp)
 		return
 	}
 
-	c.JSON(http.StatusOK, preference)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(preference).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListPreferences 列出通知偏好
@@ -651,7 +875,9 @@ func (h *NotificationHandler) ListPreferences(c *gin.Context) {
 	// 从上下文获取商户ID
 	merchantID, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未认证", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
@@ -659,7 +885,9 @@ func (h *NotificationHandler) ListPreferences(c *gin.Context) {
 	if userIDStr := c.Query("user_id"); userIDStr != "" {
 		uid, err := uuid.Parse(userIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户ID"})
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的用户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		userID = &uid
@@ -667,11 +895,20 @@ func (h *NotificationHandler) ListPreferences(c *gin.Context) {
 
 	preferences, err := h.notificationService.ListPreferences(c.Request.Context(), merchantID.(uuid.UUID), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询通知偏好列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, preferences)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(preferences).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // UpdatePreference 更新通知偏好
@@ -687,24 +924,37 @@ func (h *NotificationHandler) UpdatePreference(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的偏好ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的偏好ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var preference model.NotificationPreference
 	if err := c.ShouldBindJSON(&preference); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	preference.ID = id
 
 	if err := h.notificationService.UpdatePreference(c.Request.Context(), &preference); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "更新通知偏好失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, preference)
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(preference).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // DeletePreference 删除通知偏好
@@ -719,16 +969,27 @@ func (h *NotificationHandler) DeletePreference(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的偏好ID"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的偏好ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.notificationService.DeletePreference(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "删除通知偏好失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "偏好设置删除成功"})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "偏好设置删除成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RegisterRoutes 注册路由
