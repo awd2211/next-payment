@@ -18,6 +18,9 @@ import (
 	"payment-platform/analytics-service/internal/model"
 	"payment-platform/analytics-service/internal/repository"
 	"payment-platform/analytics-service/internal/service"
+	grpcServer "payment-platform/analytics-service/internal/grpc"
+	pb "github.com/payment-platform/proto/analytics"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -157,7 +160,20 @@ func main() {
 	// 注册分析路由
 	analyticsHandler.RegisterRoutes(r)
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50009)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	analyticsGrpcServer := grpcServer.NewAnalyticsServer(analyticsService)
+	pb.RegisterAnalyticsServiceServer(gRPCServer, analyticsGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40009)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Analytics Service 正在监听 %s", addr))

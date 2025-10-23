@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/analytics-service/internal/repository"
 	"payment-platform/analytics-service/internal/service"
 )
@@ -60,57 +62,87 @@ func (h *AnalyticsHandler) RegisterRoutes(router *gin.Engine) {
 func (h *AnalyticsHandler) GetPaymentMetrics(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("merchant_id 不能为空"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "merchant_id 不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	startDate, endDate, err := parseDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "日期范围参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	metrics, err := h.analyticsService.GetPaymentMetrics(c.Request.Context(), merchantID, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取支付指标失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(metrics))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(metrics).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *AnalyticsHandler) GetPaymentSummary(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("merchant_id 不能为空"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "merchant_id 不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	startDate, endDate, err := parseDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "日期范围参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	summary, err := h.analyticsService.GetPaymentSummary(c.Request.Context(), merchantID, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取支付汇总失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(summary))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(summary).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Merchant Analytics
@@ -118,57 +150,87 @@ func (h *AnalyticsHandler) GetPaymentSummary(c *gin.Context) {
 func (h *AnalyticsHandler) GetMerchantMetrics(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("merchant_id 不能为空"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "merchant_id 不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	startDate, endDate, err := parseDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "日期范围参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	metrics, err := h.analyticsService.GetMerchantMetrics(c.Request.Context(), merchantID, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取商户指标失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(metrics))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(metrics).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *AnalyticsHandler) GetMerchantSummary(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("merchant_id 不能为空"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "merchant_id 不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	startDate, endDate, err := parseDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "日期范围参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	summary, err := h.analyticsService.GetMerchantSummary(c.Request.Context(), merchantID, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取商户汇总失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(summary))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(summary).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Channel Analytics
@@ -176,45 +238,71 @@ func (h *AnalyticsHandler) GetMerchantSummary(c *gin.Context) {
 func (h *AnalyticsHandler) GetChannelMetrics(c *gin.Context) {
 	channelCode := c.Query("channel_code")
 	if channelCode == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("channel_code 不能为空"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "channel_code 不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	startDate, endDate, err := parseDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "日期范围参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	metrics, err := h.analyticsService.GetChannelMetrics(c.Request.Context(), channelCode, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取渠道指标失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(metrics))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(metrics).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *AnalyticsHandler) GetChannelSummary(c *gin.Context) {
 	channelCode := c.Query("channel_code")
 	if channelCode == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("channel_code 不能为空"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "channel_code 不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	startDate, endDate, err := parseDateRange(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "日期范围参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	summary, err := h.analyticsService.GetChannelSummary(c.Request.Context(), channelCode, startDate, endDate)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取渠道汇总失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(summary))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(summary).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Realtime Stats
@@ -229,7 +317,9 @@ func (h *AnalyticsHandler) GetRealtimeStats(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
@@ -237,11 +327,20 @@ func (h *AnalyticsHandler) GetRealtimeStats(c *gin.Context) {
 
 	stats, err := h.analyticsService.GetRealtimeStats(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取实时统计失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(stats))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(stats).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Helper functions
