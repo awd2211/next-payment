@@ -21,7 +21,9 @@ import {
   KeyOutlined,
   ShopOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
+import LanguageSwitcher from './LanguageSwitcher'
 
 const { Header, Sider, Content } = AntLayout
 const { Text } = Typography
@@ -29,6 +31,7 @@ const { Text } = Typography
 const Layout = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation()
   const { admin, clearAuth, hasPermission } = useAuthStore()
   const [collapsed, setCollapsed] = useState(false)
 
@@ -41,32 +44,32 @@ const Layout = () => {
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
-      label: '仪表板',
+      label: t('menu.dashboard'),
     },
     hasPermission('config.view') && {
       key: '/system-configs',
       icon: <SettingOutlined />,
-      label: '系统配置',
+      label: t('menu.systemConfigs'),
     },
     hasPermission('admin.view') && {
       key: '/admins',
       icon: <TeamOutlined />,
-      label: '管理员管理',
+      label: t('menu.admins'),
     },
     hasPermission('role.view') && {
       key: '/roles',
       icon: <SafetyOutlined />,
-      label: '角色权限',
+      label: t('menu.roles'),
     },
     hasPermission('merchant.view') && {
       key: '/merchants',
       icon: <ShopOutlined />,
-      label: '商户管理',
+      label: t('menu.merchants'),
     },
     hasPermission('audit.view') && {
       key: '/audit-logs',
       icon: <FileTextOutlined />,
-      label: '审计日志',
+      label: t('menu.auditLogs'),
     },
   ].filter(Boolean) as MenuProps['items']
 
@@ -75,7 +78,7 @@ const Layout = () => {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: '个人信息',
+      label: t('layout.profile'),
     },
     {
       key: 'change-password',
@@ -88,7 +91,7 @@ const Layout = () => {
     {
       key: 'logout',
       icon: <LogoutOutlined />,
-      label: '退出登录',
+      label: t('layout.logout'),
       danger: true,
     },
   ]
@@ -144,12 +147,15 @@ const Layout = () => {
           }}
         >
           <div />
-          <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }}>
-            <Space style={{ cursor: 'pointer' }}>
-              <Avatar src={admin?.avatar} icon={<UserOutlined />} />
-              <Text>{admin?.full_name || admin?.username}</Text>
-            </Space>
-          </Dropdown>
+          <Space size="large">
+            <LanguageSwitcher />
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }}>
+              <Space style={{ cursor: 'pointer' }}>
+                <Avatar src={admin?.avatar} icon={<UserOutlined />} />
+                <Text>{admin?.full_name || admin?.username}</Text>
+              </Space>
+            </Dropdown>
+          </Space>
         </Header>
         <Content
           style={{

@@ -2,17 +2,56 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import enUS from 'antd/locale/en_US'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/en'
 import App from './App'
 import './index.css'
+import './i18n/config'
 
-dayjs.locale('zh-cn')
+// 动态设置 dayjs 语言
+const getAntdLocale = (lang: string) => {
+  return lang === 'zh-CN' ? zhCN : enUS
+}
+
+const getDayjsLocale = (lang: string) => {
+  return lang === 'zh-CN' ? 'zh-cn' : 'en'
+}
+
+dayjs.locale(getDayjsLocale(localStorage.getItem('i18nextLng') || 'zh-CN'))
+
+// 创建一个动态语言的包装器
+const AppWithI18n = () => {
+  const [locale, setLocale] = React.useState(() =>
+    getAntdLocale(localStorage.getItem('i18nextLng') || 'zh-CN')
+  )
+
+  React.useEffect(() => {
+    const handleLanguageChange = (lng: string) => {
+      setLocale(getAntdLocale(lng))
+      dayjs.locale(getDayjsLocale(lng))
+    }
+
+    // 监听语言变化
+    window.addEventListener('languagechange', ((e: CustomEvent) => {
+      handleLanguageChange(e.detail)
+    }) as EventListener)
+
+    return () => {
+      window.removeEventListener('languagechange', () => {})
+    }
+  }, [])
+
+  return (
+    <ConfigProvider locale={locale}>
+      <App />
+    </ConfigProvider>
+  )
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ConfigProvider locale={zhCN}>
-      <App />
-    </ConfigProvider>
+    <AppWithI18n />
   </React.StrictMode>,
 )
