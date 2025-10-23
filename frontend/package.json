@@ -1,0 +1,8 @@
+{
+	"dependencies": {
+		"@ant-design/charts": "^2.6.6"
+	},
+	"devDependencies": {
+		"prettier": "^3.6.2"
+	}
+}
