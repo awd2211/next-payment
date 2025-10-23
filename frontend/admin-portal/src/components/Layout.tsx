@@ -23,6 +23,7 @@ import {
   DollarOutlined,
   ShoppingOutlined,
   WarningOutlined,
+  AccountBookOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -85,6 +86,11 @@ const Layout = () => {
       key: '/risk',
       icon: <WarningOutlined />,
       label: t('menu.riskManagement'),
+    },
+    hasPermission('accounting.view') && {
+      key: '/settlements',
+      icon: <AccountBookOutlined />,
+      label: t('menu.settlements'),
     },
     hasPermission('audit.view') && {
       key: '/audit-logs',
