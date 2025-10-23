@@ -8,6 +8,7 @@ use (
 	./services/analytics-service
 	./services/channel-adapter
 	./services/config-service
+	./services/kyc-service
 	// 预留：待拆分的服务（go.mod创建后取消注释）
 	./services/merchant-auth-service
 	./services/merchant-service
@@ -17,7 +18,6 @@ use (
 	./services/risk-service
 	./services/settlement-service
 	./services/withdrawal-service
-	./services/kyc-service
-// ./services/merchant-config-service
+	// ./services/merchant-config-service
 	./tests/integration
 )

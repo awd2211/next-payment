@@ -3,18 +3,13 @@
 # 生成所有Proto文件
 proto:
 	@echo "Generating protobuf files..."
-	@protoc --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		proto/admin/*.proto
-	@protoc --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		proto/merchant/*.proto
-	@protoc --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		proto/payment/*.proto
-	@protoc --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		proto/order/*.proto
+	@export PATH=$$PATH:$(HOME)/go/bin && \
+	for dir in admin merchant payment order risk channel accounting notification analytics config kyc merchant_auth settlement withdrawal; do \
+		echo "Generating $$dir proto..."; \
+		protoc -I. -I$(HOME)/include --go_out=. --go_opt=paths=source_relative \
+			--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+			proto/$$dir/*.proto 2>&1 && echo "✓ $$dir done" || echo "✗ $$dir failed"; \
+	done
 	@echo "Proto generation completed!"
 
 # 清理生成的文件
