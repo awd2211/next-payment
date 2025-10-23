@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/metrics"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 	"payment-platform/payment-gateway/internal/client"
@@ -38,12 +39,13 @@ type PaymentService interface {
 }
 
 type paymentService struct {
-	db            *gorm.DB
-	paymentRepo   repository.PaymentRepository
-	orderClient   *client.OrderClient
-	channelClient *client.ChannelClient
-	riskClient    *client.RiskClient
-	redisClient   *redis.Client
+	db             *gorm.DB
+	paymentRepo    repository.PaymentRepository
+	orderClient    *client.OrderClient
+	channelClient  *client.ChannelClient
+	riskClient     *client.RiskClient
+	redisClient    *redis.Client
+	paymentMetrics *metrics.PaymentMetrics
 }
 
 // NewPaymentService 创建支付服务实例
@@ -54,14 +56,16 @@ func NewPaymentService(
 	channelClient *client.ChannelClient,
 	riskClient *client.RiskClient,
 	redisClient *redis.Client,
+	paymentMetrics *metrics.PaymentMetrics,
 ) PaymentService {
 	return &paymentService{
-		db:            db,
-		paymentRepo:   paymentRepo,
-		orderClient:   orderClient,
-		channelClient: channelClient,
-		riskClient:    riskClient,
-		redisClient:   redisClient,
+		db:             db,
+		paymentRepo:    paymentRepo,
+		orderClient:    orderClient,
+		channelClient:  channelClient,
+		riskClient:     riskClient,
+		redisClient:    redisClient,
+		paymentMetrics: paymentMetrics,
 	}
 }
 
@@ -97,17 +101,37 @@ type CreateRefundInput struct {
 
 // CreatePayment 创建支付（完整流程，带事务保护）
 func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePaymentInput) (*model.Payment, error) {
+	// 记录开始时间用于性能指标
+	start := time.Now()
+	var finalStatus string
+	var finalChannel string
+
+	// 使用 defer 确保指标总是被记录
+	defer func() {
+		if s.paymentMetrics != nil {
+			duration := time.Since(start)
+			amount := float64(input.Amount) / 100.0 // 转换为主币单位
+			if finalChannel == "" {
+				finalChannel = input.Channel
+			}
+			s.paymentMetrics.RecordPayment(finalStatus, finalChannel, input.Currency, amount, duration)
+		}
+	}()
+
 	// 1. 验证货币类型
 	if !s.isValidCurrency(input.Currency) {
+		finalStatus = "failed"
 		return nil, fmt.Errorf("不支持的货币类型: %s", input.Currency)
 	}
 
 	// 2. 检查订单号是否已存在（防重复）
 	existing, err := s.paymentRepo.GetByOrderNo(ctx, input.MerchantID, input.OrderNo)
 	if err != nil {
+		finalStatus = "failed"
 		return nil, fmt.Errorf("检查订单号失败: %w", err)
 	}
 	if existing != nil {
+		finalStatus = "duplicate"
 		return nil, fmt.Errorf("订单号已存在: %s", input.OrderNo)
 	}
 
@@ -131,6 +155,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		} else if riskResult != nil {
 			// 如果风控拒绝，直接返回错误
 			if riskResult.Decision == "reject" {
+				finalStatus = "risk_rejected"
 				return nil, fmt.Errorf("风控拒绝: %s", strings.Join(riskResult.Reasons, ", "))
 			}
 			// 如果需要人工审核，标记支付状态
@@ -188,14 +213,19 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 	} else {
 		channel, err := s.SelectChannel(ctx, payment)
 		if err != nil {
+			finalStatus = "failed"
 			return nil, fmt.Errorf("选择支付渠道失败: %w", err)
 		}
 		payment.Channel = channel
 	}
 
+	// 记录最终选择的渠道
+	finalChannel = payment.Channel
+
 	// 9. 在事务中创建支付记录
 	// 注意：这里只保存支付记录，外部服务调用放在事务外
 	if err := s.paymentRepo.Create(ctx, payment); err != nil {
+		finalStatus = "failed"
 		return nil, fmt.Errorf("创建支付记录失败: %w", err)
 	}
 
@@ -224,6 +254,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			if updateErr := s.paymentRepo.Update(ctx, payment); updateErr != nil {
 				fmt.Printf("更新支付状态失败: %v\n", updateErr)
 			}
+			finalStatus = "failed"
 			return nil, fmt.Errorf("创建订单失败: %w", err)
 		}
 		orderCreated = true
@@ -264,6 +295,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 				fmt.Printf("警告：支付失败但订单已创建，需要补偿。PaymentNo=%s\n", payment.PaymentNo)
 			}
 
+			finalStatus = "failed"
 			return nil, fmt.Errorf("发起支付失败: %w", err)
 		}
 
@@ -285,6 +317,8 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		payment.Extra = string(extraBytes)
 	}
 
+	// 支付创建成功
+	finalStatus = "success"
 	return payment, nil
 }
 
@@ -465,23 +499,45 @@ func (s *paymentService) notifyMerchant(ctx context.Context, payment *model.Paym
 
 // CreateRefund 创建退款（完整流程）
 func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundInput) (*model.Refund, error) {
+	// 记录退款指标
+	var finalStatus string
+	var currency string
+	var amount float64
+
+	defer func() {
+		if s.paymentMetrics != nil && currency != "" {
+			s.paymentMetrics.RecordRefund(finalStatus, currency, amount)
+		}
+	}()
+
 	// 1. 获取原支付记录
 	payment, err := s.GetPayment(ctx, input.PaymentNo)
 	if err != nil {
-		return nil, err
+		finalStatus = "failed"
+		return nil, fmt.Errorf("获取支付记录失败: %w", err)
 	}
+
+	// 记录货币类型和金额
+	currency = payment.Currency
+	amount = float64(input.Amount) / 100.0
 
 	// 2. 只有成功的支付才能退款
 	if payment.Status != model.PaymentStatusSuccess {
+		finalStatus = "invalid_status"
 		return nil, fmt.Errorf("只有成功的支付才能退款，当前状态: %s", payment.Status)
 	}
 
 	// 3. 验证退款金额
+	if input.Amount <= 0 {
+		finalStatus = "invalid_amount"
+		return nil, fmt.Errorf("退款金额必须大于0")
+	}
 	if input.Amount > payment.Amount {
-		return nil, fmt.Errorf("退款金额不能大于支付金额")
+		finalStatus = "amount_exceeded"
+		return nil, fmt.Errorf("退款金额不能大于支付金额: 退款=%d, 支付=%d", input.Amount, payment.Amount)
 	}
 
-	// 4. 检查已退款总额
+	// 4. 检查已退款总额（防止重复退款）
 	existingRefunds, _, err := s.paymentRepo.ListRefunds(ctx, &repository.RefundQuery{
 		PaymentID: &payment.ID,
 		Status:    model.RefundStatusSuccess,
@@ -489,6 +545,7 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 		PageSize:  100,
 	})
 	if err != nil {
+		finalStatus = "failed"
 		return nil, fmt.Errorf("查询已退款总额失败: %w", err)
 	}
 
@@ -498,6 +555,7 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 	}
 
 	if refundedAmount+input.Amount > payment.Amount {
+		finalStatus = "amount_exceeded"
 		return nil, fmt.Errorf("退款总额超过支付金额: 已退款=%d, 本次退款=%d, 支付金额=%d",
 			refundedAmount, input.Amount, payment.Amount)
 	}
@@ -505,7 +563,7 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 	// 5. 生成退款单号
 	refundNo := s.generateRefundNo()
 
-	// 6. 创建退款记录
+	// 6. 创建退款记录（初始状态为 pending）
 	refund := &model.Refund{
 		PaymentID:    payment.ID,
 		MerchantID:   payment.MerchantID,
@@ -520,10 +578,12 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 	}
 
 	if err := s.paymentRepo.CreateRefund(ctx, refund); err != nil {
+		finalStatus = "failed"
 		return nil, fmt.Errorf("创建退款记录失败: %w", err)
 	}
 
-	// 7. 调用Channel-Adapter执行退款
+	// 7. 调用 Channel-Adapter 执行渠道退款（事务外，使用 Saga 模式）
+	var channelRefundSuccess bool
 	if s.channelClient != nil {
 		channelResult, err := s.channelClient.CreateRefund(ctx, &client.RefundRequest{
 			RefundNo:       refund.RefundNo,
@@ -534,27 +594,45 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 			Reason:         refund.Reason,
 		})
 		if err != nil {
-			// 渠道退款失败
+			// 渠道退款失败，标记退款为失败状态
 			refund.Status = model.RefundStatusFailed
-			refund.ErrorMsg = err.Error()
-			s.paymentRepo.UpdateRefund(ctx, refund)
+			refund.ErrorMsg = fmt.Sprintf("渠道退款失败: %v", err)
+			if updateErr := s.paymentRepo.UpdateRefund(ctx, refund); updateErr != nil {
+				fmt.Printf("更新退款失败状态时出错: %v\n", updateErr)
+			}
+			finalStatus = "failed"
 			return nil, fmt.Errorf("渠道退款失败: %w", err)
 		}
 
-		// 更新退款状态
+		// 渠道退款成功
+		channelRefundSuccess = true
 		refund.ChannelRefundNo = channelResult.ChannelRefundNo
 		refund.Status = model.RefundStatusSuccess
 		now := time.Now()
 		refund.RefundedAt = &now
 
+		// 更新退款记录为成功状态
 		if err := s.paymentRepo.UpdateRefund(ctx, refund); err != nil {
-			fmt.Printf("更新退款状态失败: %v\n", err)
+			// 警告：渠道已退款成功，但本地状态更新失败
+			fmt.Printf("警告：渠道退款成功但本地状态更新失败，RefundNo=%s, ChannelRefundNo=%s, Error=%v\n",
+				refund.RefundNo, refund.ChannelRefundNo, err)
+			// 这里应该发送到消息队列，由后台任务重试更新
+			// TODO: 发送补偿消息到 MQ
+			finalStatus = "partial_success"
+			return nil, fmt.Errorf("退款成功但状态更新失败，请手动确认: %w", err)
 		}
+	} else {
+		// 没有配置渠道客户端（测试环境）
+		fmt.Printf("警告：未配置渠道客户端，退款记录已创建但未实际退款: RefundNo=%s\n", refund.RefundNo)
 	}
 
-	// 8. 通知商户退款结果
-	go s.notifyMerchantRefund(context.Background(), payment, refund)
+	// 8. 只有成功后才通知商户
+	if channelRefundSuccess {
+		go s.notifyMerchantRefund(context.Background(), payment, refund)
+	}
 
+	// 退款成功
+	finalStatus = "success"
 	return refund, nil
 }
 
