@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+package analytics;
+
+option go_package = "github.com/payment-platform/proto/analytics;analytics";
+
+import "google/protobuf/timestamp.proto";
+
+// Analytics Service - 分析服务
+service AnalyticsService {
+  // 支付统计
+  rpc GetPaymentStats(GetPaymentStatsRequest) returns (PaymentStatsResponse);
+  rpc GetPaymentTrends(GetPaymentTrendsRequest) returns (PaymentTrendsResponse);
+  rpc GetChannelStats(GetChannelStatsRequest) returns (ChannelStatsResponse);
+
+  // 商户统计
+  rpc GetMerchantStats(GetMerchantStatsRequest) returns (MerchantStatsResponse);
+  rpc GetTopMerchants(GetTopMerchantsRequest) returns (TopMerchantsResponse);
+
+  // 实时监控
+  rpc GetRealtimeMetrics(GetRealtimeMetricsRequest) returns (RealtimeMetricsResponse);
+  rpc GetSystemHealth(GetSystemHealthRequest) returns (SystemHealthResponse);
+
+  // 自定义报表
+  rpc GenerateReport(GenerateReportRequest) returns (ReportResponse);
+  rpc ListReports(ListReportsRequest) returns (ListReportsResponse);
+}
+
+// 支付统计相关消息
+message PaymentStats {
+  int64 total_count = 1;
+  int64 success_count = 2;
+  int64 failed_count = 3;
+  int64 total_amount = 4;
+  double success_rate = 5;
+  double average_amount = 6;
+  string currency = 7;
+  string period = 8;
+}
+
+message GetPaymentStatsRequest {
+  string merchant_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  string currency = 4;
+}
+
+message PaymentStatsResponse {
+  PaymentStats stats = 1;
+}
+
+message TrendPoint {
+  string time = 1;
+  int64 count = 2;
+  int64 amount = 3;
+}
+
+message GetPaymentTrendsRequest {
+  string merchant_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  string granularity = 4;  // hour, day, week, month
+}
+
+message PaymentTrendsResponse {
+  repeated TrendPoint trends = 1;
+}
+
+message ChannelStat {
+  string channel = 1;
+  int64 count = 2;
+  int64 amount = 3;
+  double success_rate = 4;
+}
+
+message GetChannelStatsRequest {
+  string merchant_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+}
+
+message ChannelStatsResponse {
+  repeated ChannelStat channels = 1;
+}
+
+// 商户统计相关消息
+message MerchantStats {
+  string merchant_id = 1;
+  string merchant_name = 2;
+  int64 total_transactions = 3;
+  int64 total_amount = 4;
+  int64 active_users = 5;
+  double conversion_rate = 6;
+}
+
+message GetMerchantStatsRequest {
+  string merchant_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+}
+
+message MerchantStatsResponse {
+  MerchantStats stats = 1;
+}
+
+message TopMerchant {
+  string merchant_id = 1;
+  string merchant_name = 2;
+  int64 total_amount = 3;
+  int64 transaction_count = 4;
+}
+
+message GetTopMerchantsRequest {
+  int32 limit = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  string order_by = 4;  // amount, count
+}
+
+message TopMerchantsResponse {
+  repeated TopMerchant merchants = 1;
+}
+
+// 实时监控相关消息
+message RealtimeMetrics {
+  int64 active_sessions = 1;
+  int64 requests_per_second = 2;
+  int64 successful_payments_count = 3;
+  int64 failed_payments_count = 4;
+  double average_response_time = 5;
+}
+
+message GetRealtimeMetricsRequest {
+  string time_range = 1;  // 1m, 5m, 15m
+}
+
+message RealtimeMetricsResponse {
+  RealtimeMetrics metrics = 1;
+}
+
+message ServiceHealth {
+  string service_name = 1;
+  string status = 2;
+  double cpu_usage = 3;
+  double memory_usage = 4;
+  int64 request_count = 5;
+  double error_rate = 6;
+}
+
+message GetSystemHealthRequest {
+}
+
+message SystemHealthResponse {
+  string overall_status = 1;
+  repeated ServiceHealth services = 2;
+}
+
+// 报表相关消息
+message Report {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string period = 4;
+  string format = 5;
+  string file_url = 6;
+  string status = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message GenerateReportRequest {
+  string name = 1;
+  string type = 2;
+  string merchant_id = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  string format = 6;  // pdf, excel, csv
+}
+
+message ReportResponse {
+  Report report = 1;
+}
+
+message ListReportsRequest {
+  string merchant_id = 1;
+  string type = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message ListReportsResponse {
+  repeated Report reports = 1;
+  int64 total = 2;
+}

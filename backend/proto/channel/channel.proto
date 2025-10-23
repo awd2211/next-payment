@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package channel;
+
+option go_package = "github.com/payment-platform/proto/channel;channel";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Channel Adapter Service - 支付渠道适配服务
+service ChannelService {
+  // 支付操作
+  rpc CreatePayment(CreatePaymentRequest) returns (CreatePaymentResponse);
+  rpc QueryPayment(QueryPaymentRequest) returns (QueryPaymentResponse);
+  rpc CancelPayment(CancelPaymentRequest) returns (CancelPaymentResponse);
+
+  // 退款操作
+  rpc CreateRefund(CreateRefundRequest) returns (CreateRefundResponse);
+  rpc QueryRefund(QueryRefundRequest) returns (QueryRefundResponse);
+
+  // 渠道配置
+  rpc GetChannelConfig(GetChannelConfigRequest) returns (ChannelConfigResponse);
+  rpc UpdateChannelConfig(UpdateChannelConfigRequest) returns (ChannelConfigResponse);
+}
+
+// 支付相关消息
+message CreatePaymentRequest {
+  string merchant_id = 1;
+  string payment_no = 2;
+  string channel = 3;  // stripe, paypal, etc.
+  int64 amount = 4;
+  string currency = 5;
+  string pay_method = 6;
+  string customer_email = 7;
+  string customer_name = 8;
+  string description = 9;
+  string return_url = 10;
+  string notify_url = 11;
+  google.protobuf.Struct extra = 12;
+}
+
+message CreatePaymentResponse {
+  string channel_order_no = 1;
+  string payment_url = 2;
+  string client_secret = 3;
+  string status = 4;
+  google.protobuf.Struct extra = 5;
+}
+
+message QueryPaymentRequest {
+  string payment_no = 1;
+  string channel = 2;
+}
+
+message QueryPaymentResponse {
+  string channel_order_no = 1;
+  string status = 2;
+  int64 amount = 3;
+  string currency = 4;
+  google.protobuf.Timestamp paid_at = 5;
+  string failure_code = 6;
+  string failure_message = 7;
+}
+
+message CancelPaymentRequest {
+  string payment_no = 1;
+  string channel = 2;
+}
+
+message CancelPaymentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 退款相关消息
+message CreateRefundRequest {
+  string payment_no = 1;
+  string refund_no = 2;
+  string channel = 3;
+  string channel_order_no = 4;
+  int64 amount = 5;
+  string currency = 6;
+  string reason = 7;
+}
+
+message CreateRefundResponse {
+  string channel_refund_no = 1;
+  string status = 2;
+  google.protobuf.Timestamp refunded_at = 3;
+}
+
+message QueryRefundRequest {
+  string refund_no = 1;
+  string channel = 2;
+}
+
+message QueryRefundResponse {
+  string channel_refund_no = 1;
+  string status = 2;
+  int64 amount = 3;
+  string currency = 4;
+  google.protobuf.Timestamp refunded_at = 5;
+}
+
+// 渠道配置相关消息
+message ChannelConfig {
+  string channel = 1;
+  string merchant_id = 2;
+  google.protobuf.Struct config = 3;
+  bool enabled = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message GetChannelConfigRequest {
+  string merchant_id = 1;
+  string channel = 2;
+}
+
+message UpdateChannelConfigRequest {
+  string merchant_id = 1;
+  string channel = 2;
+  google.protobuf.Struct config = 3;
+  bool enabled = 4;
+}
+
+message ChannelConfigResponse {
+  ChannelConfig config = 1;
+}

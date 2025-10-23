@@ -1,0 +1,207 @@
+syntax = "proto3";
+
+package config;
+
+option go_package = "github.com/payment-platform/proto/config;config";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Config Service - 配置服务
+service ConfigService {
+  // 系统配置
+  rpc GetSystemConfig(GetSystemConfigRequest) returns (SystemConfigResponse);
+  rpc UpdateSystemConfig(UpdateSystemConfigRequest) returns (SystemConfigResponse);
+  rpc ListSystemConfigs(ListSystemConfigsRequest) returns (ListSystemConfigsResponse);
+
+  // 商户配置
+  rpc GetMerchantConfig(GetMerchantConfigRequest) returns (MerchantConfigResponse);
+  rpc UpdateMerchantConfig(UpdateMerchantConfigRequest) returns (MerchantConfigResponse);
+
+  // 渠道配置
+  rpc GetChannelConfig(GetChannelConfigRequest) returns (ChannelConfigResponse);
+  rpc UpdateChannelConfig(UpdateChannelConfigRequest) returns (ChannelConfigResponse);
+  rpc ListChannelConfigs(ListChannelConfigsRequest) returns (ListChannelConfigsResponse);
+
+  // 费率配置
+  rpc GetFeeConfig(GetFeeConfigRequest) returns (FeeConfigResponse);
+  rpc UpdateFeeConfig(UpdateFeeConfigRequest) returns (FeeConfigResponse);
+
+  // 限额配置
+  rpc GetLimitConfig(GetLimitConfigRequest) returns (LimitConfigResponse);
+  rpc UpdateLimitConfig(UpdateLimitConfigRequest) returns (LimitConfigResponse);
+}
+
+// 系统配置相关消息
+message SystemConfig {
+  string id = 1;
+  string key = 2;
+  string value = 3;
+  string description = 4;
+  string category = 5;
+  bool is_public = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message GetSystemConfigRequest {
+  string key = 1;
+}
+
+message UpdateSystemConfigRequest {
+  string key = 1;
+  string value = 2;
+  string description = 3;
+}
+
+message SystemConfigResponse {
+  SystemConfig config = 1;
+}
+
+message ListSystemConfigsRequest {
+  string category = 1;
+  bool is_public = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message ListSystemConfigsResponse {
+  repeated SystemConfig configs = 1;
+  int64 total = 2;
+}
+
+// 商户配置相关消息
+message MerchantConfig {
+  string merchant_id = 1;
+  bool auto_settlement = 2;
+  int32 settlement_cycle = 3;
+  int64 min_settlement_amount = 4;
+  bool webhook_enabled = 5;
+  string webhook_url = 6;
+  string webhook_secret = 7;
+  repeated string allowed_channels = 8;
+  google.protobuf.Struct extra = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message GetMerchantConfigRequest {
+  string merchant_id = 1;
+}
+
+message UpdateMerchantConfigRequest {
+  string merchant_id = 1;
+  bool auto_settlement = 2;
+  int32 settlement_cycle = 3;
+  int64 min_settlement_amount = 4;
+  bool webhook_enabled = 5;
+  string webhook_url = 6;
+  repeated string allowed_channels = 7;
+  google.protobuf.Struct extra = 8;
+}
+
+message MerchantConfigResponse {
+  MerchantConfig config = 1;
+}
+
+// 渠道配置相关消息
+message ChannelConfig {
+  string id = 1;
+  string channel = 2;
+  string merchant_id = 3;
+  google.protobuf.Struct credentials = 4;
+  bool enabled = 5;
+  int32 priority = 6;
+  google.protobuf.Struct extra = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message GetChannelConfigRequest {
+  string merchant_id = 1;
+  string channel = 2;
+}
+
+message UpdateChannelConfigRequest {
+  string merchant_id = 1;
+  string channel = 2;
+  google.protobuf.Struct credentials = 3;
+  bool enabled = 4;
+  int32 priority = 5;
+}
+
+message ChannelConfigResponse {
+  ChannelConfig config = 1;
+}
+
+message ListChannelConfigsRequest {
+  string merchant_id = 1;
+  bool enabled_only = 2;
+}
+
+message ListChannelConfigsResponse {
+  repeated ChannelConfig configs = 1;
+}
+
+// 费率配置相关消息
+message FeeConfig {
+  string id = 1;
+  string merchant_id = 2;
+  string channel = 3;
+  string payment_method = 4;
+  double fee_rate = 5;
+  int64 fixed_fee = 6;
+  int64 min_fee = 7;
+  int64 max_fee = 8;
+  string currency = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message GetFeeConfigRequest {
+  string merchant_id = 1;
+  string channel = 2;
+  string payment_method = 3;
+}
+
+message UpdateFeeConfigRequest {
+  string merchant_id = 1;
+  string channel = 2;
+  string payment_method = 3;
+  double fee_rate = 4;
+  int64 fixed_fee = 5;
+  int64 min_fee = 6;
+  int64 max_fee = 7;
+}
+
+message FeeConfigResponse {
+  FeeConfig config = 1;
+}
+
+// 限额配置相关消息
+message LimitConfig {
+  string id = 1;
+  string merchant_id = 2;
+  string limit_type = 3;
+  int64 single_min = 4;
+  int64 single_max = 5;
+  int64 daily_max = 6;
+  int64 monthly_max = 7;
+  string currency = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message GetLimitConfigRequest {
+  string merchant_id = 1;
+  string limit_type = 2;
+}
+
+message UpdateLimitConfigRequest {
+  string merchant_id = 1;
+  string limit_type = 2;
+  int64 single_min = 3;
+  int64 single_max = 4;
+  int64 daily_max = 5;
+  int64 monthly_max = 6;
+}
+
+message LimitConfigResponse {
+  LimitConfig config = 1;
+}

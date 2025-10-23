@@ -1,0 +1,226 @@
+syntax = "proto3";
+
+package risk;
+
+option go_package = "github.com/payment-platform/proto/risk;risk";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Risk Service - 风控服务
+service RiskService {
+  // 风控检查
+  rpc CheckPayment(CheckPaymentRequest) returns (CheckPaymentResponse);
+  rpc ReportPaymentResult(ReportPaymentResultRequest) returns (ReportPaymentResultResponse);
+
+  // 规则管理
+  rpc CreateRule(CreateRuleRequest) returns (RuleResponse);
+  rpc GetRule(GetRuleRequest) returns (RuleResponse);
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
+  rpc UpdateRule(UpdateRuleRequest) returns (RuleResponse);
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+  rpc EnableRule(EnableRuleRequest) returns (RuleResponse);
+  rpc DisableRule(DisableRuleRequest) returns (RuleResponse);
+
+  // 检查记录
+  rpc GetCheck(GetCheckRequest) returns (CheckResponse);
+  rpc ListChecks(ListChecksRequest) returns (ListChecksResponse);
+
+  // 黑名单管理
+  rpc AddBlacklist(AddBlacklistRequest) returns (BlacklistResponse);
+  rpc RemoveBlacklist(RemoveBlacklistRequest) returns (RemoveBlacklistResponse);
+  rpc CheckBlacklist(CheckBlacklistRequest) returns (CheckBlacklistResponse);
+  rpc ListBlacklist(ListBlacklistRequest) returns (ListBlacklistResponse);
+}
+
+// 风控检查相关消息
+message CheckPaymentRequest {
+  string merchant_id = 1;
+  string related_id = 2;
+  string related_type = 3;
+  int64 amount = 4;
+  string currency = 5;
+  string payer_ip = 6;
+  string payer_email = 7;
+  string payer_phone = 8;
+  string device_id = 9;
+  string payment_method = 10;
+  google.protobuf.Struct extra = 11;
+}
+
+message CheckPaymentResponse {
+  string decision = 1;  // accept, reject, review
+  int32 score = 2;
+  repeated string reasons = 3;
+  repeated string matched_rules = 4;
+  string check_id = 5;
+}
+
+message ReportPaymentResultRequest {
+  string check_id = 1;
+  string result = 2;  // success, failed
+  string error_code = 3;
+  string error_message = 4;
+}
+
+message ReportPaymentResultResponse {
+  bool success = 1;
+}
+
+// 规则管理相关消息
+message RiskRule {
+  string id = 1;
+  string rule_name = 2;
+  string rule_type = 3;
+  google.protobuf.Struct conditions = 4;
+  google.protobuf.Struct actions = 5;
+  int32 priority = 6;
+  string status = 7;
+  string description = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message CreateRuleRequest {
+  string rule_name = 1;
+  string rule_type = 2;
+  google.protobuf.Struct conditions = 3;
+  google.protobuf.Struct actions = 4;
+  int32 priority = 5;
+  string description = 6;
+}
+
+message UpdateRuleRequest {
+  string id = 1;
+  string rule_name = 2;
+  google.protobuf.Struct conditions = 3;
+  google.protobuf.Struct actions = 4;
+  int32 priority = 5;
+  string description = 6;
+}
+
+message GetRuleRequest {
+  string id = 1;
+}
+
+message ListRulesRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string rule_type = 3;
+  string status = 4;
+}
+
+message ListRulesResponse {
+  repeated RiskRule rules = 1;
+  int64 total = 2;
+}
+
+message DeleteRuleRequest {
+  string id = 1;
+}
+
+message DeleteRuleResponse {
+  bool success = 1;
+}
+
+message EnableRuleRequest {
+  string id = 1;
+}
+
+message DisableRuleRequest {
+  string id = 1;
+}
+
+message RuleResponse {
+  RiskRule rule = 1;
+}
+
+// 检查记录相关消息
+message RiskCheck {
+  string id = 1;
+  string merchant_id = 2;
+  string related_id = 3;
+  string related_type = 4;
+  int64 amount = 5;
+  string currency = 6;
+  string decision = 7;
+  int32 score = 8;
+  repeated string reasons = 9;
+  string result = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message GetCheckRequest {
+  string id = 1;
+}
+
+message CheckResponse {
+  RiskCheck check = 1;
+}
+
+message ListChecksRequest {
+  string merchant_id = 1;
+  string related_id = 2;
+  string decision = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  int32 page = 6;
+  int32 page_size = 7;
+}
+
+message ListChecksResponse {
+  repeated RiskCheck checks = 1;
+  int64 total = 2;
+}
+
+// 黑名单相关消息
+message Blacklist {
+  string id = 1;
+  string entity_type = 2;
+  string entity_value = 3;
+  string reason = 4;
+  string added_by = 5;
+  google.protobuf.Timestamp expire_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message AddBlacklistRequest {
+  string entity_type = 1;
+  string entity_value = 2;
+  string reason = 3;
+  string added_by = 4;
+  google.protobuf.Timestamp expire_at = 5;
+}
+
+message BlacklistResponse {
+  Blacklist blacklist = 1;
+}
+
+message RemoveBlacklistRequest {
+  string id = 1;
+}
+
+message RemoveBlacklistResponse {
+  bool success = 1;
+}
+
+message CheckBlacklistRequest {
+  string entity_type = 1;
+  string entity_value = 2;
+}
+
+message CheckBlacklistResponse {
+  bool is_blacklisted = 1;
+  Blacklist blacklist = 2;
+}
+
+message ListBlacklistRequest {
+  string entity_type = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListBlacklistResponse {
+  repeated Blacklist blacklists = 1;
+  int64 total = 2;
+}

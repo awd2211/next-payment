@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package kyc;
+
+option go_package = "github.com/payment-platform/proto/kyc";
+
+import "google/protobuf/timestamp.proto";
+
+// KYC Service - 商户KYC认证服务
+service KYCService {
+  // 提交KYC文档
+  rpc SubmitDocument(SubmitDocumentRequest) returns (DocumentResponse);
+
+  // 获取KYC文档
+  rpc GetDocument(GetDocumentRequest) returns (DocumentResponse);
+
+  // 更新KYC文档状态
+  rpc UpdateDocumentStatus(UpdateDocumentStatusRequest) returns (DocumentResponse);
+
+  // 获取商户KYC等级
+  rpc GetMerchantKYCLevel(GetMerchantKYCLevelRequest) returns (KYCLevelResponse);
+
+  // 创建KYC审核
+  rpc CreateReview(CreateReviewRequest) returns (ReviewResponse);
+
+  // 获取KYC审核
+  rpc GetReview(GetReviewRequest) returns (ReviewResponse);
+
+  // 完成KYC审核
+  rpc CompleteReview(CompleteReviewRequest) returns (ReviewResponse);
+
+  // 获取KYC告警列表
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+}
+
+// 提交文档请求
+message SubmitDocumentRequest {
+  string merchant_id = 1;
+  string document_type = 2;  // ID_CARD, BUSINESS_LICENSE, etc.
+  string document_number = 3;
+  string document_url = 4;
+  map<string, string> metadata = 5;
+}
+
+// 文档响应
+message DocumentResponse {
+  int32 code = 1;
+  string message = 2;
+  KYCDocumentData data = 3;
+}
+
+message KYCDocumentData {
+  string id = 1;
+  string merchant_id = 2;
+  string document_type = 3;
+  string document_number = 4;
+  string document_url = 5;
+  string status = 6;  // PENDING, APPROVED, REJECTED
+  string reject_reason = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// 获取文档请求
+message GetDocumentRequest {
+  string document_id = 1;
+}
+
+// 更新文档状态请求
+message UpdateDocumentStatusRequest {
+  string document_id = 1;
+  string status = 2;
+  string reject_reason = 3;
+  string reviewed_by = 4;
+}
+
+// 获取商户KYC等级请求
+message GetMerchantKYCLevelRequest {
+  string merchant_id = 1;
+}
+
+// KYC等级响应
+message KYCLevelResponse {
+  int32 code = 1;
+  string message = 2;
+  KYCLevelData data = 3;
+}
+
+message KYCLevelData {
+  string merchant_id = 1;
+  string kyc_level = 2;  // LEVEL_0, LEVEL_1, LEVEL_2, LEVEL_3
+  int64 daily_limit = 3;
+  int64 monthly_limit = 4;
+  bool email_verified = 5;
+  bool phone_verified = 6;
+  bool identity_verified = 7;
+  bool business_verified = 8;
+}
+
+// 创建审核请求
+message CreateReviewRequest {
+  string merchant_id = 1;
+  string document_id = 2;
+  string reviewer_id = 3;
+}
+
+// 审核响应
+message ReviewResponse {
+  int32 code = 1;
+  string message = 2;
+  KYCReviewData data = 3;
+}
+
+message KYCReviewData {
+  string id = 1;
+  string merchant_id = 2;
+  string document_id = 3;
+  string reviewer_id = 4;
+  string status = 5;  // IN_REVIEW, APPROVED, REJECTED
+  string comments = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp completed_at = 8;
+}
+
+// 获取审核请求
+message GetReviewRequest {
+  string review_id = 1;
+}
+
+// 完成审核请求
+message CompleteReviewRequest {
+  string review_id = 1;
+  string status = 2;  // APPROVED, REJECTED
+  string comments = 3;
+}
+
+// 获取告警列表请求
+message ListAlertsRequest {
+  string merchant_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+// 告警列表响应
+message ListAlertsResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated KYCAlertData alerts = 3;
+  int64 total = 4;
+}
+
+message KYCAlertData {
+  string id = 1;
+  string merchant_id = 2;
+  string alert_type = 3;  // SUSPICIOUS_ACTIVITY, DOCUMENT_EXPIRED, etc.
+  string severity = 4;  // LOW, MEDIUM, HIGH, CRITICAL
+  string description = 5;
+  string status = 6;  // OPEN, INVESTIGATING, RESOLVED
+  google.protobuf.Timestamp created_at = 7;
+}

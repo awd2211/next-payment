@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+package settlement;
+
+option go_package = "github.com/payment-platform/proto/settlement";
+
+import "google/protobuf/timestamp.proto";
+
+// Settlement Service - 结算服务
+service SettlementService {
+  // 创建结算
+  rpc CreateSettlement(CreateSettlementRequest) returns (SettlementResponse);
+
+  // 获取结算信息
+  rpc GetSettlement(GetSettlementRequest) returns (SettlementResponse);
+
+  // 查询结算列表
+  rpc ListSettlements(ListSettlementsRequest) returns (ListSettlementsResponse);
+
+  // 审批结算
+  rpc ApproveSettlement(ApproveSettlementRequest) returns (SettlementResponse);
+
+  // 拒绝结算
+  rpc RejectSettlement(RejectSettlementRequest) returns (SettlementResponse);
+
+  // 确认结算已付款
+  rpc ConfirmSettlement(ConfirmSettlementRequest) returns (SettlementResponse);
+
+  // 计算待结算金额
+  rpc CalculateSettlement(CalculateSettlementRequest) returns (CalculateSettlementResponse);
+
+  // 获取结算统计
+  rpc GetSettlementStats(GetSettlementStatsRequest) returns (SettlementStatsResponse);
+}
+
+// 创建结算请求
+message CreateSettlementRequest {
+  string merchant_id = 1;
+  string settlement_currency = 2;
+  google.protobuf.Timestamp start_date = 3;
+  google.protobuf.Timestamp end_date = 4;
+  repeated SettlementItemInput items = 5;
+}
+
+message SettlementItemInput {
+  string order_no = 1;
+  string payment_no = 2;
+  int64 amount = 3;
+  int64 fee = 4;
+  string currency = 5;
+}
+
+// 结算响应
+message SettlementResponse {
+  int32 code = 1;
+  string message = 2;
+  SettlementData data = 3;
+}
+
+message SettlementData {
+  string id = 1;
+  string settlement_no = 2;
+  string merchant_id = 3;
+  int64 total_amount = 4;
+  int64 total_fee = 5;
+  int64 net_amount = 6;
+  string currency = 7;
+  string status = 8;  // PENDING, APPROVED, REJECTED, PAID, FAILED
+  google.protobuf.Timestamp settlement_date = 9;
+  google.protobuf.Timestamp start_date = 10;
+  google.protobuf.Timestamp end_date = 11;
+  string bank_account = 12;
+  string reject_reason = 13;
+  int32 item_count = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+// 获取结算请求
+message GetSettlementRequest {
+  string settlement_id = 1;
+}
+
+// 查询结算列表请求
+message ListSettlementsRequest {
+  string merchant_id = 1;
+  string status = 2;
+  google.protobuf.Timestamp start_date = 3;
+  google.protobuf.Timestamp end_date = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+// 结算列表响应
+message ListSettlementsResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated SettlementData settlements = 3;
+  int64 total = 4;
+}
+
+// 审批结算请求
+message ApproveSettlementRequest {
+  string settlement_id = 1;
+  string approver_id = 2;
+  string comments = 3;
+}
+
+// 拒绝结算请求
+message RejectSettlementRequest {
+  string settlement_id = 1;
+  string approver_id = 2;
+  string reject_reason = 3;
+}
+
+// 确认结算请求
+message ConfirmSettlementRequest {
+  string settlement_id = 1;
+  string transaction_no = 2;
+  google.protobuf.Timestamp paid_at = 3;
+}
+
+// 计算待结算金额请求
+message CalculateSettlementRequest {
+  string merchant_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+// 计算结算响应
+message CalculateSettlementResponse {
+  int32 code = 1;
+  string message = 2;
+  CalculateSettlementData data = 3;
+}
+
+message CalculateSettlementData {
+  string merchant_id = 1;
+  int64 total_amount = 2;
+  int64 total_fee = 3;
+  int64 net_amount = 4;
+  string currency = 5;
+  int32 transaction_count = 6;
+  google.protobuf.Timestamp start_date = 7;
+  google.protobuf.Timestamp end_date = 8;
+}
+
+// 获取结算统计请求
+message GetSettlementStatsRequest {
+  string merchant_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+// 结算统计响应
+message SettlementStatsResponse {
+  int32 code = 1;
+  string message = 2;
+  SettlementStatsData data = 3;
+}
+
+message SettlementStatsData {
+  string merchant_id = 1;
+  int64 total_settled_amount = 2;
+  int64 total_settled_fee = 3;
+  int64 pending_settlement_amount = 4;
+  int32 settlement_count = 5;
+  int32 pending_count = 6;
+  repeated SettlementByStatus by_status = 7;
+}
+
+message SettlementByStatus {
+  string status = 1;
+  int32 count = 2;
+  int64 amount = 3;
+}

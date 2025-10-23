@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package notification;
+
+option go_package = "github.com/payment-platform/proto/notification;notification";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Notification Service - 通知服务
+service NotificationService {
+  // 邮件通知
+  rpc SendEmail(SendEmailRequest) returns (SendEmailResponse);
+  rpc GetEmailTemplate(GetEmailTemplateRequest) returns (EmailTemplateResponse);
+  rpc UpdateEmailTemplate(UpdateEmailTemplateRequest) returns (EmailTemplateResponse);
+
+  // Webhook通知
+  rpc SendWebhook(SendWebhookRequest) returns (SendWebhookResponse);
+  rpc ListWebhookLogs(ListWebhookLogsRequest) returns (ListWebhookLogsResponse);
+  rpc RetryWebhook(RetryWebhookRequest) returns (RetryWebhookResponse);
+
+  // 短信通知
+  rpc SendSMS(SendSMSRequest) returns (SendSMSResponse);
+
+  // 通知历史
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
+}
+
+// 邮件相关消息
+message SendEmailRequest {
+  string to = 1;
+  string subject = 2;
+  string content = 3;
+  string template_id = 4;
+  google.protobuf.Struct template_data = 5;
+  repeated string cc = 6;
+  repeated string bcc = 7;
+}
+
+message SendEmailResponse {
+  string message_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message EmailTemplate {
+  string id = 1;
+  string name = 2;
+  string subject = 3;
+  string content = 4;
+  string language = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message GetEmailTemplateRequest {
+  string id = 1;
+}
+
+message UpdateEmailTemplateRequest {
+  string id = 1;
+  string subject = 2;
+  string content = 3;
+}
+
+message EmailTemplateResponse {
+  EmailTemplate template = 1;
+}
+
+// Webhook相关消息
+message SendWebhookRequest {
+  string url = 1;
+  string method = 2;
+  google.protobuf.Struct payload = 3;
+  map<string, string> headers = 4;
+  string related_id = 5;
+  string related_type = 6;
+}
+
+message SendWebhookResponse {
+  bool success = 1;
+  int32 status_code = 2;
+  string response_body = 3;
+  string error = 4;
+}
+
+message WebhookLog {
+  string id = 1;
+  string url = 2;
+  string method = 3;
+  string payload = 4;
+  int32 status_code = 5;
+  string response = 6;
+  int32 retry_count = 7;
+  string status = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message ListWebhookLogsRequest {
+  string related_id = 1;
+  string status = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message ListWebhookLogsResponse {
+  repeated WebhookLog logs = 1;
+  int64 total = 2;
+}
+
+message RetryWebhookRequest {
+  string webhook_log_id = 1;
+}
+
+message RetryWebhookResponse {
+  bool success = 1;
+}
+
+// 短信相关消息
+message SendSMSRequest {
+  string phone = 1;
+  string content = 2;
+  string template_id = 3;
+  google.protobuf.Struct template_data = 4;
+}
+
+message SendSMSResponse {
+  string message_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+// 通知历史相关消息
+message Notification {
+  string id = 1;
+  string type = 2;
+  string recipient = 3;
+  string content = 4;
+  string status = 5;
+  google.protobuf.Timestamp sent_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message ListNotificationsRequest {
+  string type = 1;
+  string recipient = 2;
+  string status = 3;
+  int32 page = 4;
+  int32 page_size = 5;
+}
+
+message ListNotificationsResponse {
+  repeated Notification notifications = 1;
+  int64 total = 2;
+}

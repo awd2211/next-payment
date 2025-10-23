@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package accounting;
+
+option go_package = "github.com/payment-platform/proto/accounting;accounting";
+
+import "google/protobuf/timestamp.proto";
+
+// Accounting Service - 会计核算服务
+service AccountingService {
+  // 账目记录
+  rpc CreateEntry(CreateEntryRequest) returns (EntryResponse);
+  rpc GetEntry(GetEntryRequest) returns (EntryResponse);
+  rpc ListEntries(ListEntriesRequest) returns (ListEntriesResponse);
+
+  // 结算
+  rpc CreateSettlement(CreateSettlementRequest) returns (SettlementResponse);
+  rpc GetSettlement(GetSettlementRequest) returns (SettlementResponse);
+  rpc ListSettlements(ListSettlementsRequest) returns (ListSettlementsResponse);
+  rpc UpdateSettlementStatus(UpdateSettlementStatusRequest) returns (SettlementResponse);
+
+  // 账单
+  rpc GetMerchantBalance(GetMerchantBalanceRequest) returns (MerchantBalanceResponse);
+  rpc GenerateBill(GenerateBillRequest) returns (BillResponse);
+  rpc ListBills(ListBillsRequest) returns (ListBillsResponse);
+}
+
+// 账目记录相关消息
+message Entry {
+  string id = 1;
+  string merchant_id = 2;
+  string related_id = 3;
+  string related_type = 4;
+  string entry_type = 5;
+  int64 amount = 6;
+  string currency = 7;
+  int64 balance = 8;
+  string description = 9;
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message CreateEntryRequest {
+  string merchant_id = 1;
+  string related_id = 2;
+  string related_type = 3;
+  string entry_type = 4;
+  int64 amount = 5;
+  string currency = 6;
+  string description = 7;
+}
+
+message GetEntryRequest {
+  string id = 1;
+}
+
+message EntryResponse {
+  Entry entry = 1;
+}
+
+message ListEntriesRequest {
+  string merchant_id = 1;
+  string entry_type = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+message ListEntriesResponse {
+  repeated Entry entries = 1;
+  int64 total = 2;
+}
+
+// 结算相关消息
+message Settlement {
+  string id = 1;
+  string merchant_id = 2;
+  int64 amount = 3;
+  string currency = 4;
+  string status = 5;
+  string period_start = 6;
+  string period_end = 7;
+  google.protobuf.Timestamp settled_at = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message CreateSettlementRequest {
+  string merchant_id = 1;
+  string period_start = 2;
+  string period_end = 3;
+}
+
+message GetSettlementRequest {
+  string id = 1;
+}
+
+message SettlementResponse {
+  Settlement settlement = 1;
+}
+
+message ListSettlementsRequest {
+  string merchant_id = 1;
+  string status = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message ListSettlementsResponse {
+  repeated Settlement settlements = 1;
+  int64 total = 2;
+}
+
+message UpdateSettlementStatusRequest {
+  string id = 1;
+  string status = 2;
+}
+
+// 账单相关消息
+message MerchantBalanceResponse {
+  string merchant_id = 1;
+  int64 available_balance = 2;
+  int64 pending_balance = 3;
+  int64 frozen_balance = 4;
+  string currency = 5;
+}
+
+message GetMerchantBalanceRequest {
+  string merchant_id = 1;
+}
+
+message Bill {
+  string id = 1;
+  string merchant_id = 2;
+  string period = 3;
+  int64 total_amount = 4;
+  int64 fee_amount = 5;
+  int64 net_amount = 6;
+  string currency = 7;
+  string status = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message GenerateBillRequest {
+  string merchant_id = 1;
+  string period = 2;
+}
+
+message BillResponse {
+  Bill bill = 1;
+}
+
+message ListBillsRequest {
+  string merchant_id = 1;
+  string status = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message ListBillsResponse {
+  repeated Bill bills = 1;
+  int64 total = 2;
+}

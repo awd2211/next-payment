@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+package withdrawal;
+
+option go_package = "github.com/payment-platform/proto/withdrawal";
+
+import "google/protobuf/timestamp.proto";
+
+// Withdrawal Service - 提现服务
+service WithdrawalService {
+  // 创建提现申请
+  rpc CreateWithdrawal(CreateWithdrawalRequest) returns (WithdrawalResponse);
+
+  // 获取提现信息
+  rpc GetWithdrawal(GetWithdrawalRequest) returns (WithdrawalResponse);
+
+  // 查询提现列表
+  rpc ListWithdrawals(ListWithdrawalsRequest) returns (ListWithdrawalsResponse);
+
+  // 审批提现
+  rpc ApproveWithdrawal(ApproveWithdrawalRequest) returns (WithdrawalResponse);
+
+  // 拒绝提现
+  rpc RejectWithdrawal(RejectWithdrawalRequest) returns (WithdrawalResponse);
+
+  // 确认提现已付款
+  rpc ConfirmWithdrawal(ConfirmWithdrawalRequest) returns (WithdrawalResponse);
+
+  // 取消提现
+  rpc CancelWithdrawal(CancelWithdrawalRequest) returns (WithdrawalResponse);
+
+  // 添加银行账户
+  rpc AddBankAccount(AddBankAccountRequest) returns (BankAccountResponse);
+
+  // 获取银行账户列表
+  rpc ListBankAccounts(ListBankAccountsRequest) returns (ListBankAccountsResponse);
+
+  // 设置默认银行账户
+  rpc SetDefaultBankAccount(SetDefaultBankAccountRequest) returns (StatusResponse);
+
+  // 创建提现批次
+  rpc CreateWithdrawalBatch(CreateWithdrawalBatchRequest) returns (WithdrawalBatchResponse);
+
+  // 获取提现统计
+  rpc GetWithdrawalStats(GetWithdrawalStatsRequest) returns (WithdrawalStatsResponse);
+}
+
+// 创建提现请求
+message CreateWithdrawalRequest {
+  string merchant_id = 1;
+  int64 amount = 2;
+  string currency = 3;
+  string bank_account_id = 4;
+  string remarks = 5;
+}
+
+// 提现响应
+message WithdrawalResponse {
+  int32 code = 1;
+  string message = 2;
+  WithdrawalData data = 3;
+}
+
+message WithdrawalData {
+  string id = 1;
+  string withdrawal_no = 2;
+  string merchant_id = 3;
+  int64 amount = 4;
+  int64 fee = 5;
+  int64 net_amount = 6;
+  string currency = 7;
+  string status = 8;  // PENDING, APPROVED, PROCESSING, COMPLETED, REJECTED, CANCELLED, FAILED
+  string bank_account_id = 9;
+  string bank_name = 10;
+  string bank_account_no = 11;
+  string bank_account_name = 12;
+  string reject_reason = 13;
+  string transaction_no = 14;
+  string remarks = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp completed_at = 17;
+}
+
+// 获取提现请求
+message GetWithdrawalRequest {
+  string withdrawal_id = 1;
+}
+
+// 查询提现列表请求
+message ListWithdrawalsRequest {
+  string merchant_id = 1;
+  string status = 2;
+  google.protobuf.Timestamp start_date = 3;
+  google.protobuf.Timestamp end_date = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+// 提现列表响应
+message ListWithdrawalsResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated WithdrawalData withdrawals = 3;
+  int64 total = 4;
+}
+
+// 审批提现请求
+message ApproveWithdrawalRequest {
+  string withdrawal_id = 1;
+  string approver_id = 2;
+  string comments = 3;
+}
+
+// 拒绝提现请求
+message RejectWithdrawalRequest {
+  string withdrawal_id = 1;
+  string approver_id = 2;
+  string reject_reason = 3;
+}
+
+// 确认提现请求
+message ConfirmWithdrawalRequest {
+  string withdrawal_id = 1;
+  string transaction_no = 2;
+  google.protobuf.Timestamp completed_at = 3;
+}
+
+// 取消提现请求
+message CancelWithdrawalRequest {
+  string withdrawal_id = 1;
+  string merchant_id = 2;
+  string cancel_reason = 3;
+}
+
+// 添加银行账户请求
+message AddBankAccountRequest {
+  string merchant_id = 1;
+  string bank_name = 2;
+  string bank_code = 3;
+  string account_no = 4;
+  string account_name = 5;
+  string account_type = 6;  // PERSONAL, BUSINESS
+  string branch_name = 7;
+  string swift_code = 8;
+  bool is_default = 9;
+}
+
+// 银行账户响应
+message BankAccountResponse {
+  int32 code = 1;
+  string message = 2;
+  BankAccountData data = 3;
+}
+
+message BankAccountData {
+  string id = 1;
+  string merchant_id = 2;
+  string bank_name = 3;
+  string bank_code = 4;
+  string account_no = 5;
+  string account_name = 6;
+  string account_type = 7;
+  string branch_name = 8;
+  string swift_code = 9;
+  bool is_default = 10;
+  string status = 11;  // ACTIVE, INACTIVE, PENDING_VERIFICATION
+  google.protobuf.Timestamp created_at = 12;
+}
+
+// 获取银行账户列表请求
+message ListBankAccountsRequest {
+  string merchant_id = 1;
+}
+
+// 银行账户列表响应
+message ListBankAccountsResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated BankAccountData accounts = 3;
+}
+
+// 设置默认银行账户请求
+message SetDefaultBankAccountRequest {
+  string merchant_id = 1;
+  string bank_account_id = 2;
+}
+
+// 状态响应
+message StatusResponse {
+  int32 code = 1;
+  string message = 2;
+}
+
+// 创建提现批次请求
+message CreateWithdrawalBatchRequest {
+  string creator_id = 1;
+  repeated string withdrawal_ids = 2;
+}
+
+// 提现批次响应
+message WithdrawalBatchResponse {
+  int32 code = 1;
+  string message = 2;
+  WithdrawalBatchData data = 3;
+}
+
+message WithdrawalBatchData {
+  string id = 1;
+  string batch_no = 2;
+  int32 total_count = 3;
+  int64 total_amount = 4;
+  string status = 5;  // PENDING, PROCESSING, COMPLETED, PARTIALLY_COMPLETED
+  int32 success_count = 6;
+  int32 failed_count = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp completed_at = 9;
+}
+
+// 获取提现统计请求
+message GetWithdrawalStatsRequest {
+  string merchant_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+// 提现统计响应
+message WithdrawalStatsResponse {
+  int32 code = 1;
+  string message = 2;
+  WithdrawalStatsData data = 3;
+}
+
+message WithdrawalStatsData {
+  string merchant_id = 1;
+  int64 total_withdrawal_amount = 2;
+  int64 total_withdrawal_fee = 3;
+  int32 withdrawal_count = 4;
+  int32 pending_count = 5;
+  int32 completed_count = 6;
+  int64 available_balance = 7;
+  repeated WithdrawalByStatus by_status = 8;
+}
+
+message WithdrawalByStatus {
+  string status = 1;
+  int32 count = 2;
+  int64 amount = 3;
+}

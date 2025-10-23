@@ -1,0 +1,206 @@
+syntax = "proto3";
+
+package merchant_auth;
+
+option go_package = "github.com/payment-platform/proto/merchant_auth";
+
+import "google/protobuf/timestamp.proto";
+
+// Merchant Auth Service - 商户认证服务
+service MerchantAuthService {
+  // 商户登录
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // 刷新Token
+  rpc RefreshToken(RefreshTokenRequest) returns (LoginResponse);
+
+  // 商户登出
+  rpc Logout(LogoutRequest) returns (StatusResponse);
+
+  // 启用双因素认证
+  rpc EnableTwoFactor(EnableTwoFactorRequest) returns (TwoFactorResponse);
+
+  // 验证双因素认证
+  rpc VerifyTwoFactor(VerifyTwoFactorRequest) returns (StatusResponse);
+
+  // 禁用双因素认证
+  rpc DisableTwoFactor(DisableTwoFactorRequest) returns (StatusResponse);
+
+  // 获取登录活动
+  rpc GetLoginActivities(GetLoginActivitiesRequest) returns (LoginActivitiesResponse);
+
+  // 获取会话列表
+  rpc ListSessions(ListSessionsRequest) returns (SessionsResponse);
+
+  // 撤销会话
+  rpc RevokeSession(RevokeSessionRequest) returns (StatusResponse);
+
+  // 更新安全设置
+  rpc UpdateSecuritySettings(UpdateSecuritySettingsRequest) returns (SecuritySettingsResponse);
+
+  // 修改密码
+  rpc ChangePassword(ChangePasswordRequest) returns (StatusResponse);
+}
+
+// 登录请求
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  string ip_address = 3;
+  string user_agent = 4;
+  string two_factor_code = 5;
+}
+
+// 登录响应
+message LoginResponse {
+  int32 code = 1;
+  string message = 2;
+  AuthData data = 3;
+}
+
+message AuthData {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in = 3;
+  string merchant_id = 4;
+  string username = 5;
+  bool requires_two_factor = 6;
+}
+
+// 刷新Token请求
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+// 登出请求
+message LogoutRequest {
+  string merchant_id = 1;
+  string session_id = 2;
+}
+
+// 状态响应
+message StatusResponse {
+  int32 code = 1;
+  string message = 2;
+}
+
+// 启用双因素认证请求
+message EnableTwoFactorRequest {
+  string merchant_id = 1;
+  string method = 2;  // SMS, TOTP, EMAIL
+}
+
+// 双因素认证响应
+message TwoFactorResponse {
+  int32 code = 1;
+  string message = 2;
+  TwoFactorData data = 3;
+}
+
+message TwoFactorData {
+  string secret = 1;
+  string qr_code = 2;
+  repeated string backup_codes = 3;
+}
+
+// 验证双因素认证请求
+message VerifyTwoFactorRequest {
+  string merchant_id = 1;
+  string code = 2;
+}
+
+// 禁用双因素认证请求
+message DisableTwoFactorRequest {
+  string merchant_id = 1;
+  string password = 2;
+}
+
+// 获取登录活动请求
+message GetLoginActivitiesRequest {
+  string merchant_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+// 登录活动响应
+message LoginActivitiesResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated LoginActivityData activities = 3;
+  int64 total = 4;
+}
+
+message LoginActivityData {
+  string id = 1;
+  string merchant_id = 2;
+  string ip_address = 3;
+  string user_agent = 4;
+  string location = 5;
+  string status = 6;  // SUCCESS, FAILED, BLOCKED
+  string failure_reason = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// 获取会话列表请求
+message ListSessionsRequest {
+  string merchant_id = 1;
+}
+
+// 会话列表响应
+message SessionsResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated SessionData sessions = 3;
+}
+
+message SessionData {
+  string id = 1;
+  string merchant_id = 2;
+  string ip_address = 3;
+  string user_agent = 4;
+  string device_type = 5;
+  bool is_current = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  google.protobuf.Timestamp last_activity_at = 9;
+}
+
+// 撤销会话请求
+message RevokeSessionRequest {
+  string merchant_id = 1;
+  string session_id = 2;
+}
+
+// 更新安全设置请求
+message UpdateSecuritySettingsRequest {
+  string merchant_id = 1;
+  bool two_factor_enabled = 2;
+  string two_factor_method = 3;
+  bool login_alerts_enabled = 4;
+  bool suspicious_activity_alerts_enabled = 5;
+  int32 session_timeout_minutes = 6;
+}
+
+// 安全设置响应
+message SecuritySettingsResponse {
+  int32 code = 1;
+  string message = 2;
+  SecuritySettingsData data = 3;
+}
+
+message SecuritySettingsData {
+  string merchant_id = 1;
+  bool two_factor_enabled = 2;
+  string two_factor_method = 3;
+  bool login_alerts_enabled = 4;
+  bool suspicious_activity_alerts_enabled = 5;
+  int32 session_timeout_minutes = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// 修改密码请求
+message ChangePasswordRequest {
+  string merchant_id = 1;
+  string old_password = 2;
+  string new_password = 3;
+}
