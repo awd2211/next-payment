@@ -22,8 +22,9 @@
 
 # Go 工作空间
 /vendor/
-go.work
-go.work.sum
+# 注意: go.work 和 go.work.sum 在这个项目中需要提交，用于多模块依赖管理
+# go.work
+# go.work.sum
 
 # 二进制文件
 /bin/
@@ -59,6 +60,10 @@ tmp/
 logs/
 backend/logs/
 **/*.log
+
+# PID 文件
+*.pid
+**/*.pid
 
 # ========================================
 # IDE 和编辑器
@@ -166,3 +171,26 @@ coverage/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
+
+# ========================================
+# Swagger/API 文档 (自动生成)
+# ========================================
+# 注意: 如果不想提交自动生成的 Swagger 文档，取消下面的注释
+# **/api-docs/
+# docs.go
+# swagger.json
+# swagger.yaml
+
+# ========================================
+# 开发和测试相关
+# ========================================
+# Air 日志
+air.log
+
+# 本地脚本和工具
+*.local.sh
+*.test.sh
+
+# 临时文件
+.scratch/
+.temp/

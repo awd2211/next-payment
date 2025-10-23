@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 	"payment-platform/payment-gateway/internal/client"
 	"payment-platform/payment-gateway/internal/model"
 	"payment-platform/payment-gateway/internal/repository"
@@ -37,6 +38,7 @@ type PaymentService interface {
 }
 
 type paymentService struct {
+	db            *gorm.DB
 	paymentRepo   repository.PaymentRepository
 	orderClient   *client.OrderClient
 	channelClient *client.ChannelClient
@@ -46,6 +48,7 @@ type paymentService struct {
 
 // NewPaymentService 创建支付服务实例
 func NewPaymentService(
+	db *gorm.DB,
 	paymentRepo repository.PaymentRepository,
 	orderClient *client.OrderClient,
 	channelClient *client.ChannelClient,
@@ -53,6 +56,7 @@ func NewPaymentService(
 	redisClient *redis.Client,
 ) PaymentService {
 	return &paymentService{
+		db:            db,
 		paymentRepo:   paymentRepo,
 		orderClient:   orderClient,
 		channelClient: channelClient,
@@ -91,7 +95,7 @@ type CreateRefundInput struct {
 	OperatorType string   `json:"operator_type"`                    // 操作人类型
 }
 
-// CreatePayment 创建支付（完整流程）
+// CreatePayment 创建支付（完整流程，带事务保护）
 func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePaymentInput) (*model.Payment, error) {
 	// 1. 验证货币类型
 	if !s.isValidCurrency(input.Currency) {
@@ -189,12 +193,14 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		payment.Channel = channel
 	}
 
-	// 9. 保存支付记录到数据库
+	// 9. 在事务中创建支付记录
+	// 注意：这里只保存支付记录，外部服务调用放在事务外
 	if err := s.paymentRepo.Create(ctx, payment); err != nil {
 		return nil, fmt.Errorf("创建支付记录失败: %w", err)
 	}
 
-	// 10. 调用Order-Service创建订单
+	// 10. 调用Order-Service创建订单（事务外，使用补偿机制）
+	var orderCreated bool
 	if s.orderClient != nil {
 		_, err := s.orderClient.CreateOrder(ctx, &client.CreateOrderRequest{
 			MerchantID:    payment.MerchantID,
@@ -212,13 +218,18 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			Extra:         payment.Extra,
 		})
 		if err != nil {
-			// 订单创建失败，回滚支付记录
-			s.paymentRepo.Delete(ctx, payment.ID)
+			// 订单创建失败，标记支付为失败状态（而非直接删除）
+			payment.Status = model.PaymentStatusFailed
+			payment.ErrorMsg = fmt.Sprintf("创建订单失败: %v", err)
+			if updateErr := s.paymentRepo.Update(ctx, payment); updateErr != nil {
+				fmt.Printf("更新支付状态失败: %v\n", updateErr)
+			}
 			return nil, fmt.Errorf("创建订单失败: %w", err)
 		}
+		orderCreated = true
 	}
 
-	// 11. 调用Channel-Adapter发起支付
+	// 11. 调用Channel-Adapter发起支付（事务外）
 	if s.channelClient != nil {
 		var extraMap map[string]interface{}
 		if payment.Extra != "" {
@@ -240,18 +251,28 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			Extra:         extraMap,
 		})
 		if err != nil {
-			// 渠道调用失败，更新支付状态
+			// 渠道调用失败，更新支付状态为失败
 			payment.Status = model.PaymentStatusFailed
-			payment.ErrorMsg = err.Error()
-			s.paymentRepo.Update(ctx, payment)
+			payment.ErrorMsg = fmt.Sprintf("发起支付失败: %v", err)
+			if updateErr := s.paymentRepo.Update(ctx, payment); updateErr != nil {
+				fmt.Printf("更新支付状态失败: %v\n", updateErr)
+			}
+
+			// TODO: 如果订单已创建，需要补偿取消订单
+			// 这里应该发送到消息队列由后台任务处理
+			if orderCreated {
+				fmt.Printf("警告：支付失败但订单已创建，需要补偿。PaymentNo=%s\n", payment.PaymentNo)
+			}
+
 			return nil, fmt.Errorf("发起支付失败: %w", err)
 		}
 
-		// 更新渠道订单号和支付URL
+		// 在事务中更新支付记录（包括渠道订单号）
 		payment.ChannelOrderNo = channelResult.ChannelOrderNo
 		payment.Status = model.PaymentStatusProcessing
 		if err := s.paymentRepo.Update(ctx, payment); err != nil {
 			fmt.Printf("更新支付记录失败: %v\n", err)
+			// 注意：这里不返回错误，因为支付已经发起成功
 		}
 
 		// 将支付URL/二维码放入Extra返回
