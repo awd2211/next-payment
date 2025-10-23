@@ -9,16 +9,18 @@ import (
 	"strings"
 	"time"
 
+	"payment-platform/channel-adapter/internal/client"
 	"payment-platform/channel-adapter/internal/model"
 )
 
 // CryptoAdapter 加密货币支付适配器
 // 支持多链：ETH, BSC, TRON, BTC 等
 type CryptoAdapter struct {
-	config     *model.CryptoConfig
-	httpClient *http.Client
-	priceCache map[string]CryptoPrice // 价格缓存
-	cacheTime  time.Time
+	config             *model.CryptoConfig
+	httpClient         *http.Client
+	exchangeRateClient *client.ExchangeRateClient // 汇率客户端
+	priceCache         map[string]CryptoPrice     // 价格缓存
+	cacheTime          time.Time
 }
 
 // CryptoPrice 加密货币价格
@@ -41,13 +43,14 @@ type CryptoTransaction struct {
 }
 
 // NewCryptoAdapter 创建加密货币适配器实例
-func NewCryptoAdapter(config *model.CryptoConfig) *CryptoAdapter {
+func NewCryptoAdapter(config *model.CryptoConfig, exchangeRateClient *client.ExchangeRateClient) *CryptoAdapter {
 	return &CryptoAdapter{
 		config: config,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		priceCache: make(map[string]CryptoPrice),
+		exchangeRateClient: exchangeRateClient,
+		priceCache:         make(map[string]CryptoPrice),
 	}
 }
 
