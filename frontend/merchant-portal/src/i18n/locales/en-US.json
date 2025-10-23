@@ -68,9 +68,20 @@
     "totalOrders": "Total Orders",
     "successRate": "Success Rate",
     "accountBalance": "Account Balance",
-    "transactionTrend": "Transaction Trend",
+    "transactionTrend": "Transaction Trend (Last 7 Days)",
     "recentTransactions": "Recent Transactions",
-    "orderStats": "Order Statistics"
+    "orderStats": "Order Statistics",
+    "quickActions": "Quick Actions",
+    "viewAll": "View All",
+    "channelDistribution": "Payment Channel Distribution",
+    "paymentMethodStats": "Payment Method Statistics",
+    "revenueLabel": "Revenue",
+    "ordersLabel": "Orders",
+    "alipay": "Alipay",
+    "wechat": "WeChat Pay",
+    "card": "Credit Card",
+    "bankTransfer": "Bank Transfer",
+    "eWallet": "E-Wallet"
   },
   "transactions": {
     "title": "Transactions",

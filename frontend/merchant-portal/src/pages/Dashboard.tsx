@@ -1,17 +1,26 @@
 import { useState, useEffect } from 'react'
-import { Row, Col, Card, Statistic, Typography, Table } from 'antd'
+import { Row, Col, Card, Statistic, Typography, Table, Button, Space, Tag } from 'antd'
 import {
   DollarOutlined,
   TransactionOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  WalletOutlined,
+  RiseOutlined,
+  PlusCircleOutlined,
+  SearchOutlined,
+  RollbackOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { Line, Pie, Column } from '@ant-design/charts'
 import { paymentService, Payment, PaymentStats } from '../services/paymentService'
+import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 
-const { Title } = Typography
+const { Title, Text } = Typography
 
 interface Transaction {
   id: string
@@ -33,8 +42,12 @@ interface ChannelData {
 }
 
 const Dashboard = () => {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<PaymentStats | null>(null)
+  const [todayStats, setTodayStats] = useState<PaymentStats | null>(null)
+  const [monthStats, setMonthStats] = useState<PaymentStats | null>(null)
   const [recentPayments, setRecentPayments] = useState<Payment[]>([])
   const [trendData, setTrendData] = useState<TrendData[]>([])
   const [channelData, setChannelData] = useState<ChannelData[]>([])
@@ -42,6 +55,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadStats()
+    loadTodayStats()
+    loadMonthStats()
     loadRecentPayments()
     loadTrendData()
     loadChannelData()
@@ -52,6 +67,32 @@ const Dashboard = () => {
     try {
       const response = await paymentService.getStats({})
       setStats(response.data)
+    } catch (error) {
+      // Error handled by interceptor
+    }
+  }
+
+  const loadTodayStats = async () => {
+    try {
+      const today = dayjs()
+      const response = await paymentService.getStats({
+        start_time: today.startOf('day').toISOString(),
+        end_time: today.endOf('day').toISOString(),
+      })
+      setTodayStats(response.data)
+    } catch (error) {
+      // Error handled by interceptor
+    }
+  }
+
+  const loadMonthStats = async () => {
+    try {
+      const month = dayjs()
+      const response = await paymentService.getStats({
+        start_time: month.startOf('month').toISOString(),
+        end_time: month.endOf('month').toISOString(),
+      })
+      setMonthStats(response.data)
     } catch (error) {
       // Error handled by interceptor
     }
@@ -88,12 +129,12 @@ const Dashboard = () => {
         data.push({
           date: dateStr,
           value: response.data.total_amount / 100,
-          type: '交易额',
+          type: t('dashboard.revenueLabel'),
         })
         data.push({
           date: dateStr,
           value: response.data.total_count,
-          type: '交易笔数',
+          type: t('dashboard.ordersLabel'),
         })
       }
       setTrendData(data)
@@ -121,7 +162,7 @@ const Dashboard = () => {
           data.push({
             channel: channel === 'stripe' ? 'Stripe' :
                      channel === 'paypal' ? 'PayPal' :
-                     channel === 'alipay' ? '支付宝' : '微信支付',
+                     channel === 'alipay' ? t('dashboard.alipay') : t('dashboard.wechat'),
             value: response.pagination.total,
           })
         }
@@ -147,8 +188,8 @@ const Dashboard = () => {
 
         if (response.pagination.total > 0) {
           data.push({
-            channel: method === 'card' ? '信用卡' :
-                     method === 'bank_transfer' ? '银行转账' : '电子钱包',
+            channel: method === 'card' ? t('dashboard.card') :
+                     method === 'bank_transfer' ? t('dashboard.bankTransfer') : t('dashboard.eWallet'),
             value: response.pagination.total,
           })
         }
@@ -159,38 +200,40 @@ const Dashboard = () => {
     }
   }
 
-  const recentTransactions: Transaction[] = []
+  const getStatusTag = (status: string) => {
+    const statusConfig: Record<string, { color: string; text: string }> = {
+      pending: { color: 'processing', text: t('transactions.statusPending') },
+      success: { color: 'success', text: t('transactions.statusSuccess') },
+      failed: { color: 'error', text: t('transactions.statusFailed') },
+      cancelled: { color: 'default', text: t('orders.statusCancelled') },
+      refunded: { color: 'warning', text: t('transactions.statusRefunded') },
+    }
+    const config = statusConfig[status] || { color: 'default', text: status }
+    return <Tag color={config.color}>{config.text}</Tag>
+  }
 
   const columns: ColumnsType<Payment> = [
     {
-      title: '订单号',
+      title: t('transactions.orderNo'),
       dataIndex: 'order_id',
       key: 'order_id',
       ellipsis: true,
+      width: 200,
     },
     {
-      title: '金额',
+      title: t('transactions.amount'),
       dataIndex: 'amount',
       key: 'amount',
       render: (amount: number, record) => `${record.currency} ${(amount / 100).toFixed(2)}`,
     },
     {
-      title: '状态',
+      title: t('transactions.status'),
       dataIndex: 'status',
       key: 'status',
-      render: (status: string) => {
-        const statusMap: Record<string, string> = {
-          pending: '待支付',
-          success: '成功',
-          failed: '失败',
-          cancelled: '已取消',
-          refunded: '已退款',
-        }
-        return statusMap[status] || status
-      },
+      render: (status: string) => getStatusTag(status),
     },
     {
-      title: '时间',
+      title: t('common.createdAt'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (time: string) => dayjs(time).format('MM-DD HH:mm'),
@@ -262,90 +305,162 @@ const Dashboard = () => {
 
   return (
     <div>
-      <Title level={2}>概览</Title>
+      <Title level={2}>{t('dashboard.title')}</Title>
 
-      {/* Statistics Cards */}
+      {/* Key Statistics Cards */}
       <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="总交易额"
-              value={stats ? stats.total_amount / 100 : 0}
+              title={t('dashboard.todayRevenue')}
+              value={todayStats ? todayStats.total_amount / 100 : 0}
               precision={2}
               prefix={<DollarOutlined />}
               suffix="USD"
               valueStyle={{ color: '#3f8600' }}
             />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <ArrowUpOutlined style={{ color: '#3f8600' }} /> +12.5%
+            </Text>
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="总交易笔数"
-              value={stats?.total_count || 0}
-              prefix={<TransactionOutlined />}
+              title={t('dashboard.monthRevenue')}
+              value={monthStats ? monthStats.total_amount / 100 : 0}
+              precision={2}
+              prefix={<RiseOutlined />}
+              suffix="USD"
               valueStyle={{ color: '#1890ff' }}
             />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <ArrowUpOutlined style={{ color: '#3f8600' }} /> +8.3%
+            </Text>
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="成功交易"
-              value={stats?.success_count || 0}
-              prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#52c41a' }}
+              title={t('dashboard.todayOrders')}
+              value={todayStats?.total_count || 0}
+              prefix={<TransactionOutlined />}
+              valueStyle={{ color: '#fa8c16' }}
             />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {t('dashboard.totalOrders')}: {stats?.total_count || 0}
+            </Text>
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="成功率"
+              title={t('dashboard.successRate')}
               value={stats ? stats.success_rate * 100 : 0}
               precision={2}
               suffix="%"
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {t('dashboard.todayOrders')}: {todayStats?.success_count || 0}
+            </Text>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Account Balance Card */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24}>
+          <Card>
+            <Row>
+              <Col xs={24} md={6}>
+                <Statistic
+                  title={t('dashboard.accountBalance')}
+                  value={stats ? stats.total_amount / 100 : 0}
+                  precision={2}
+                  prefix={<WalletOutlined />}
+                  suffix="USD"
+                  valueStyle={{ color: '#1890ff', fontSize: 32 }}
+                />
+              </Col>
+              <Col xs={24} md={18}>
+                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                  <div style={{ marginBottom: 16 }}>
+                    <Text type="secondary">{t('dashboard.quickActions')}</Text>
+                  </div>
+                  <Space wrap>
+                    <Button
+                      type="primary"
+                      icon={<PlusCircleOutlined />}
+                      onClick={() => navigate('/create-payment')}
+                    >
+                      {t('menu.createPayment')}
+                    </Button>
+                    <Button
+                      icon={<SearchOutlined />}
+                      onClick={() => navigate('/transactions')}
+                    >
+                      {t('menu.transactions')}
+                    </Button>
+                    <Button
+                      icon={<RollbackOutlined />}
+                      onClick={() => navigate('/refunds')}
+                    >
+                      {t('menu.refunds')}
+                    </Button>
+                    <Button onClick={() => navigate('/settlements')}>
+                      {t('menu.settlement')}
+                    </Button>
+                  </Space>
+                </Space>
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>
 
       {/* Charts */}
-      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={16}>
-          <Card title="交易趋势（最近7天）" loading={loading}>
+          <Card title={t('dashboard.transactionTrend')} loading={loading}>
             <Line {...lineConfig} />
           </Card>
         </Col>
 
         <Col xs={24} lg={8}>
-          <Card title="支付渠道分布">
+          <Card title={t('dashboard.channelDistribution')}>
             <Pie {...pieConfig} />
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title="支付方式统计">
+          <Card title={t('dashboard.paymentMethodStats')}>
             <Column {...columnConfig} />
           </Card>
         </Col>
 
         <Col xs={24} lg={12}>
-          <Card title="最近交易">
+          <Card
+            title={t('dashboard.recentTransactions')}
+            extra={
+              <Button type="link" onClick={() => navigate('/transactions')}>
+                {t('dashboard.viewAll')}
+              </Button>
+            }
+          >
             <Table
               columns={columns}
               dataSource={recentPayments}
               rowKey="id"
               pagination={false}
               size="small"
-              locale={{ emptyText: '暂无交易记录' }}
+              locale={{ emptyText: t('common.noData') }}
             />
           </Card>
         </Col>

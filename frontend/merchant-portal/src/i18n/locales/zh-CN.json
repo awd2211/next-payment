@@ -68,9 +68,20 @@
     "totalOrders": "总订单数",
     "successRate": "成功率",
     "accountBalance": "账户余额",
-    "transactionTrend": "交易趋势",
+    "transactionTrend": "交易趋势（最近7天）",
     "recentTransactions": "近期交易",
-    "orderStats": "订单统计"
+    "orderStats": "订单统计",
+    "quickActions": "快捷操作",
+    "viewAll": "查看全部",
+    "channelDistribution": "支付渠道分布",
+    "paymentMethodStats": "支付方式统计",
+    "revenueLabel": "交易额",
+    "ordersLabel": "交易笔数",
+    "alipay": "支付宝",
+    "wechat": "微信支付",
+    "card": "信用卡",
+    "bankTransfer": "银行转账",
+    "eWallet": "电子钱包"
   },
   "transactions": {
     "title": "交易记录",
