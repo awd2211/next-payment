@@ -140,6 +140,10 @@ export default defineConfig({
     port: 5173, // 使用标准端口
     proxy: {
       // Admin Service (管理员、角色、权限、审计、系统配置)
+      '/api/v1/admin': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
       '/api/v1/admins': {
         target: 'http://localhost:40001',
         changeOrigin: true,
