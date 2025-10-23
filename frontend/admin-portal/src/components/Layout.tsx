@@ -22,6 +22,7 @@ import {
   ShopOutlined,
   DollarOutlined,
   ShoppingOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -79,6 +80,11 @@ const Layout = () => {
       key: '/orders',
       icon: <ShoppingOutlined />,
       label: t('menu.orders'),
+    },
+    hasPermission('risk.view') && {
+      key: '/risk',
+      icon: <WarningOutlined />,
+      label: t('menu.riskManagement'),
     },
     hasPermission('audit.view') && {
       key: '/audit-logs',
