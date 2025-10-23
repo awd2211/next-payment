@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/merchant-auth-service/internal/service"
 )
 
@@ -32,24 +34,35 @@ func NewSecurityHandler(securityService service.SecurityService) *SecurityHandle
 func (h *SecurityHandler) ChangePassword(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.securityService.ChangePassword(c.Request.Context(), merchantID.(uuid.UUID), req.OldPassword, req.NewPassword); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "修改密码失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "密码修改成功",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "密码修改成功"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ChangePasswordRequest 修改密码请求
@@ -67,20 +80,31 @@ type ChangePasswordRequest struct {
 func (h *SecurityHandler) Enable2FA(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	result, err := h.securityService.Enable2FA(c.Request.Context(), merchantID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "启用2FA失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
 		"message": "请扫描二维码并验证",
 		"data":    result,
-	})
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Verify2FA 验证并启用2FA
@@ -94,31 +118,46 @@ func (h *SecurityHandler) Enable2FA(c *gin.Context) {
 func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	var req Verify2FARequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	result, err := h.securityService.Verify2FA(c.Request.Context(), merchantID.(uuid.UUID), req.Code)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "验证2FA失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
 	if !result.Success {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "验证码错误", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
 		"message": "2FA已启用",
 		"data":    result,
-	})
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Verify2FARequest 验证2FA请求
@@ -137,24 +176,35 @@ type Verify2FARequest struct {
 func (h *SecurityHandler) Disable2FA(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	var req Disable2FARequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.securityService.Disable2FA(c.Request.Context(), merchantID.(uuid.UUID), req.Password); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "禁用2FA失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "2FA已禁用",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "2FA已禁用"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Disable2FARequest 禁用2FA请求
@@ -171,19 +221,28 @@ type Disable2FARequest struct {
 func (h *SecurityHandler) GetSecuritySettings(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	settings, err := h.securityService.GetSecuritySettings(c.Request.Context(), merchantID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取安全设置失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": settings,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(settings).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // UpdateSecuritySettings 更新安全设置
@@ -197,26 +256,39 @@ func (h *SecurityHandler) GetSecuritySettings(c *gin.Context) {
 func (h *SecurityHandler) UpdateSecuritySettings(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	var req service.UpdateSecuritySettingsInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	settings, err := h.securityService.UpdateSecuritySettings(c.Request.Context(), merchantID.(uuid.UUID), &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "更新安全设置失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
 		"message": "安全设置更新成功",
 		"data":    settings,
-	})
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetLoginActivities 获取登录活动
@@ -230,7 +302,9 @@ func (h *SecurityHandler) UpdateSecuritySettings(c *gin.Context) {
 func (h *SecurityHandler) GetLoginActivities(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
@@ -239,18 +313,25 @@ func (h *SecurityHandler) GetLoginActivities(c *gin.Context) {
 
 	activities, total, err := h.securityService.GetLoginActivities(c.Request.Context(), merchantID.(uuid.UUID), page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取登录活动失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"list":      activities,
-			"total":     total,
-			"page":      page,
-			"page_size": pageSize,
-		},
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
+		"list":      activities,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetActiveSessions 获取活跃会话
@@ -262,19 +343,28 @@ func (h *SecurityHandler) GetLoginActivities(c *gin.Context) {
 func (h *SecurityHandler) GetActiveSessions(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	sessions, err := h.securityService.GetActiveSessions(c.Request.Context(), merchantID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取活跃会话失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": sessions,
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(sessions).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RevokeSession 撤销会话
@@ -288,13 +378,20 @@ func (h *SecurityHandler) RevokeSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 
 	if err := h.securityService.RevokeSession(c.Request.Context(), sessionID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "撤销会话失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "会话已撤销",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "会话已撤销"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RevokeAllSessions 撤销所有会话
@@ -306,18 +403,27 @@ func (h *SecurityHandler) RevokeSession(c *gin.Context) {
 func (h *SecurityHandler) RevokeAllSessions(c *gin.Context) {
 	merchantID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeUnauthorized, "未授权", "").WithTraceID(traceID)
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
 	if err := h.securityService.RevokeAllSessions(c.Request.Context(), merchantID.(uuid.UUID)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "撤销所有会话失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "所有会话已撤销",
-	})
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{"message": "所有会话已撤销"}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RegisterRoutes 注册路由

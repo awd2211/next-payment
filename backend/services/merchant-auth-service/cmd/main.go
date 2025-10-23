@@ -20,6 +20,9 @@ import (
 	"payment-platform/merchant-auth-service/internal/model"
 	"payment-platform/merchant-auth-service/internal/repository"
 	"payment-platform/merchant-auth-service/internal/service"
+	grpcServer "payment-platform/merchant-auth-service/internal/grpc"
+	pb "github.com/payment-platform/proto/merchant_auth"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -189,12 +192,25 @@ func main() {
 		}
 	}()
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50011)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	authGrpcServer := grpcServer.NewMerchantAuthServer(authService)
+	pb.RegisterMerchantAuthServiceServer(gRPCServer, authGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40011)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Merchant Auth Service 正在监听 %s", addr))
 
-	if err := r.Run(addr); err != nil {
+	if err := r.Run(addr); err != nil{
 		logger.Fatal("服务启动失败")
 		log.Fatalf("Error: %v", err)
 	}
