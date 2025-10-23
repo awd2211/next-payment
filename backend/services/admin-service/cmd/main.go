@@ -23,6 +23,9 @@ import (
 	"payment-platform/admin-service/internal/model"
 	"payment-platform/admin-service/internal/repository"
 	"payment-platform/admin-service/internal/service"
+	grpcServer "payment-platform/admin-service/internal/grpc"
+	pb "github.com/payment-platform/proto/admin"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 
 	_ "payment-platform/admin-service/api-docs" // Import generated swagger docs
 )
@@ -219,7 +222,20 @@ func main() {
 		emailTemplateHandler.RegisterRoutes(api, authMiddleware)
 	}
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50001)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	adminGrpcServer := grpcServer.NewAdminServer(adminService)
+	pb.RegisterAdminServiceServer(gRPCServer, adminGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal("gRPC Server 启动失败", zap.Error(err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40001)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Admin Service 正在监听 %s", addr))
