@@ -33,6 +33,40 @@ type AccountService interface {
 	GetSettlement(ctx context.Context, settlementNo string) (*model.Settlement, error)
 	ListSettlements(ctx context.Context, query *repository.SettlementQuery) ([]*model.Settlement, int64, error)
 	ProcessSettlement(ctx context.Context, settlementNo string) error
+
+	// 提现管理
+	CreateWithdrawal(ctx context.Context, input *CreateWithdrawalInput) (*model.Withdrawal, error)
+	GetWithdrawal(ctx context.Context, withdrawalNo string) (*model.Withdrawal, error)
+	ListWithdrawals(ctx context.Context, query *repository.WithdrawalQuery) ([]*model.Withdrawal, int64, error)
+	ApproveWithdrawal(ctx context.Context, withdrawalNo string, approverID uuid.UUID, notes string) error
+	RejectWithdrawal(ctx context.Context, withdrawalNo string, approverID uuid.UUID, reason string) error
+	ProcessWithdrawal(ctx context.Context, withdrawalNo string, processorID uuid.UUID) error
+	CompleteWithdrawal(ctx context.Context, withdrawalNo string) error
+	FailWithdrawal(ctx context.Context, withdrawalNo string, reason string) error
+	CancelWithdrawal(ctx context.Context, withdrawalNo string) error
+
+	// 账单管理
+	CreateInvoice(ctx context.Context, input *CreateInvoiceInput) (*model.Invoice, error)
+	GetInvoice(ctx context.Context, invoiceNo string) (*model.Invoice, error)
+	ListInvoices(ctx context.Context, query *repository.InvoiceQuery) ([]*model.Invoice, int64, error)
+	PayInvoice(ctx context.Context, invoiceNo string, paidAmount int64) error
+	CancelInvoice(ctx context.Context, invoiceNo string) error
+	VoidInvoice(ctx context.Context, invoiceNo string) error
+	CheckOverdueInvoices(ctx context.Context) error
+
+	// 对账管理
+	CreateReconciliation(ctx context.Context, input *CreateReconciliationInput) (*model.Reconciliation, error)
+	GetReconciliation(ctx context.Context, reconciliationNo string) (*model.Reconciliation, error)
+	ListReconciliations(ctx context.Context, query *repository.ReconciliationQuery) ([]*model.Reconciliation, int64, error)
+	ProcessReconciliation(ctx context.Context, reconciliationNo string, userID uuid.UUID) error
+	CompleteReconciliation(ctx context.Context, reconciliationNo string) error
+	ResolveReconciliationItem(ctx context.Context, itemID uuid.UUID, resolution string) error
+
+	// 余额查询聚合
+	GetMerchantBalanceSummary(ctx context.Context, merchantID uuid.UUID) (*MerchantBalanceSummary, error)
+	GetBalanceByCurrency(ctx context.Context, merchantID uuid.UUID, currency string) (*CurrencyBalanceSummary, error)
+	GetBalanceByAccountType(ctx context.Context, merchantID uuid.UUID, accountType string) (*AccountTypeBalanceSummary, error)
+	GetAllCurrencyBalances(ctx context.Context, merchantID uuid.UUID) ([]*CurrencyBalanceSummary, error)
 }
 
 type accountService struct {
@@ -73,6 +107,119 @@ type CreateSettlementInput struct {
 	Currency     string    `json:"currency" binding:"required"`
 	PaymentCount int       `json:"payment_count"`
 	RefundCount  int       `json:"refund_count"`
+}
+
+// CreateWithdrawalInput 创建提现输入
+type CreateWithdrawalInput struct {
+	MerchantID          uuid.UUID `json:"merchant_id" binding:"required"`
+	AccountID           uuid.UUID `json:"account_id" binding:"required"`
+	SettlementAccountID uuid.UUID `json:"settlement_account_id" binding:"required"`
+	Amount              int64     `json:"amount" binding:"required,gt=0"`
+	Currency            string    `json:"currency" binding:"required"`
+	RequestReason       string    `json:"request_reason"`
+}
+
+// CreateInvoiceInput 创建账单输入
+type CreateInvoiceInput struct {
+	MerchantID   uuid.UUID           `json:"merchant_id" binding:"required"`
+	InvoiceType  string              `json:"invoice_type" binding:"required"`
+	PeriodStart  time.Time           `json:"period_start" binding:"required"`
+	PeriodEnd    time.Time           `json:"period_end" binding:"required"`
+	Currency     string              `json:"currency" binding:"required"`
+	DueDate      time.Time           `json:"due_date" binding:"required"`
+	TaxRate      float64             `json:"tax_rate"`                        // 税率（百分比）
+	Notes        string              `json:"notes"`
+	Items        []InvoiceItemInput  `json:"items" binding:"required,min=1"`
+}
+
+// InvoiceItemInput 账单明细输入
+type InvoiceItemInput struct {
+	ItemType    string     `json:"item_type" binding:"required"`
+	Description string     `json:"description"`
+	Quantity    int        `json:"quantity" binding:"required,gt=0"`
+	UnitPrice   int64      `json:"unit_price" binding:"required,gt=0"`
+	RelatedID   *uuid.UUID `json:"related_id"`
+	RelatedNo   string     `json:"related_no"`
+}
+
+// CreateReconciliationInput 创建对账单输入
+type CreateReconciliationInput struct {
+	MerchantID         uuid.UUID                     `json:"merchant_id" binding:"required"`
+	Channel            string                        `json:"channel" binding:"required"`
+	ReconciliationDate time.Time                     `json:"reconciliation_date" binding:"required"`
+	PeriodStart        time.Time                     `json:"period_start" binding:"required"`
+	PeriodEnd          time.Time                     `json:"period_end" binding:"required"`
+	Currency           string                        `json:"currency" binding:"required"`
+	Items              []ReconciliationItemInput     `json:"items" binding:"required,min=1"`
+}
+
+// ReconciliationItemInput 对账明细输入
+type ReconciliationItemInput struct {
+	TransactionNo  string `json:"transaction_no" binding:"required"`
+	ExternalTxNo   string `json:"external_tx_no"`
+	ItemType       string `json:"item_type" binding:"required"`
+	InternalAmount int64  `json:"internal_amount"`
+	ExternalAmount int64  `json:"external_amount"`
+	Status         string `json:"status"`
+	Description    string `json:"description"`
+}
+
+// Balance Aggregation Response Structures
+
+// AccountBalance 单个账户余额信息
+type AccountBalance struct {
+	AccountID        uuid.UUID `json:"account_id"`
+	AccountType      string    `json:"account_type"`
+	Currency         string    `json:"currency"`
+	Balance          int64     `json:"balance"`
+	FrozenBalance    int64     `json:"frozen_balance"`
+	AvailableBalance int64     `json:"available_balance"`
+	TotalIn          int64     `json:"total_in"`
+	TotalOut         int64     `json:"total_out"`
+	Status           string    `json:"status"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// MerchantBalanceSummary 商户余额汇总
+type MerchantBalanceSummary struct {
+	MerchantID       uuid.UUID        `json:"merchant_id"`
+	TotalAccounts    int              `json:"total_accounts"`
+	ActiveAccounts   int              `json:"active_accounts"`
+	FrozenAccounts   int              `json:"frozen_accounts"`
+	Accounts         []AccountBalance `json:"accounts"`
+	CurrencySummary  map[string]int64 `json:"currency_summary"`   // 按货币汇总余额
+	TypeSummary      map[string]int64 `json:"type_summary"`       // 按账户类型汇总余额
+	TotalBalance     int64            `json:"total_balance"`      // 所有账户余额总和（需转换为基准货币）
+	TotalFrozen      int64            `json:"total_frozen"`       // 所有账户冻结金额总和
+	TotalAvailable   int64            `json:"total_available"`    // 所有账户可用余额总和
+	LastUpdated      time.Time        `json:"last_updated"`
+}
+
+// CurrencyBalanceSummary 货币余额汇总
+type CurrencyBalanceSummary struct {
+	MerchantID       uuid.UUID        `json:"merchant_id"`
+	Currency         string           `json:"currency"`
+	AccountCount     int              `json:"account_count"`
+	TotalBalance     int64            `json:"total_balance"`
+	TotalFrozen      int64            `json:"total_frozen"`
+	TotalAvailable   int64            `json:"total_available"`
+	TotalIn          int64            `json:"total_in"`
+	TotalOut         int64            `json:"total_out"`
+	Accounts         []AccountBalance `json:"accounts"`
+	LastUpdated      time.Time        `json:"last_updated"`
+}
+
+// AccountTypeBalanceSummary 账户类型余额汇总
+type AccountTypeBalanceSummary struct {
+	MerchantID       uuid.UUID        `json:"merchant_id"`
+	AccountType      string           `json:"account_type"`
+	AccountCount     int              `json:"account_count"`
+	CurrencyBalances map[string]int64 `json:"currency_balances"` // 按货币分组的余额
+	TotalBalance     int64            `json:"total_balance"`
+	TotalFrozen      int64            `json:"total_frozen"`
+	TotalAvailable   int64            `json:"total_available"`
+	Accounts         []AccountBalance `json:"accounts"`
+	LastUpdated      time.Time        `json:"last_updated"`
 }
 
 // CreateAccount 创建账户
@@ -271,7 +418,47 @@ func (s *accountService) CreateSettlement(ctx context.Context, input *CreateSett
 	// 生成结算单号
 	settlementNo := s.generateSettlementNo()
 
-	// TODO: 计算结算金额、手续费等
+	// 查询结算周期内的交易
+	txQuery := &repository.TransactionQuery{
+		MerchantID: &input.MerchantID,
+		Currency:   input.Currency,
+		StartTime:  &input.PeriodStart,
+		EndTime:    &input.PeriodEnd,
+		Page:       1,
+		PageSize:   10000, // 一次性获取所有交易
+	}
+
+	transactions, _, err := s.accountRepo.ListTransactions(ctx, txQuery)
+	if err != nil {
+		return nil, fmt.Errorf("查询交易失败: %w", err)
+	}
+
+	// 计算结算金额
+	var totalAmount int64
+	var paymentCount, refundCount int
+
+	for _, tx := range transactions {
+		if tx.Status != "completed" {
+			continue
+		}
+
+		switch tx.TransactionType {
+		case model.TransactionTypePaymentIn:
+			totalAmount += tx.Amount
+			paymentCount++
+		case model.TransactionTypeRefundOut:
+			totalAmount += tx.Amount // 退款金额为负数
+			refundCount++
+		}
+	}
+
+	// 计算手续费（简单示例：2% 费率）
+	// 实际应该从merchant-service的fee_configs表查询商户费率
+	feeRate := 0.02
+	feeAmount := int64(float64(totalAmount) * feeRate)
+
+	// 计算净额
+	netAmount := totalAmount - feeAmount
 
 	settlement := &model.Settlement{
 		MerchantID:   input.MerchantID,
@@ -279,13 +466,13 @@ func (s *accountService) CreateSettlement(ctx context.Context, input *CreateSett
 		AccountID:    input.AccountID,
 		PeriodStart:  input.PeriodStart,
 		PeriodEnd:    input.PeriodEnd,
-		TotalAmount:  0,
-		FeeAmount:    0,
-		NetAmount:    0,
+		TotalAmount:  totalAmount,
+		FeeAmount:    feeAmount,
+		NetAmount:    netAmount,
 		Currency:     input.Currency,
 		Status:       model.SettlementStatusPending,
-		PaymentCount: input.PaymentCount,
-		RefundCount:  input.RefundCount,
+		PaymentCount: paymentCount,
+		RefundCount:  refundCount,
 	}
 
 	if err := s.accountRepo.CreateSettlement(ctx, settlement); err != nil {
@@ -334,8 +521,63 @@ func (s *accountService) ProcessSettlement(ctx context.Context, settlementNo str
 		return err
 	}
 
-	// TODO: 执行结算逻辑
+	// 执行结算逻辑
 
+	// 1. 获取账户信息
+	account, err := s.GetAccount(ctx, settlement.AccountID)
+	if err != nil {
+		settlement.Status = model.SettlementStatusFailed
+		s.accountRepo.UpdateSettlement(ctx, settlement)
+		return fmt.Errorf("获取账户失败: %w", err)
+	}
+
+	// 2. 检查账户状态
+	if account.Status != model.AccountStatusActive {
+		settlement.Status = model.SettlementStatusFailed
+		s.accountRepo.UpdateSettlement(ctx, settlement)
+		return fmt.Errorf("账户状态异常: %s", account.Status)
+	}
+
+	// 3. 创建结算交易记录（手续费扣除）
+	if settlement.FeeAmount > 0 {
+		feeInput := &CreateTransactionInput{
+			AccountID:       settlement.AccountID,
+			TransactionType: model.TransactionTypeFee,
+			Amount:          -settlement.FeeAmount,
+			RelatedID:       settlement.ID,
+			RelatedNo:       settlement.SettlementNo,
+			Description:     fmt.Sprintf("结算手续费: %s", settlement.SettlementNo),
+		}
+
+		_, err = s.CreateTransaction(ctx, feeInput)
+		if err != nil {
+			settlement.Status = model.SettlementStatusFailed
+			s.accountRepo.UpdateSettlement(ctx, settlement)
+			return fmt.Errorf("创建手续费交易失败: %w", err)
+		}
+	}
+
+	// 4. 创建结算交易记录（净额结算）
+	settlementInput := &CreateTransactionInput{
+		AccountID:       settlement.AccountID,
+		TransactionType: "settlement",
+		Amount:          settlement.NetAmount,
+		RelatedID:       settlement.ID,
+		RelatedNo:       settlement.SettlementNo,
+		Description:     fmt.Sprintf("结算: %s (周期: %s - %s)",
+			settlement.SettlementNo,
+			settlement.PeriodStart.Format("2006-01-02"),
+			settlement.PeriodEnd.Format("2006-01-02")),
+	}
+
+	_, err = s.CreateTransaction(ctx, settlementInput)
+	if err != nil {
+		settlement.Status = model.SettlementStatusFailed
+		s.accountRepo.UpdateSettlement(ctx, settlement)
+		return fmt.Errorf("创建结算交易失败: %w", err)
+	}
+
+	// 5. 完成结算
 	now := time.Now()
 	settlement.Status = model.SettlementStatusCompleted
 	settlement.SettledAt = &now
@@ -358,6 +600,30 @@ func (s *accountService) generateSettlementNo() string {
 	rand.Read(randomBytes)
 	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:10]
 	return fmt.Sprintf("ST%s%s", timestamp, randomStr)
+}
+
+func (s *accountService) generateWithdrawalNo() string {
+	timestamp := time.Now().Format("20060102150405")
+	randomBytes := make([]byte, 8)
+	rand.Read(randomBytes)
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:10]
+	return fmt.Sprintf("WD%s%s", timestamp, randomStr)
+}
+
+func (s *accountService) generateInvoiceNo() string {
+	timestamp := time.Now().Format("20060102150405")
+	randomBytes := make([]byte, 8)
+	rand.Read(randomBytes)
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:10]
+	return fmt.Sprintf("INV%s%s", timestamp, randomStr)
+}
+
+func (s *accountService) generateReconciliationNo() string {
+	timestamp := time.Now().Format("20060102150405")
+	randomBytes := make([]byte, 8)
+	rand.Read(randomBytes)
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:10]
+	return fmt.Sprintf("REC%s%s", timestamp, randomStr)
 }
 
 func (s *accountService) createDoubleEntry(ctx context.Context, tx *model.AccountTransaction) {
@@ -394,4 +660,853 @@ func (s *accountService) createDoubleEntry(ctx context.Context, tx *model.Accoun
 	}
 
 	s.accountRepo.CreateDoubleEntry(ctx, entry)
+}
+
+// Withdrawal Management Methods
+
+// CreateWithdrawal 创建提现申请
+func (s *accountService) CreateWithdrawal(ctx context.Context, input *CreateWithdrawalInput) (*model.Withdrawal, error) {
+	// 获取账户
+	account, err := s.GetAccount(ctx, input.AccountID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 检查账户所属
+	if account.MerchantID != input.MerchantID {
+		return nil, fmt.Errorf("账户不属于该商户")
+	}
+
+	// 检查账户状态
+	if account.Status != model.AccountStatusActive {
+		return nil, fmt.Errorf("账户状态异常: %s", account.Status)
+	}
+
+	// 检查账户余额
+	if account.Balance < input.Amount {
+		return nil, fmt.Errorf("账户余额不足")
+	}
+
+	// 计算手续费（简单示例：0.5%）
+	feeAmount := input.Amount * 5 / 1000
+	actualAmount := input.Amount - feeAmount
+
+	// 生成提现单号
+	withdrawalNo := s.generateWithdrawalNo()
+
+	// 创建提现记录
+	withdrawal := &model.Withdrawal{
+		MerchantID:          input.MerchantID,
+		WithdrawalNo:        withdrawalNo,
+		AccountID:           input.AccountID,
+		SettlementAccountID: input.SettlementAccountID,
+		Amount:              input.Amount,
+		Currency:            input.Currency,
+		FeeAmount:           feeAmount,
+		ActualAmount:        actualAmount,
+		Status:              model.WithdrawalStatusPending,
+		RequestReason:       input.RequestReason,
+	}
+
+	if err := s.accountRepo.CreateWithdrawal(ctx, withdrawal); err != nil {
+		return nil, fmt.Errorf("创建提现记录失败: %w", err)
+	}
+
+	// 冻结提现金额
+	if err := s.accountRepo.FreezeBalance(ctx, input.AccountID, input.Amount); err != nil {
+		return nil, fmt.Errorf("冻结余额失败: %w", err)
+	}
+
+	return withdrawal, nil
+}
+
+// GetWithdrawal 获取提现记录
+func (s *accountService) GetWithdrawal(ctx context.Context, withdrawalNo string) (*model.Withdrawal, error) {
+	withdrawal, err := s.accountRepo.GetWithdrawalByNo(ctx, withdrawalNo)
+	if err != nil {
+		return nil, fmt.Errorf("获取提现记录失败: %w", err)
+	}
+	if withdrawal == nil {
+		return nil, fmt.Errorf("提现记录不存在")
+	}
+	return withdrawal, nil
+}
+
+// ListWithdrawals 提现列表
+func (s *accountService) ListWithdrawals(ctx context.Context, query *repository.WithdrawalQuery) ([]*model.Withdrawal, int64, error) {
+	if query.Page < 1 {
+		query.Page = 1
+	}
+	if query.PageSize < 1 || query.PageSize > 100 {
+		query.PageSize = 20
+	}
+	return s.accountRepo.ListWithdrawals(ctx, query)
+}
+
+// ApproveWithdrawal 批准提现
+func (s *accountService) ApproveWithdrawal(ctx context.Context, withdrawalNo string, approverID uuid.UUID, notes string) error {
+	withdrawal, err := s.GetWithdrawal(ctx, withdrawalNo)
+	if err != nil {
+		return err
+	}
+
+	if withdrawal.Status != model.WithdrawalStatusPending {
+		return fmt.Errorf("提现状态不正确: %s", withdrawal.Status)
+	}
+
+	now := time.Now()
+	withdrawal.Status = model.WithdrawalStatusApproved
+	withdrawal.ApprovedBy = &approverID
+	withdrawal.ApprovedAt = &now
+	withdrawal.ApprovalNotes = notes
+
+	return s.accountRepo.UpdateWithdrawal(ctx, withdrawal)
+}
+
+// RejectWithdrawal 拒绝提现
+func (s *accountService) RejectWithdrawal(ctx context.Context, withdrawalNo string, approverID uuid.UUID, reason string) error {
+	withdrawal, err := s.GetWithdrawal(ctx, withdrawalNo)
+	if err != nil {
+		return err
+	}
+
+	if withdrawal.Status != model.WithdrawalStatusPending {
+		return fmt.Errorf("提现状态不正确: %s", withdrawal.Status)
+	}
+
+	now := time.Now()
+	withdrawal.Status = model.WithdrawalStatusRejected
+	withdrawal.ApprovedBy = &approverID
+	withdrawal.ApprovedAt = &now
+	withdrawal.ApprovalNotes = reason
+
+	// 解冻余额
+	if err := s.accountRepo.UnfreezeBalance(ctx, withdrawal.AccountID, withdrawal.Amount); err != nil {
+		return fmt.Errorf("解冻余额失败: %w", err)
+	}
+
+	return s.accountRepo.UpdateWithdrawal(ctx, withdrawal)
+}
+
+// ProcessWithdrawal 处理提现（开始转账）
+func (s *accountService) ProcessWithdrawal(ctx context.Context, withdrawalNo string, processorID uuid.UUID) error {
+	withdrawal, err := s.GetWithdrawal(ctx, withdrawalNo)
+	if err != nil {
+		return err
+	}
+
+	if withdrawal.Status != model.WithdrawalStatusApproved {
+		return fmt.Errorf("提现状态不正确: %s，必须先审批", withdrawal.Status)
+	}
+
+	now := time.Now()
+	withdrawal.Status = model.WithdrawalStatusProcessing
+	withdrawal.ProcessedBy = &processorID
+	withdrawal.ProcessedAt = &now
+
+	return s.accountRepo.UpdateWithdrawal(ctx, withdrawal)
+}
+
+// CompleteWithdrawal 完成提现
+func (s *accountService) CompleteWithdrawal(ctx context.Context, withdrawalNo string) error {
+	withdrawal, err := s.GetWithdrawal(ctx, withdrawalNo)
+	if err != nil {
+		return err
+	}
+
+	if withdrawal.Status != model.WithdrawalStatusProcessing {
+		return fmt.Errorf("提现状态不正确: %s", withdrawal.Status)
+	}
+
+	// 创建提现交易记录
+	txInput := &CreateTransactionInput{
+		AccountID:       withdrawal.AccountID,
+		TransactionType: model.TransactionTypeWithdraw,
+		Amount:          -withdrawal.Amount,
+		RelatedID:       withdrawal.ID,
+		RelatedNo:       withdrawal.WithdrawalNo,
+		Description:     fmt.Sprintf("提现: %s", withdrawal.WithdrawalNo),
+	}
+
+	tx, err := s.CreateTransaction(ctx, txInput)
+	if err != nil {
+		return fmt.Errorf("创建提现交易失败: %w", err)
+	}
+
+	// 解冻余额（实际已在CreateTransaction中扣除）
+	if err := s.accountRepo.UnfreezeBalance(ctx, withdrawal.AccountID, withdrawal.Amount); err != nil {
+		return fmt.Errorf("解冻余额失败: %w", err)
+	}
+
+	// 手续费交易
+	if withdrawal.FeeAmount > 0 {
+		feeInput := &CreateTransactionInput{
+			AccountID:       withdrawal.AccountID,
+			TransactionType: model.TransactionTypeFee,
+			Amount:          -withdrawal.FeeAmount,
+			RelatedID:       withdrawal.ID,
+			RelatedNo:       withdrawal.WithdrawalNo,
+			Description:     fmt.Sprintf("提现手续费: %s", withdrawal.WithdrawalNo),
+		}
+		_, _ = s.CreateTransaction(ctx, feeInput)
+	}
+
+	now := time.Now()
+	withdrawal.Status = model.WithdrawalStatusCompleted
+	withdrawal.CompletedAt = &now
+	withdrawal.TransactionID = &tx.ID
+
+	return s.accountRepo.UpdateWithdrawal(ctx, withdrawal)
+}
+
+// FailWithdrawal 提现失败
+func (s *accountService) FailWithdrawal(ctx context.Context, withdrawalNo string, reason string) error {
+	withdrawal, err := s.GetWithdrawal(ctx, withdrawalNo)
+	if err != nil {
+		return err
+	}
+
+	if withdrawal.Status != model.WithdrawalStatusProcessing {
+		return fmt.Errorf("提现状态不正确: %s", withdrawal.Status)
+	}
+
+	withdrawal.Status = model.WithdrawalStatusFailed
+	withdrawal.FailureReason = reason
+
+	// 解冻余额
+	if err := s.accountRepo.UnfreezeBalance(ctx, withdrawal.AccountID, withdrawal.Amount); err != nil {
+		return fmt.Errorf("解冻余额失败: %w", err)
+	}
+
+	return s.accountRepo.UpdateWithdrawal(ctx, withdrawal)
+}
+
+// CancelWithdrawal 取消提现
+func (s *accountService) CancelWithdrawal(ctx context.Context, withdrawalNo string) error {
+	withdrawal, err := s.GetWithdrawal(ctx, withdrawalNo)
+	if err != nil {
+		return err
+	}
+
+	if withdrawal.Status != model.WithdrawalStatusPending && withdrawal.Status != model.WithdrawalStatusApproved {
+		return fmt.Errorf("只能取消待审核或已批准的提现")
+	}
+
+	withdrawal.Status = model.WithdrawalStatusCancelled
+
+	// 解冻余额
+	if err := s.accountRepo.UnfreezeBalance(ctx, withdrawal.AccountID, withdrawal.Amount); err != nil {
+		return fmt.Errorf("解冻余额失败: %w", err)
+	}
+
+	return s.accountRepo.UpdateWithdrawal(ctx, withdrawal)
+}
+
+// Invoice Management Methods
+
+// CreateInvoice 创建账单
+func (s *accountService) CreateInvoice(ctx context.Context, input *CreateInvoiceInput) (*model.Invoice, error) {
+	// 生成账单号
+	invoiceNo := s.generateInvoiceNo()
+
+	// 计算小计金额
+	var subtotalAmount int64
+	for _, item := range input.Items {
+		subtotalAmount += int64(item.Quantity) * item.UnitPrice
+	}
+
+	// 计算税额
+	taxAmount := int64(float64(subtotalAmount) * input.TaxRate / 100)
+
+	// 计算总金额
+	totalAmount := subtotalAmount + taxAmount
+
+	// 创建账单
+	invoice := &model.Invoice{
+		MerchantID:        input.MerchantID,
+		InvoiceNo:         invoiceNo,
+		InvoiceType:       input.InvoiceType,
+		PeriodStart:       input.PeriodStart,
+		PeriodEnd:         input.PeriodEnd,
+		Currency:          input.Currency,
+		SubtotalAmount:    subtotalAmount,
+		TaxAmount:         taxAmount,
+		TotalAmount:       totalAmount,
+		PaidAmount:        0,
+		OutstandingAmount: totalAmount,
+		Status:            model.InvoiceStatusPending,
+		DueDate:           input.DueDate,
+		Notes:             input.Notes,
+	}
+
+	if err := s.accountRepo.CreateInvoice(ctx, invoice); err != nil {
+		return nil, fmt.Errorf("创建账单失败: %w", err)
+	}
+
+	// 创建账单明细
+	for _, itemInput := range input.Items {
+		amount := int64(itemInput.Quantity) * itemInput.UnitPrice
+		item := &model.InvoiceItem{
+			InvoiceID:   invoice.ID,
+			ItemType:    itemInput.ItemType,
+			Description: itemInput.Description,
+			Quantity:    itemInput.Quantity,
+			UnitPrice:   itemInput.UnitPrice,
+			Amount:      amount,
+			RelatedID:   itemInput.RelatedID,
+			RelatedNo:   itemInput.RelatedNo,
+		}
+		if err := s.accountRepo.CreateInvoiceItem(ctx, item); err != nil {
+			return nil, fmt.Errorf("创建账单明细失败: %w", err)
+		}
+	}
+
+	// 重新加载账单（包含明细）
+	return s.GetInvoice(ctx, invoiceNo)
+}
+
+// GetInvoice 获取账单
+func (s *accountService) GetInvoice(ctx context.Context, invoiceNo string) (*model.Invoice, error) {
+	invoice, err := s.accountRepo.GetInvoiceByNo(ctx, invoiceNo)
+	if err != nil {
+		return nil, fmt.Errorf("获取账单失败: %w", err)
+	}
+	if invoice == nil {
+		return nil, fmt.Errorf("账单不存在")
+	}
+	return invoice, nil
+}
+
+// ListInvoices 账单列表
+func (s *accountService) ListInvoices(ctx context.Context, query *repository.InvoiceQuery) ([]*model.Invoice, int64, error) {
+	if query.Page < 1 {
+		query.Page = 1
+	}
+	if query.PageSize < 1 || query.PageSize > 100 {
+		query.PageSize = 20
+	}
+	return s.accountRepo.ListInvoices(ctx, query)
+}
+
+// PayInvoice 支付账单
+func (s *accountService) PayInvoice(ctx context.Context, invoiceNo string, paidAmount int64) error {
+	invoice, err := s.GetInvoice(ctx, invoiceNo)
+	if err != nil {
+		return err
+	}
+
+	if invoice.Status != model.InvoiceStatusPending && invoice.Status != model.InvoiceStatusPartialPaid {
+		return fmt.Errorf("账单状态不正确: %s", invoice.Status)
+	}
+
+	if paidAmount <= 0 {
+		return fmt.Errorf("支付金额必须大于0")
+	}
+
+	if paidAmount > invoice.OutstandingAmount {
+		return fmt.Errorf("支付金额超过未付金额")
+	}
+
+	// 更新已支付金额和未付金额
+	invoice.PaidAmount += paidAmount
+	invoice.OutstandingAmount -= paidAmount
+
+	// 更新状态
+	if invoice.OutstandingAmount == 0 {
+		invoice.Status = model.InvoiceStatusPaid
+		now := time.Now()
+		invoice.PaidAt = &now
+	} else {
+		invoice.Status = model.InvoiceStatusPartialPaid
+	}
+
+	return s.accountRepo.UpdateInvoice(ctx, invoice)
+}
+
+// CancelInvoice 取消账单
+func (s *accountService) CancelInvoice(ctx context.Context, invoiceNo string) error {
+	invoice, err := s.GetInvoice(ctx, invoiceNo)
+	if err != nil {
+		return err
+	}
+
+	if invoice.Status != model.InvoiceStatusDraft && invoice.Status != model.InvoiceStatusPending {
+		return fmt.Errorf("只能取消草稿或待支付的账单")
+	}
+
+	invoice.Status = model.InvoiceStatusCancelled
+	return s.accountRepo.UpdateInvoice(ctx, invoice)
+}
+
+// VoidInvoice 作废账单
+func (s *accountService) VoidInvoice(ctx context.Context, invoiceNo string) error {
+	invoice, err := s.GetInvoice(ctx, invoiceNo)
+	if err != nil {
+		return err
+	}
+
+	if invoice.Status == model.InvoiceStatusPaid {
+		return fmt.Errorf("已支付的账单不能作废")
+	}
+
+	invoice.Status = model.InvoiceStatusVoided
+	return s.accountRepo.UpdateInvoice(ctx, invoice)
+}
+
+// CheckOverdueInvoices 检查逾期账单
+func (s *accountService) CheckOverdueInvoices(ctx context.Context) error {
+	// 查询所有待支付和部分支付的账单
+	query := &repository.InvoiceQuery{
+		Page:     1,
+		PageSize: 1000,
+	}
+
+	invoices, _, err := s.ListInvoices(ctx, query)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	for _, invoice := range invoices {
+		if (invoice.Status == model.InvoiceStatusPending || invoice.Status == model.InvoiceStatusPartialPaid) &&
+			invoice.DueDate.Before(now) {
+			invoice.Status = model.InvoiceStatusOverdue
+			s.accountRepo.UpdateInvoice(ctx, invoice)
+		}
+	}
+
+	return nil
+}
+
+// Reconciliation Management Methods
+
+// CreateReconciliation 创建对账单
+func (s *accountService) CreateReconciliation(ctx context.Context, input *CreateReconciliationInput) (*model.Reconciliation, error) {
+	// 生成对账单号
+	reconciliationNo := s.generateReconciliationNo()
+
+	// 计算内部和外部统计数据
+	var internalCount, externalCount int
+	var internalAmount, externalAmount int64
+	var mismatchedCount int
+
+	for _, item := range input.Items {
+		if item.InternalAmount != 0 {
+			internalCount++
+			internalAmount += item.InternalAmount
+		}
+		if item.ExternalAmount != 0 {
+			externalCount++
+			externalAmount += item.ExternalAmount
+		}
+		if item.Status == model.ReconciliationItemStatusMismatched ||
+			item.Status == model.ReconciliationItemStatusMissing {
+			mismatchedCount++
+		}
+	}
+
+	// 计算差异
+	diffCount := internalCount - externalCount
+	diffAmount := internalAmount - externalAmount
+
+	// 确定状态
+	status := model.ReconciliationStatusPending
+	if mismatchedCount == 0 && diffCount == 0 && diffAmount == 0 {
+		status = model.ReconciliationStatusMatched
+	} else if mismatchedCount > 0 || diffCount != 0 || diffAmount != 0 {
+		status = model.ReconciliationStatusMismatched
+	}
+
+	// 创建对账单
+	reconciliation := &model.Reconciliation{
+		ReconciliationNo:   reconciliationNo,
+		MerchantID:         input.MerchantID,
+		Channel:            input.Channel,
+		ReconciliationDate: input.ReconciliationDate,
+		PeriodStart:        input.PeriodStart,
+		PeriodEnd:          input.PeriodEnd,
+		Currency:           input.Currency,
+		InternalCount:      internalCount,
+		InternalAmount:     internalAmount,
+		ExternalCount:      externalCount,
+		ExternalAmount:     externalAmount,
+		DiffCount:          diffCount,
+		DiffAmount:         diffAmount,
+		MismatchedCount:    mismatchedCount,
+		Status:             status,
+	}
+
+	if err := s.accountRepo.CreateReconciliation(ctx, reconciliation); err != nil {
+		return nil, fmt.Errorf("创建对账单失败: %w", err)
+	}
+
+	// 创建对账明细
+	for _, itemInput := range input.Items {
+		diffAmount := itemInput.InternalAmount - itemInput.ExternalAmount
+
+		// 如果未指定状态，自动判断
+		itemStatus := itemInput.Status
+		if itemStatus == "" {
+			if diffAmount == 0 {
+				itemStatus = model.ReconciliationItemStatusMatched
+			} else {
+				itemStatus = model.ReconciliationItemStatusMismatched
+			}
+		}
+
+		item := &model.ReconciliationItem{
+			ReconciliationID: reconciliation.ID,
+			TransactionNo:    itemInput.TransactionNo,
+			ExternalTxNo:     itemInput.ExternalTxNo,
+			ItemType:         itemInput.ItemType,
+			InternalAmount:   itemInput.InternalAmount,
+			ExternalAmount:   itemInput.ExternalAmount,
+			DiffAmount:       diffAmount,
+			Status:           itemStatus,
+			Description:      itemInput.Description,
+		}
+		if err := s.accountRepo.CreateReconciliationItem(ctx, item); err != nil {
+			return nil, fmt.Errorf("创建对账明细失败: %w", err)
+		}
+	}
+
+	// 重新加载对账单（包含明细）
+	return s.GetReconciliation(ctx, reconciliationNo)
+}
+
+// GetReconciliation 获取对账单
+func (s *accountService) GetReconciliation(ctx context.Context, reconciliationNo string) (*model.Reconciliation, error) {
+	reconciliation, err := s.accountRepo.GetReconciliationByNo(ctx, reconciliationNo)
+	if err != nil {
+		return nil, fmt.Errorf("获取对账单失败: %w", err)
+	}
+	if reconciliation == nil {
+		return nil, fmt.Errorf("对账单不存在")
+	}
+	return reconciliation, nil
+}
+
+// ListReconciliations 对账单列表
+func (s *accountService) ListReconciliations(ctx context.Context, query *repository.ReconciliationQuery) ([]*model.Reconciliation, int64, error) {
+	if query.Page < 1 {
+		query.Page = 1
+	}
+	if query.PageSize < 1 || query.PageSize > 100 {
+		query.PageSize = 20
+	}
+	return s.accountRepo.ListReconciliations(ctx, query)
+}
+
+// ProcessReconciliation 处理对账单
+func (s *accountService) ProcessReconciliation(ctx context.Context, reconciliationNo string, userID uuid.UUID) error {
+	reconciliation, err := s.GetReconciliation(ctx, reconciliationNo)
+	if err != nil {
+		return err
+	}
+
+	if reconciliation.Status != model.ReconciliationStatusPending &&
+		reconciliation.Status != model.ReconciliationStatusMismatched {
+		return fmt.Errorf("对账单状态不正确: %s", reconciliation.Status)
+	}
+
+	reconciliation.Status = model.ReconciliationStatusProcessing
+	return s.accountRepo.UpdateReconciliation(ctx, reconciliation)
+}
+
+// CompleteReconciliation 完成对账
+func (s *accountService) CompleteReconciliation(ctx context.Context, reconciliationNo string) error {
+	reconciliation, err := s.GetReconciliation(ctx, reconciliationNo)
+	if err != nil {
+		return err
+	}
+
+	if reconciliation.Status != model.ReconciliationStatusProcessing &&
+		reconciliation.Status != model.ReconciliationStatusMatched {
+		return fmt.Errorf("对账单状态不正确: %s", reconciliation.Status)
+	}
+
+	now := time.Now()
+	reconciliation.Status = model.ReconciliationStatusCompleted
+	reconciliation.ReconciledAt = &now
+
+	return s.accountRepo.UpdateReconciliation(ctx, reconciliation)
+}
+
+// ResolveReconciliationItem 解决对账明细差异
+func (s *accountService) ResolveReconciliationItem(ctx context.Context, itemID uuid.UUID, resolution string) error {
+	// 获取对账明细
+	items, err := s.accountRepo.GetReconciliationItems(ctx, itemID)
+	if err != nil {
+		return fmt.Errorf("获取对账明细失败: %w", err)
+	}
+	if len(items) == 0 {
+		return fmt.Errorf("对账明细不存在")
+	}
+
+	item := items[0]
+	item.Status = model.ReconciliationItemStatusResolved
+	item.Description = resolution
+
+	return s.accountRepo.UpdateReconciliationItem(ctx, item)
+}
+
+// Balance Aggregation Methods
+
+// GetMerchantBalanceSummary 获取商户余额汇总
+func (s *accountService) GetMerchantBalanceSummary(ctx context.Context, merchantID uuid.UUID) (*MerchantBalanceSummary, error) {
+	// 查询商户所有账户
+	query := &repository.AccountQuery{
+		MerchantID: &merchantID,
+		Page:       1,
+		PageSize:   1000, // 获取所有账户
+	}
+
+	accounts, _, err := s.accountRepo.ListAccounts(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("查询账户失败: %w", err)
+	}
+
+	// 初始化汇总数据
+	summary := &MerchantBalanceSummary{
+		MerchantID:      merchantID,
+		TotalAccounts:   len(accounts),
+		ActiveAccounts:  0,
+		FrozenAccounts:  0,
+		Accounts:        make([]AccountBalance, 0, len(accounts)),
+		CurrencySummary: make(map[string]int64),
+		TypeSummary:     make(map[string]int64),
+		TotalBalance:    0,
+		TotalFrozen:     0,
+		TotalAvailable:  0,
+		LastUpdated:     time.Now(),
+	}
+
+	// 遍历账户统计
+	for _, account := range accounts {
+		availableBalance := account.Balance - account.FrozenBalance
+
+		// 账户状态统计
+		if account.Status == model.AccountStatusActive {
+			summary.ActiveAccounts++
+		} else if account.Status == model.AccountStatusFrozen {
+			summary.FrozenAccounts++
+		}
+
+		// 账户详情
+		accountBalance := AccountBalance{
+			AccountID:        account.ID,
+			AccountType:      account.AccountType,
+			Currency:         account.Currency,
+			Balance:          account.Balance,
+			FrozenBalance:    account.FrozenBalance,
+			AvailableBalance: availableBalance,
+			TotalIn:          account.TotalIn,
+			TotalOut:         account.TotalOut,
+			Status:           account.Status,
+			UpdatedAt:        account.UpdatedAt,
+		}
+		summary.Accounts = append(summary.Accounts, accountBalance)
+
+		// 按货币汇总
+		summary.CurrencySummary[account.Currency] += account.Balance
+
+		// 按账户类型汇总
+		summary.TypeSummary[account.AccountType] += account.Balance
+
+		// 总计
+		summary.TotalBalance += account.Balance
+		summary.TotalFrozen += account.FrozenBalance
+		summary.TotalAvailable += availableBalance
+	}
+
+	return summary, nil
+}
+
+// GetBalanceByCurrency 按货币获取余额汇总
+func (s *accountService) GetBalanceByCurrency(ctx context.Context, merchantID uuid.UUID, currency string) (*CurrencyBalanceSummary, error) {
+	// 查询指定货币的所有账户
+	query := &repository.AccountQuery{
+		MerchantID: &merchantID,
+		Currency:   currency,
+		Page:       1,
+		PageSize:   1000,
+	}
+
+	accounts, _, err := s.accountRepo.ListAccounts(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("查询账户失败: %w", err)
+	}
+
+	// 初始化汇总数据
+	summary := &CurrencyBalanceSummary{
+		MerchantID:     merchantID,
+		Currency:       currency,
+		AccountCount:   len(accounts),
+		TotalBalance:   0,
+		TotalFrozen:    0,
+		TotalAvailable: 0,
+		TotalIn:        0,
+		TotalOut:       0,
+		Accounts:       make([]AccountBalance, 0, len(accounts)),
+		LastUpdated:    time.Now(),
+	}
+
+	// 遍历账户统计
+	for _, account := range accounts {
+		availableBalance := account.Balance - account.FrozenBalance
+
+		// 账户详情
+		accountBalance := AccountBalance{
+			AccountID:        account.ID,
+			AccountType:      account.AccountType,
+			Currency:         account.Currency,
+			Balance:          account.Balance,
+			FrozenBalance:    account.FrozenBalance,
+			AvailableBalance: availableBalance,
+			TotalIn:          account.TotalIn,
+			TotalOut:         account.TotalOut,
+			Status:           account.Status,
+			UpdatedAt:        account.UpdatedAt,
+		}
+		summary.Accounts = append(summary.Accounts, accountBalance)
+
+		// 累加统计
+		summary.TotalBalance += account.Balance
+		summary.TotalFrozen += account.FrozenBalance
+		summary.TotalAvailable += availableBalance
+		summary.TotalIn += account.TotalIn
+		summary.TotalOut += account.TotalOut
+	}
+
+	return summary, nil
+}
+
+// GetBalanceByAccountType 按账户类型获取余额汇总
+func (s *accountService) GetBalanceByAccountType(ctx context.Context, merchantID uuid.UUID, accountType string) (*AccountTypeBalanceSummary, error) {
+	// 查询指定类型的所有账户
+	query := &repository.AccountQuery{
+		MerchantID:  &merchantID,
+		AccountType: accountType,
+		Page:        1,
+		PageSize:    1000,
+	}
+
+	accounts, _, err := s.accountRepo.ListAccounts(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("查询账户失败: %w", err)
+	}
+
+	// 初始化汇总数据
+	summary := &AccountTypeBalanceSummary{
+		MerchantID:       merchantID,
+		AccountType:      accountType,
+		AccountCount:     len(accounts),
+		CurrencyBalances: make(map[string]int64),
+		TotalBalance:     0,
+		TotalFrozen:      0,
+		TotalAvailable:   0,
+		Accounts:         make([]AccountBalance, 0, len(accounts)),
+		LastUpdated:      time.Now(),
+	}
+
+	// 遍历账户统计
+	for _, account := range accounts {
+		availableBalance := account.Balance - account.FrozenBalance
+
+		// 账户详情
+		accountBalance := AccountBalance{
+			AccountID:        account.ID,
+			AccountType:      account.AccountType,
+			Currency:         account.Currency,
+			Balance:          account.Balance,
+			FrozenBalance:    account.FrozenBalance,
+			AvailableBalance: availableBalance,
+			TotalIn:          account.TotalIn,
+			TotalOut:         account.TotalOut,
+			Status:           account.Status,
+			UpdatedAt:        account.UpdatedAt,
+		}
+		summary.Accounts = append(summary.Accounts, accountBalance)
+
+		// 按货币统计
+		summary.CurrencyBalances[account.Currency] += account.Balance
+
+		// 累加总计
+		summary.TotalBalance += account.Balance
+		summary.TotalFrozen += account.FrozenBalance
+		summary.TotalAvailable += availableBalance
+	}
+
+	return summary, nil
+}
+
+// GetAllCurrencyBalances 获取所有货币的余额汇总
+func (s *accountService) GetAllCurrencyBalances(ctx context.Context, merchantID uuid.UUID) ([]*CurrencyBalanceSummary, error) {
+	// 查询商户所有账户
+	query := &repository.AccountQuery{
+		MerchantID: &merchantID,
+		Page:       1,
+		PageSize:   1000,
+	}
+
+	accounts, _, err := s.accountRepo.ListAccounts(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("查询账户失败: %w", err)
+	}
+
+	// 按货币分组
+	currencyMap := make(map[string]*CurrencyBalanceSummary)
+
+	for _, account := range accounts {
+		availableBalance := account.Balance - account.FrozenBalance
+
+		// 如果该货币还没有汇总记录，创建一个
+		if _, exists := currencyMap[account.Currency]; !exists {
+			currencyMap[account.Currency] = &CurrencyBalanceSummary{
+				MerchantID:     merchantID,
+				Currency:       account.Currency,
+				AccountCount:   0,
+				TotalBalance:   0,
+				TotalFrozen:    0,
+				TotalAvailable: 0,
+				TotalIn:        0,
+				TotalOut:       0,
+				Accounts:       make([]AccountBalance, 0),
+				LastUpdated:    time.Now(),
+			}
+		}
+
+		summary := currencyMap[account.Currency]
+
+		// 账户详情
+		accountBalance := AccountBalance{
+			AccountID:        account.ID,
+			AccountType:      account.AccountType,
+			Currency:         account.Currency,
+			Balance:          account.Balance,
+			FrozenBalance:    account.FrozenBalance,
+			AvailableBalance: availableBalance,
+			TotalIn:          account.TotalIn,
+			TotalOut:         account.TotalOut,
+			Status:           account.Status,
+			UpdatedAt:        account.UpdatedAt,
+		}
+		summary.Accounts = append(summary.Accounts, accountBalance)
+
+		// 累加统计
+		summary.AccountCount++
+		summary.TotalBalance += account.Balance
+		summary.TotalFrozen += account.FrozenBalance
+		summary.TotalAvailable += availableBalance
+		summary.TotalIn += account.TotalIn
+		summary.TotalOut += account.TotalOut
+	}
+
+	// 转换为数组
+	result := make([]*CurrencyBalanceSummary, 0, len(currencyMap))
+	for _, summary := range currencyMap {
+		result = append(result, summary)
+	}
+
+	return result, nil
 }

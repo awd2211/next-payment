@@ -358,6 +358,93 @@ func (h *MerchantHandler) UpdateProfile(c *gin.Context) {
 	})
 }
 
+// MerchantWithPassword 带密码的商户信息响应（仅用于内部接口）
+type MerchantWithPassword struct {
+	ID           uuid.UUID `json:"id"`
+	MerchantNo   string    `json:"merchant_no"`
+	Name         string    `json:"merchant_name"`
+	Email        string    `json:"email"`
+	Phone        string    `json:"phone"`
+	Status       string    `json:"status"`
+	PasswordHash string    `json:"password_hash"` // 仅内部接口返回
+}
+
+// GetWithPassword 获取带密码的商户信息（内部接口，供merchant-auth-service调用）
+// @Summary 获取带密码的商户信息
+// @Tags Merchant
+// @Produce json
+// @Param id path string true "商户ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/merchants/{id}/with-password [get]
+func (h *MerchantHandler) GetWithPassword(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		return
+	}
+
+	merchant, err := h.merchantService.GetByIDWithPassword(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 构造包含密码哈希的响应（仅内部接口）
+	response := MerchantWithPassword{
+		ID:           merchant.ID,
+		MerchantNo:   "", // merchant_no字段可能不存在，保持为空
+		Name:         merchant.Name,
+		Email:        merchant.Email,
+		Phone:        merchant.Phone,
+		Status:       merchant.Status,
+		PasswordHash: merchant.PasswordHash,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "success",
+		"data":    response,
+	})
+}
+
+// UpdatePasswordRequest 更新密码请求
+type UpdatePasswordRequest struct {
+	PasswordHash string `json:"password_hash" binding:"required"`
+}
+
+// UpdatePassword 更新商户密码（内部接口，供merchant-auth-service调用）
+// @Summary 更新商户密码
+// @Tags Merchant
+// @Accept json
+// @Produce json
+// @Param id path string true "商户ID"
+// @Param request body UpdatePasswordRequest true "密码哈希"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/merchants/{id}/password [put]
+func (h *MerchantHandler) UpdatePassword(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的商户ID"})
+		return
+	}
+
+	var req UpdatePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.merchantService.UpdatePasswordHash(c.Request.Context(), id, req.PasswordHash); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "success",
+	})
+}
+
 // RegisterRoutes 注册路由
 func (h *MerchantHandler) RegisterRoutes(r *gin.RouterGroup) {
 	// 公开路由（无需认证）
@@ -386,5 +473,12 @@ func (h *MerchantHandler) RegisterRoutes(r *gin.RouterGroup) {
 		admin.PUT("/:id/status", h.UpdateStatus)
 		admin.PUT("/:id/kyc-status", h.UpdateKYCStatus)
 		admin.DELETE("/:id", h.Delete)
+	}
+
+	// 内部接口（供其他微服务调用，未来可添加服务间认证）
+	internal := r.Group("/merchants")
+	{
+		internal.GET("/:id/with-password", h.GetWithPassword)
+		internal.PUT("/:id/password", h.UpdatePassword)
 	}
 }

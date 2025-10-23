@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"payment-platform/merchant-service/internal/service"
+	"payment-platform/merchant-auth-service/internal/service"
 )
 
 // SecurityHandler 安全处理器

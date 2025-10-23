@@ -12,8 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/pquerna/otp/totp"
-	"payment-platform/merchant-service/internal/model"
-	"payment-platform/merchant-service/internal/repository"
+	"payment-platform/merchant-auth-service/internal/client"
+	"payment-platform/merchant-auth-service/internal/model"
+	"payment-platform/merchant-auth-service/internal/repository"
 )
 
 // SecurityService 安全服务接口
@@ -44,18 +45,18 @@ type SecurityService interface {
 }
 
 type securityService struct {
-	securityRepo repository.SecurityRepository
-	merchantRepo repository.MerchantRepository
+	securityRepo   repository.SecurityRepository
+	merchantClient client.MerchantClient
 }
 
 // NewSecurityService 创建安全服务实例
 func NewSecurityService(
 	securityRepo repository.SecurityRepository,
-	merchantRepo repository.MerchantRepository,
+	merchantClient client.MerchantClient,
 ) SecurityService {
 	return &securityService{
-		securityRepo: securityRepo,
-		merchantRepo: merchantRepo,
+		securityRepo:   securityRepo,
+		merchantClient: merchantClient,
 	}
 }
 
@@ -85,13 +86,10 @@ type UpdateSecuritySettingsInput struct {
 
 // ChangePassword 修改密码
 func (s *securityService) ChangePassword(ctx context.Context, merchantID uuid.UUID, oldPassword, newPassword string) error {
-	// 获取商户
-	merchant, err := s.merchantRepo.GetByID(ctx, merchantID)
+	// 获取商户信息（包含密码哈希）
+	merchant, err := s.merchantClient.GetMerchantWithPassword(ctx, merchantID)
 	if err != nil {
 		return fmt.Errorf("获取商户失败: %w", err)
-	}
-	if merchant == nil {
-		return fmt.Errorf("商户不存在")
 	}
 
 	// 验证旧密码
@@ -130,9 +128,8 @@ func (s *securityService) ChangePassword(ctx context.Context, merchantID uuid.UU
 		return fmt.Errorf("保存密码历史失败: %w", err)
 	}
 
-	// 更新密码
-	merchant.PasswordHash = newPasswordHash
-	if err := s.merchantRepo.Update(ctx, merchant); err != nil {
+	// 更新密码（通过merchant-service）
+	if err := s.merchantClient.UpdatePassword(ctx, merchantID, newPasswordHash); err != nil {
 		return fmt.Errorf("更新密码失败: %w", err)
 	}
 
@@ -174,12 +171,9 @@ func (s *securityService) Enable2FA(ctx context.Context, merchantID uuid.UUID) (
 	}
 
 	// 获取商户信息
-	merchant, err := s.merchantRepo.GetByID(ctx, merchantID)
+	merchant, err := s.merchantClient.GetMerchant(ctx, merchantID)
 	if err != nil {
 		return nil, fmt.Errorf("获取商户失败: %w", err)
-	}
-	if merchant == nil {
-		return nil, fmt.Errorf("商户不存在")
 	}
 
 	// 生成TOTP密钥
@@ -286,12 +280,9 @@ func (s *securityService) Verify2FA(ctx context.Context, merchantID uuid.UUID, c
 // Disable2FA 禁用2FA
 func (s *securityService) Disable2FA(ctx context.Context, merchantID uuid.UUID, password string) error {
 	// 验证密码
-	merchant, err := s.merchantRepo.GetByID(ctx, merchantID)
+	merchant, err := s.merchantClient.GetMerchantWithPassword(ctx, merchantID)
 	if err != nil {
 		return fmt.Errorf("获取商户失败: %w", err)
-	}
-	if merchant == nil {
-		return fmt.Errorf("商户不存在")
 	}
 
 	if err := auth.VerifyPassword(password, merchant.PasswordHash); err != nil {
@@ -358,6 +349,9 @@ func (s *securityService) GetSecuritySettings(ctx context.Context, merchantID uu
 			MaxConcurrentSessions: 5,
 			LoginNotification:     true,
 			AbnormalNotification:  true,
+			IPWhitelist:           "[]",  // 空数组JSON
+			AllowedCountries:      "[]",  // 空数组JSON
+			BlockedCountries:      "[]",  // 空数组JSON
 		}
 		if err := s.securityRepo.CreateSecuritySettings(ctx, settings); err != nil {
 			return nil, fmt.Errorf("创建安全设置失败: %w", err)

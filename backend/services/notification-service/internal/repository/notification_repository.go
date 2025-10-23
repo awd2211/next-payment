@@ -43,6 +43,14 @@ type NotificationRepository interface {
 	ListPendingNotifications(ctx context.Context, limit int) ([]*model.Notification, error)
 	// 查询待重试的投递
 	ListPendingDeliveries(ctx context.Context, limit int) ([]*model.WebhookDelivery, error)
+
+	// 通知偏好管理
+	CreatePreference(ctx context.Context, preference *model.NotificationPreference) error
+	GetPreference(ctx context.Context, id uuid.UUID) (*model.NotificationPreference, error)
+	ListPreferences(ctx context.Context, merchantID uuid.UUID, userID *uuid.UUID) ([]*model.NotificationPreference, error)
+	UpdatePreference(ctx context.Context, preference *model.NotificationPreference) error
+	DeletePreference(ctx context.Context, id uuid.UUID) error
+	CheckPreference(ctx context.Context, merchantID uuid.UUID, userID *uuid.UUID, channel, eventType string) (bool, error)
 }
 
 type notificationRepository struct {
@@ -362,4 +370,68 @@ func (r *notificationRepository) ListPendingDeliveries(ctx context.Context, limi
 		Find(&deliveries).Error
 
 	return deliveries, err
+}
+
+// CreatePreference 创建通知偏好
+func (r *notificationRepository) CreatePreference(ctx context.Context, preference *model.NotificationPreference) error {
+	return r.db.WithContext(ctx).Create(preference).Error
+}
+
+// GetPreference 获取通知偏好
+func (r *notificationRepository) GetPreference(ctx context.Context, id uuid.UUID) (*model.NotificationPreference, error) {
+	var preference model.NotificationPreference
+	err := r.db.WithContext(ctx).First(&preference, "id = ?", id).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &preference, nil
+}
+
+// ListPreferences 列出通知偏好
+func (r *notificationRepository) ListPreferences(ctx context.Context, merchantID uuid.UUID, userID *uuid.UUID) ([]*model.NotificationPreference, error) {
+	var preferences []*model.NotificationPreference
+	db := r.db.WithContext(ctx).Where("merchant_id = ?", merchantID)
+
+	if userID != nil {
+		db = db.Where("user_id = ?", *userID)
+	}
+
+	err := db.Order("created_at DESC").Find(&preferences).Error
+	return preferences, err
+}
+
+// UpdatePreference 更新通知偏好
+func (r *notificationRepository) UpdatePreference(ctx context.Context, preference *model.NotificationPreference) error {
+	return r.db.WithContext(ctx).Save(preference).Error
+}
+
+// DeletePreference 删除通知偏好
+func (r *notificationRepository) DeletePreference(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&model.NotificationPreference{}, "id = ?", id).Error
+}
+
+// CheckPreference 检查是否允许发送通知
+func (r *notificationRepository) CheckPreference(ctx context.Context, merchantID uuid.UUID, userID *uuid.UUID, channel, eventType string) (bool, error) {
+	var preference model.NotificationPreference
+	db := r.db.WithContext(ctx).
+		Where("merchant_id = ? AND channel = ? AND event_type = ?", merchantID, channel, eventType)
+
+	if userID != nil {
+		db = db.Where("user_id = ?", *userID)
+	}
+
+	err := db.First(&preference).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// 没有找到偏好设置，默认允许发送
+			return true, nil
+		}
+		return false, err
+	}
+
+	// 返回偏好设置的 is_enabled 状态
+	return preference.IsEnabled, nil
 }

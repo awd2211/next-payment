@@ -9,10 +9,13 @@ import (
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
+	pb "github.com/payment-platform/proto/merchant"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"payment-platform/merchant-service/internal/grpc"
 	"payment-platform/merchant-service/internal/handler"
 	"payment-platform/merchant-service/internal/model"
 	"payment-platform/merchant-service/internal/repository"
@@ -66,13 +69,15 @@ func main() {
 	if err := database.AutoMigrate(
 		&model.Merchant{},
 		&model.APIKey{},
-		&model.WebhookConfig{},
 		&model.ChannelConfig{},
-		&model.TwoFactorAuth{},
-		&model.LoginActivity{},
-		&model.SecuritySettings{},
-		&model.PasswordHistory{},
-		&model.Session{},
+		// 新增业务模型
+		&model.SettlementAccount{},
+		&model.KYCDocument{},
+		&model.BusinessQualification{},
+		&model.MerchantFeeConfig{},
+		&model.MerchantUser{},
+		&model.MerchantTransactionLimit{},
+		&model.MerchantContract{},
 	); err != nil {
 		logger.Fatal("数据库迁移失败")
 		log.Fatalf("Error: %v", err)
@@ -101,24 +106,56 @@ func main() {
 	// 初始化Repository
 	merchantRepo := repository.NewMerchantRepository(database)
 	apiKeyRepo := repository.NewAPIKeyRepository(database)
-	webhookRepo := repository.NewWebhookRepository(database)
 	channelRepo := repository.NewChannelRepository(database)
-	securityRepo := repository.NewSecurityRepository(database)
+
+	// 新增业务Repository
+	settlementAccountRepo := repository.NewSettlementAccountRepository(database)
+	kycDocRepo := repository.NewKYCDocumentRepository(database)
+	feeConfigRepo := repository.NewMerchantFeeConfigRepository(database)
+	merchantUserRepo := repository.NewMerchantUserRepository(database)
+	transactionLimitRepo := repository.NewMerchantTransactionLimitRepository(database)
+	qualificationRepo := repository.NewBusinessQualificationRepository(database)
 
 	// 初始化Service
-	merchantService := service.NewMerchantService(merchantRepo, apiKeyRepo, securityRepo, jwtManager)
+	merchantService := service.NewMerchantService(merchantRepo, apiKeyRepo, jwtManager)
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, merchantRepo)
-	webhookService := service.NewWebhookService(webhookRepo)
 	channelService := service.NewChannelService(channelRepo)
-	securityService := service.NewSecurityService(securityRepo, merchantRepo)
-	// authService := service.NewAuthService(merchantRepo, securityRepo, jwtManager) // 后续可以用于增强的登录功能
 
-	// 初始化Handler
+	// 新增业务Service
+	businessService := service.NewBusinessService(
+		settlementAccountRepo,
+		kycDocRepo,
+		feeConfigRepo,
+		merchantUserRepo,
+		transactionLimitRepo,
+		qualificationRepo,
+		merchantRepo,
+	)
+
+	// Dashboard聚合服务
+	dashboardService := service.NewDashboardService()
+
+	// 初始化gRPC Server（并行启动）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50002)
+	grpcServer := pkggrpc.NewSimpleServer()
+	merchantGrpcServer := grpc.NewMerchantServer(merchantService)
+	pb.RegisterMerchantServiceServer(grpcServer, merchantGrpcServer)
+
+	// 在后台启动gRPC服务器
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(grpcServer, grpcPort); err != nil {
+			logger.Fatal("gRPC服务启动失败")
+			log.Fatalf("Error: %v", err)
+		}
+	}()
+
+	// 初始化HTTP Handler
 	merchantHandler := handler.NewMerchantHandler(merchantService)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
-	webhookHandler := handler.NewWebhookHandler(webhookService)
 	channelHandler := handler.NewChannelHandler(channelService)
-	securityHandler := handler.NewSecurityHandler(securityService)
+	businessHandler := handler.NewBusinessHandler(businessService)
+	dashboardHandler := handler.NewDashboardHandler(dashboardService)
 
 	// 初始化Gin
 	if env == "production" {
@@ -159,14 +196,14 @@ func main() {
 		// API密钥路由（不需要authMiddleware，内部处理）
 		apiKeyHandler.RegisterRoutes(api)
 
-		// Webhook配置路由
-		webhookHandler.RegisterRoutes(api, authMiddleware)
-
 		// 渠道配置路由
 		channelHandler.RegisterRoutes(api, authMiddleware)
 
-		// 安全路由
-		securityHandler.RegisterRoutes(api, authMiddleware)
+		// 业务路由（结算账户、KYC、费率、子账户、限额、资质）
+		businessHandler.RegisterRoutes(api, authMiddleware)
+
+		// Dashboard聚合查询路由
+		dashboardHandler.RegisterRoutes(api, authMiddleware)
 	}
 
 	// 启动服务器

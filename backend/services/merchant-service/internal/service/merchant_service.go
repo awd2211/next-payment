@@ -27,12 +27,15 @@ type MerchantService interface {
 	// 商户认证
 	Login(ctx context.Context, email, password string) (*LoginResponse, error)
 	Register(ctx context.Context, input *RegisterMerchantInput) (*model.Merchant, error)
+
+	// 内部接口（供其他微服务调用）
+	GetByIDWithPassword(ctx context.Context, id uuid.UUID) (*model.Merchant, error)
+	UpdatePasswordHash(ctx context.Context, id uuid.UUID, passwordHash string) error
 }
 
 type merchantService struct {
 	merchantRepo repository.MerchantRepository
 	apiKeyRepo   repository.APIKeyRepository
-	securityRepo repository.SecurityRepository
 	jwtManager   *auth.JWTManager
 }
 
@@ -40,13 +43,11 @@ type merchantService struct {
 func NewMerchantService(
 	merchantRepo repository.MerchantRepository,
 	apiKeyRepo repository.APIKeyRepository,
-	securityRepo repository.SecurityRepository,
 	jwtManager *auth.JWTManager,
 ) MerchantService {
 	return &merchantService{
 		merchantRepo: merchantRepo,
 		apiKeyRepo:   apiKeyRepo,
-		securityRepo: securityRepo,
 		jwtManager:   jwtManager,
 	}
 }
@@ -123,6 +124,7 @@ func (s *merchantService) Create(ctx context.Context, input *CreateMerchantInput
 		Status:       model.MerchantStatusPending,
 		KYCStatus:    model.KYCStatusPending,
 		IsTestMode:   true,
+		Metadata:     "{}",
 	}
 
 	if err := s.merchantRepo.Create(ctx, merchant); err != nil {
@@ -342,6 +344,7 @@ func (s *merchantService) Register(ctx context.Context, input *RegisterMerchantI
 		Status:       model.MerchantStatusPending, // 待审核
 		KYCStatus:    model.KYCStatusPending,      // 待KYC验证
 		IsTestMode:   true,                         // 默认测试模式
+		Metadata:     "{}",                         // 空JSON对象
 	}
 
 	if err := s.merchantRepo.Create(ctx, merchant); err != nil {
@@ -401,4 +404,28 @@ func (s *merchantService) generateAPISecret() string {
 	b := make([]byte, 64)
 	rand.Read(b)
 	return base64.URLEncoding.EncodeToString(b)
+}
+
+// GetByIDWithPassword 获取带密码的商户信息（内部接口）
+func (s *merchantService) GetByIDWithPassword(ctx context.Context, id uuid.UUID) (*model.Merchant, error) {
+	merchant, err := s.merchantRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("获取商户失败: %w", err)
+	}
+	if merchant == nil {
+		return nil, fmt.Errorf("商户不存在")
+	}
+
+	// 注意：这个方法不清除password_hash字段，因为它是供merchant-auth-service使用的内部接口
+	return merchant, nil
+}
+
+// UpdatePasswordHash 更新商户密码哈希（内部接口）
+func (s *merchantService) UpdatePasswordHash(ctx context.Context, id uuid.UUID, passwordHash string) error {
+	// 直接调用repository的UpdatePasswordHash方法，只更新password_hash字段
+	if err := s.merchantRepo.UpdatePasswordHash(ctx, id, passwordHash); err != nil {
+		return fmt.Errorf("更新密码失败: %w", err)
+	}
+
+	return nil
 }

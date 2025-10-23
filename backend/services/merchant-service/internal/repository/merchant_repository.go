@@ -18,6 +18,7 @@ type MerchantRepository interface {
 	Update(ctx context.Context, merchant *model.Merchant) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	UpdateKYCStatus(ctx context.Context, id uuid.UUID, kycStatus string) error
+	UpdatePasswordHash(ctx context.Context, id uuid.UUID, passwordHash string) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -40,7 +41,6 @@ func (r *merchantRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 	var merchant model.Merchant
 	err := r.db.WithContext(ctx).
 		Preload("APIKeys").
-		Preload("WebhookConfig").
 		Preload("ChannelConfigs").
 		First(&merchant, "id = ?", id).Error
 	if err != nil {
@@ -122,6 +122,14 @@ func (r *merchantRepository) UpdateKYCStatus(ctx context.Context, id uuid.UUID, 
 		Model(&model.Merchant{}).
 		Where("id = ?", id).
 		Update("kyc_status", kycStatus).Error
+}
+
+// UpdatePasswordHash 更新密码哈希（内部接口）
+func (r *merchantRepository) UpdatePasswordHash(ctx context.Context, id uuid.UUID, passwordHash string) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Merchant{}).
+		Where("id = ?", id).
+		Update("password_hash", passwordHash).Error
 }
 
 // Delete 软删除商户

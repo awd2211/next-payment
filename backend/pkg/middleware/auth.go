@@ -50,6 +50,11 @@ func AuthMiddleware(jwtManager *auth.JWTManager) gin.HandlerFunc {
 		ctx := context.WithValue(c.Request.Context(), ClaimsKey, claims)
 		c.Request = c.Request.WithContext(ctx)
 
+		// Also set user_id in Gin context for easy access
+		c.Set("user_id", claims.UserID)
+		c.Set("tenant_id", claims.TenantID)
+		c.Set("user_type", claims.UserType)
+
 		c.Next()
 	}
 }

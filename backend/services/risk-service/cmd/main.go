@@ -91,7 +91,7 @@ func main() {
 	riskRepo := repository.NewRiskRepository(database)
 
 	// 初始化Service
-	riskService := service.NewRiskService(riskRepo)
+	riskService := service.NewRiskService(riskRepo, redisClient)
 
 	// 初始化Handler
 	riskHandler := handler.NewRiskHandler(riskService)

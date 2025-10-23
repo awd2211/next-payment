@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/notification-service/internal/handler"
@@ -16,6 +19,7 @@ import (
 	"payment-platform/notification-service/internal/provider"
 	"payment-platform/notification-service/internal/repository"
 	"payment-platform/notification-service/internal/service"
+	"payment-platform/notification-service/internal/worker"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -69,6 +73,7 @@ func main() {
 		&model.NotificationTemplate{},
 		&model.WebhookEndpoint{},
 		&model.WebhookDelivery{},
+		&model.NotificationPreference{},
 	); err != nil {
 		logger.Fatal("数据库迁移失败")
 		log.Fatalf("Error: %v", err)
@@ -145,13 +150,80 @@ func main() {
 	// 初始化Repository
 	notificationRepo := repository.NewNotificationRepository(database)
 
-	// 初始化Service
-	notificationService := service.NewNotificationService(
-		notificationRepo,
-		emailFactory,
-		smsFactory,
-		webhookProvider,
-	)
+	// 初始化Kafka（可选）
+	var notificationService service.NotificationService
+	kafkaEnabled := config.GetEnv("KAFKA_ENABLE_ASYNC", "false") == "true"
+
+	if kafkaEnabled {
+		logger.Info("Kafka异步模式已启用")
+
+		// 获取Kafka配置
+		kafkaBrokers := strings.Split(config.GetEnv("KAFKA_BROKERS", "localhost:9092"), ",")
+
+		// 创建邮件生产者
+		emailProducer := kafka.NewProducer(kafka.ProducerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "notifications.email",
+		})
+		logger.Info("邮件Kafka生产者已创建")
+
+		// 创建短信生产者
+		smsProducer := kafka.NewProducer(kafka.ProducerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "notifications.sms",
+		})
+		logger.Info("短信Kafka生产者已创建")
+
+		// 使用Kafka模式初始化Service
+		notificationService = service.NewNotificationServiceWithKafka(
+			notificationRepo,
+			emailFactory,
+			smsFactory,
+			webhookProvider,
+			emailProducer,
+			smsProducer,
+		)
+
+		// 创建Worker
+		notificationWorker := worker.NewNotificationWorker(
+			notificationRepo,
+			emailFactory,
+			smsFactory,
+		)
+
+		// 创建邮件消费者并启动Worker
+		emailConsumer := kafka.NewConsumer(kafka.ConsumerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "notifications.email",
+			GroupID: "notification-email-worker",
+		})
+		go func() {
+			ctx := context.Background()
+			notificationWorker.StartEmailWorker(ctx, emailConsumer)
+		}()
+		logger.Info("邮件Worker已启动")
+
+		// 创建短信消费者并启动Worker
+		smsConsumer := kafka.NewConsumer(kafka.ConsumerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "notifications.sms",
+			GroupID: "notification-sms-worker",
+		})
+		go func() {
+			ctx := context.Background()
+			notificationWorker.StartSMSWorker(ctx, smsConsumer)
+		}()
+		logger.Info("短信Worker已启动")
+	} else {
+		logger.Info("使用同步模式（Kafka未启用）")
+		// 使用同步模式初始化Service
+		notificationService = service.NewNotificationService(
+			notificationRepo,
+			emailFactory,
+			smsFactory,
+			webhookProvider,
+		)
+	}
 
 	// 初始化Handler
 	notificationHandler := handler.NewNotificationHandler(notificationService)
@@ -171,20 +243,27 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
 
-	// 健康检查
+	// 健康检查（公开接口）
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
 			"service": "notification-service",
 			"time":    time.Now().Unix(),
 		})
-	// Swagger UI
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
 	})
 
-	// 注册通知路由
-	notificationHandler.RegisterRoutes(r)
+	// Swagger UI（公开接口）
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// 初始化JWT管理器
+	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+
+	// JWT认证中间件
+	authMiddleware := middleware.AuthMiddleware(jwtManager)
+
+	// 注册通知路由（带认证）
+	notificationHandler.RegisterRoutes(r, authMiddleware)
 
 	// 启动后台任务
 	go startBackgroundWorkers(notificationService)

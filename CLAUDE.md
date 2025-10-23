@@ -10,16 +10,44 @@ This is a **Global Payment Platform** - an enterprise-grade, multi-tenant paymen
 
 ## Development Commands
 
+### Quick Start with Docker Compose
+
+Start infrastructure (PostgreSQL on port 40432, Redis on port 40379, Kafka on port 40092, Prometheus, Grafana, Jaeger):
+
+```bash
+# From project root
+docker-compose up -d
+
+# View logs
+docker-compose logs -f postgres redis kafka
+
+# Stop infrastructure
+docker-compose down
+```
+
+**Monitoring dashboards**:
+- Grafana: http://localhost:40300 (admin/admin)
+- Prometheus: http://localhost:40090
+- Jaeger UI: http://localhost:40686
+
 ### Building and Running Services
 
 All services use Go Workspace (`go.work`) for dependency management. Work from the `backend/` directory:
 
 ```bash
+# Using Makefile (recommended)
+cd backend
+make build           # Build all services to bin/
+make test            # Run all tests
+make fmt             # Format code
+make lint            # Run golangci-lint
+make run-all         # Run all services (parallel)
+
 # Build a specific service
 cd backend/services/payment-gateway
 go build -o /tmp/payment-gateway ./cmd/main.go
 
-# Build all services (verify compilation)
+# Build all services manually
 cd backend
 for service in services/*/; do
   cd "$service"
@@ -27,7 +55,7 @@ for service in services/*/; do
   cd ../..
 done
 
-# Run with hot reload (requires Air)
+# Run with hot reload (requires Air: go install github.com/cosmtrek/air@latest)
 ./scripts/dev-with-air.sh
 
 # Stop all services
@@ -37,6 +65,10 @@ done
 ### Testing
 
 ```bash
+# Run all tests
+cd backend
+make test
+
 # Run tests for a specific service
 cd backend/services/payment-gateway
 go test ./...
@@ -45,6 +77,9 @@ go test ./...
 cd backend/pkg
 go test ./...
 
+# Run tests with coverage
+go test -cover ./...
+
 # Clean build cache
 go clean -cache
 ```
@@ -52,11 +87,17 @@ go clean -cache
 ### Database Operations
 
 ```bash
-# Initialize databases
+# Initialize all databases (creates 10 databases)
+cd backend
+make init-db
+# OR
 ./scripts/init-db.sh
 
 # Run migrations
 ./scripts/migrate.sh
+
+# Connect to PostgreSQL
+psql -h localhost -p 40432 -U postgres -d payment_admin
 ```
 
 ## Architecture
@@ -152,18 +193,26 @@ The `backend/pkg/` directory contains reusable components:
 
 ### Service Ports and Databases
 
-| Service | Port | Database |
-|---------|------|----------|
-| admin-service | 8001 | payment_admin |
-| merchant-service | 8002 | payment_merchant |
-| payment-gateway | 8003 | payment_gateway |
-| order-service | 8004 | payment_order |
-| channel-adapter | 8005 | payment_channel |
-| risk-service | 8006 | payment_risk |
-| notification-service | 8007 | payment_notify |
-| accounting-service | 8008 | payment_accounting |
-| analytics-service | 8009 | payment_analytics |
-| config-service | 8010 | payment_config |
+| Service | Port | Database | Status |
+|---------|------|----------|--------|
+| admin-service | 8001 | payment_admin | ✅ Full |
+| merchant-service | 8002 | payment_merchant | ✅ Full |
+| payment-gateway | 8003 | payment_gateway | ✅ Full |
+| order-service | 8004 | payment_order | ✅ Full |
+| channel-adapter | 8005 | payment_channel | ✅ Full |
+| risk-service | 8006 | payment_risk | ⏳ Basic |
+| notification-service | 8007 | payment_notify | ⏳ Basic |
+| accounting-service | 8008 | payment_accounting | ⏳ Basic |
+| analytics-service | 8009 | payment_analytics | ⏳ Basic |
+| config-service | 8010 | payment_config | ⏳ Basic |
+
+**Infrastructure Ports**:
+- PostgreSQL: 40432 (docker) / 5432 (local)
+- Redis: 40379 (docker) / 6379 (local)
+- Kafka: 40092 (docker) / 9092 (local)
+- Prometheus: 40090
+- Grafana: 40300
+- Jaeger UI: 40686
 
 Each service has its own isolated PostgreSQL database for multi-tenancy.
 
@@ -269,6 +318,15 @@ dbConfig := db.Config{
 }
 ```
 
+**Common environment variables**:
+- `ENV` - development/production (default: development)
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
+- `PORT` - Service HTTP port
+- `JWT_SECRET` - JWT signing key
+- `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET` - For channel-adapter
+- `ORDER_SERVICE_URL`, `CHANNEL_SERVICE_URL`, `RISK_SERVICE_URL` - For payment-gateway
+
 ### Money Handling
 
 **Critical**: All monetary amounts are stored as **integers in cents/smallest currency unit** to avoid floating-point precision errors:
@@ -363,8 +421,13 @@ The project uses `stripe-go v76`. Key differences from earlier versions:
 - ⏳ Notification templates and delivery
 - ⏳ Accounting reconciliation
 
+**Infrastructure**:
+- ✅ Docker Compose with PostgreSQL, Redis, Kafka
+- ✅ Monitoring stack (Prometheus, Grafana, Jaeger)
+- ✅ Exporters for PostgreSQL, Redis, Kafka, cAdvisor, Node
+
 **Not Started**:
-- ❌ Docker Compose configuration
 - ❌ Environment configuration templates (.env)
 - ❌ Integration tests
-- ❌ Frontend applications (mentioned in README but not present)
+- ❌ Frontend applications (mentioned in README but not implemented)
+- ❌ gRPC implementation (Makefile has proto generation but services use HTTP/REST)

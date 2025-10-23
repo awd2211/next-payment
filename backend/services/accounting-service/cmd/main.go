@@ -67,6 +67,11 @@ func main() {
 		&model.AccountTransaction{},
 		&model.Settlement{},
 		&model.DoubleEntry{},
+		&model.Withdrawal{},
+		&model.Invoice{},
+		&model.InvoiceItem{},
+		&model.Reconciliation{},
+		&model.ReconciliationItem{},
 	); err != nil {
 		logger.Fatal("数据库迁移失败")
 		log.Fatalf("Error: %v", err)
@@ -119,10 +124,10 @@ func main() {
 			"service": "accounting-service",
 			"time":    time.Now().Unix(),
 		})
+	})
+
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
-	})
 
 	// 注册账户路由
 	accountHandler.RegisterRoutes(r)

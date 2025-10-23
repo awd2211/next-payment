@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"payment-platform/risk-service/internal/model"
 	"payment-platform/risk-service/internal/repository"
 )
@@ -34,13 +35,15 @@ type RiskService interface {
 }
 
 type riskService struct {
-	riskRepo repository.RiskRepository
+	riskRepo    repository.RiskRepository
+	redisClient *redis.Client
 }
 
 // NewRiskService 创建风控服务实例
-func NewRiskService(riskRepo repository.RiskRepository) RiskService {
+func NewRiskService(riskRepo repository.RiskRepository, redisClient *redis.Client) RiskService {
 	return &riskService{
-		riskRepo: riskRepo,
+		riskRepo:    riskRepo,
+		redisClient: redisClient,
 	}
 }
 
@@ -193,18 +196,25 @@ func (s *riskService) CheckPayment(ctx context.Context, input *PaymentCheckInput
 			"device_id":      input.DeviceID,
 			"payment_method": input.PaymentMethod,
 		},
+		RiskScore:   0, // 初始分数为0
 		RiskLevel:   model.RiskLevelLow,
 		Decision:    model.DecisionPass,
 		CheckResult: make(map[string]interface{}),
 	}
 
-	// 1. 黑名单检查
+	// 风险评分累加器
+	riskScore := 0
+
+	// 1. 黑名单检查 (+100分，直接critical)
 	blacklistHit, blacklistReason := s.checkBlacklistRules(ctx, input)
 	if blacklistHit {
+		riskScore += 100
+		check.RiskScore = riskScore
 		check.RiskLevel = model.RiskLevelCritical
 		check.Decision = model.DecisionReject
 		check.Reason = blacklistReason
 		check.CheckResult["blacklist"] = "hit"
+		check.CheckResult["blacklist_score"] = 100
 		if err := s.riskRepo.CreateCheck(ctx, check); err != nil {
 			return nil, fmt.Errorf("创建检查记录失败: %w", err)
 		}
@@ -212,54 +222,103 @@ func (s *riskService) CheckPayment(ctx context.Context, input *PaymentCheckInput
 	}
 	check.CheckResult["blacklist"] = "pass"
 
-	// 2. 金额风险检查
+	// 2. 金额风险检查 (+20分)
 	amountRisk := s.checkAmountRisk(input.Amount, input.Currency)
 	if amountRisk != "" {
-		check.RiskLevel = s.upgradeRiskLevel(check.RiskLevel, model.RiskLevelHigh)
+		riskScore += 20
 		check.Reason = amountRisk
 		check.CheckResult["amount_risk"] = "high"
+		check.CheckResult["amount_score"] = 20
 	} else {
 		check.CheckResult["amount_risk"] = "normal"
 	}
 
-	// 3. 频率检查
+	// 3. 频率检查 (+15分)
 	frequencyRisk := s.checkFrequency(ctx, input)
 	if frequencyRisk != "" {
-		check.RiskLevel = s.upgradeRiskLevel(check.RiskLevel, model.RiskLevelMedium)
+		riskScore += 15
 		if check.Reason != "" {
 			check.Reason += "; " + frequencyRisk
 		} else {
 			check.Reason = frequencyRisk
 		}
 		check.CheckResult["frequency_risk"] = "high"
+		check.CheckResult["frequency_score"] = 15
 	} else {
 		check.CheckResult["frequency_risk"] = "normal"
 	}
 
-	// 4. 设备风险检查
+	// 4. 设备风险检查 (+10分)
 	if input.DeviceID != "" {
 		deviceRisk := s.checkDeviceRisk(ctx, input.DeviceID)
 		if deviceRisk != "" {
-			check.RiskLevel = s.upgradeRiskLevel(check.RiskLevel, model.RiskLevelMedium)
+			riskScore += 10
 			if check.Reason != "" {
 				check.Reason += "; " + deviceRisk
 			} else {
 				check.Reason = deviceRisk
 			}
 			check.CheckResult["device_risk"] = "suspicious"
+			check.CheckResult["device_score"] = 10
 		} else {
 			check.CheckResult["device_risk"] = "normal"
 		}
+		// 记录设备活动（用于后续风控分析）
+		go s.recordDeviceActivity(context.Background(), input)
 	}
 
-	// 决策逻辑
-	switch check.RiskLevel {
-	case model.RiskLevelCritical, model.RiskLevelHigh:
-		check.Decision = model.DecisionReview
-	case model.RiskLevelMedium:
-		check.Decision = model.DecisionReview
-	default:
-		check.Decision = model.DecisionPass
+	// 5. IP地理位置检查 (+10分)
+	geoRisk := s.checkIPGeolocation(input.PayerIP)
+	if geoRisk != "" {
+		riskScore += 10
+		if check.Reason != "" {
+			check.Reason += "; " + geoRisk
+		} else {
+			check.Reason = geoRisk
+		}
+		check.CheckResult["geo_risk"] = "suspicious"
+		check.CheckResult["geo_score"] = 10
+	} else {
+		check.CheckResult["geo_risk"] = "normal"
+	}
+
+	// 6. 执行动态规则引擎（可能增加额外分数）
+	ruleDecision, _, ruleResults := s.executeRules(ctx, input)
+	if ruleDecision != "" {
+		check.CheckResult["rules"] = ruleResults
+		// 规则引擎的决策优先级最高
+		if ruleDecision == "block" || ruleDecision == model.DecisionReject {
+			riskScore += 50 // 规则拒绝 +50分
+			check.CheckResult["rule_score"] = 50
+			check.Decision = model.DecisionReject
+			if reason, ok := ruleResults["reason"].(string); ok {
+				if check.Reason != "" {
+					check.Reason += "; " + reason
+				} else {
+					check.Reason = reason
+				}
+			}
+		} else if ruleDecision == "review" || ruleDecision == model.DecisionReview {
+			riskScore += 25 // 规则建议审核 +25分
+			check.CheckResult["rule_score"] = 25
+		}
+	}
+
+	// 7. 根据总分计算最终风险等级
+	check.RiskScore = riskScore
+	check.RiskLevel = s.calculateRiskLevel(riskScore)
+	check.CheckResult["total_score"] = riskScore
+
+	// 决策逻辑（如果规则引擎没有做决策）
+	if check.Decision == "" {
+		switch check.RiskLevel {
+		case model.RiskLevelCritical, model.RiskLevelHigh:
+			check.Decision = model.DecisionReview
+		case model.RiskLevelMedium:
+			check.Decision = model.DecisionReview
+		default:
+			check.Decision = model.DecisionPass
+		}
 	}
 
 	if err := s.riskRepo.CreateCheck(ctx, check); err != nil {
@@ -391,15 +450,130 @@ func (s *riskService) checkAmountRisk(amount int64, currency string) string {
 }
 
 func (s *riskService) checkFrequency(ctx context.Context, input *PaymentCheckInput) string {
-	// TODO: 实现频率检查逻辑
-	// 可以检查同一商户、同一IP、同一设备在短时间内的交易次数
+	// 频率检查配置
+	type freqCheck struct {
+		value     string
+		key       string
+		limit     int
+		duration  time.Duration
+		riskMsg   string
+	}
+
+	checks := []freqCheck{
+		// IP频率：同一IP每分钟最多10笔交易
+		{
+			value:    input.PayerIP,
+			key:      fmt.Sprintf("risk:freq:ip:%s", input.PayerIP),
+			limit:    10,
+			duration: time.Minute,
+			riskMsg:  "IP交易频率过高",
+		},
+		// 商户频率：同一商户每分钟最多100笔交易
+		{
+			value:    input.MerchantID.String(),
+			key:      fmt.Sprintf("risk:freq:merchant:%s", input.MerchantID.String()),
+			limit:    100,
+			duration: time.Minute,
+			riskMsg:  "商户交易频率异常",
+		},
+		// 设备频率：同一设备每小时最多30笔交易
+		{
+			value:    input.DeviceID,
+			key:      fmt.Sprintf("risk:freq:device:%s", input.DeviceID),
+			limit:    30,
+			duration: time.Hour,
+			riskMsg:  "设备交易频率异常",
+		},
+		// 邮箱频率：同一邮箱每10分钟最多5笔交易
+		{
+			value:    input.PayerEmail,
+			key:      fmt.Sprintf("risk:freq:email:%s", input.PayerEmail),
+			limit:    5,
+			duration: 10 * time.Minute,
+			riskMsg:  "邮箱交易频率过高",
+		},
+	}
+
+	for _, check := range checks {
+		// 跳过空值
+		if check.value == "" {
+			continue
+		}
+
+		// 获取当前计数
+		count, err := s.redisClient.Incr(ctx, check.key).Result()
+		if err != nil {
+			// Redis错误不阻断流程，记录日志
+			continue
+		}
+
+		// 第一次访问，设置过期时间
+		if count == 1 {
+			s.redisClient.Expire(ctx, check.key, check.duration)
+		}
+
+		// 超过限制
+		if count > int64(check.limit) {
+			return fmt.Sprintf("%s (%d次/%v)", check.riskMsg, count, check.duration)
+		}
+	}
+
 	return ""
 }
 
 func (s *riskService) checkDeviceRisk(ctx context.Context, deviceID string) string {
-	// TODO: 实现设备风险检查
-	// 可以检查设备是否关联多个账户、是否有异常行为等
+	if deviceID == "" {
+		return ""
+	}
+
+	// 1. 检查设备关联的邮箱数量（使用 Set 存储）
+	emailSetKey := fmt.Sprintf("risk:device:emails:%s", deviceID)
+	emailCount, err := s.redisClient.SCard(ctx, emailSetKey).Result()
+	if err == nil && emailCount > 5 {
+		return fmt.Sprintf("设备关联过多账户 (%d个邮箱)", emailCount)
+	}
+
+	// 2. 检查设备关联的商户数量
+	merchantSetKey := fmt.Sprintf("risk:device:merchants:%s", deviceID)
+	merchantCount, err := s.redisClient.SCard(ctx, merchantSetKey).Result()
+	if err == nil && merchantCount > 10 {
+		return fmt.Sprintf("设备异常：关联过多商户 (%d个)", merchantCount)
+	}
+
+	// 3. 检查设备的IP变化频率（24小时内IP数量）
+	ipSetKey := fmt.Sprintf("risk:device:ips:%s", deviceID)
+	ipCount, err := s.redisClient.SCard(ctx, ipSetKey).Result()
+	if err == nil && ipCount > 20 {
+		return fmt.Sprintf("设备异常：IP频繁变化 (%d个IP/24h)", ipCount)
+	}
+
 	return ""
+}
+
+// RecordDeviceActivity 记录设备活动（在风控检查时调用）
+func (s *riskService) recordDeviceActivity(ctx context.Context, input *PaymentCheckInput) {
+	if input.DeviceID == "" {
+		return
+	}
+
+	// 记录设备关联的邮箱
+	if input.PayerEmail != "" {
+		emailSetKey := fmt.Sprintf("risk:device:emails:%s", input.DeviceID)
+		s.redisClient.SAdd(ctx, emailSetKey, input.PayerEmail)
+		s.redisClient.Expire(ctx, emailSetKey, 30*24*time.Hour) // 30天过期
+	}
+
+	// 记录设备关联的商户
+	merchantSetKey := fmt.Sprintf("risk:device:merchants:%s", input.DeviceID)
+	s.redisClient.SAdd(ctx, merchantSetKey, input.MerchantID.String())
+	s.redisClient.Expire(ctx, merchantSetKey, 30*24*time.Hour)
+
+	// 记录设备的IP
+	if input.PayerIP != "" {
+		ipSetKey := fmt.Sprintf("risk:device:ips:%s", input.DeviceID)
+		s.redisClient.SAdd(ctx, ipSetKey, input.PayerIP)
+		s.redisClient.Expire(ctx, ipSetKey, 24*time.Hour) // 24小时过期
+	}
 }
 
 func (s *riskService) upgradeRiskLevel(current, new string) string {
@@ -414,4 +588,210 @@ func (s *riskService) upgradeRiskLevel(current, new string) string {
 		return new
 	}
 	return current
+}
+
+// calculateRiskLevel 根据评分计算风险等级
+func (s *riskService) calculateRiskLevel(score int) string {
+	switch {
+	case score >= 81:
+		return model.RiskLevelCritical // 81+分：极高风险
+	case score >= 51:
+		return model.RiskLevelHigh // 51-80分：高风险
+	case score >= 21:
+		return model.RiskLevelMedium // 21-50分：中等风险
+	default:
+		return model.RiskLevelLow // 0-20分：低风险
+	}
+}
+
+// executeRules 执行动态规则引擎
+func (s *riskService) executeRules(ctx context.Context, input *PaymentCheckInput) (string, string, map[string]interface{}) {
+	// 获取所有启用的规则，按优先级排序
+	query := &repository.RuleQuery{
+		Status:   model.RuleStatusActive,
+		Page:     1,
+		PageSize: 100,
+	}
+	rules, _, err := s.riskRepo.ListRules(ctx, query)
+	if err != nil {
+		return "", "", nil
+	}
+
+	// 按优先级排序（优先级高的先执行）
+	sortedRules := s.sortRulesByPriority(rules)
+
+	ruleResults := make(map[string]interface{})
+	var matchedRule *model.RiskRule
+
+	// 遍历规则进行匹配
+	for _, rule := range sortedRules {
+		if s.matchRule(rule, input) {
+			matchedRule = rule
+			ruleResults[rule.RuleName] = "matched"
+			break // 匹配到第一个符合的规则就停止
+		}
+	}
+
+	if matchedRule == nil {
+		return "", "", ruleResults
+	}
+
+	// 执行规则动作
+	decision := ""
+	riskLevel := ""
+
+	if matchedRule.Actions != nil {
+		if d, ok := matchedRule.Actions["decision"].(string); ok {
+			decision = d
+		}
+		if rl, ok := matchedRule.Actions["risk_level"].(string); ok {
+			riskLevel = rl
+		}
+		ruleResults["action"] = matchedRule.Actions
+	}
+
+	ruleResults["matched_rule"] = matchedRule.RuleName
+	ruleResults["reason"] = fmt.Sprintf("命中规则: %s", matchedRule.RuleName)
+
+	return decision, riskLevel, ruleResults
+}
+
+// matchRule 判断规则是否匹配
+func (s *riskService) matchRule(rule *model.RiskRule, input *PaymentCheckInput) bool {
+	if rule.Conditions == nil {
+		return false
+	}
+
+	// 金额范围检查
+	if minAmount, ok := rule.Conditions["amount_min"].(float64); ok {
+		if input.Amount < int64(minAmount) {
+			return false
+		}
+	}
+	if maxAmount, ok := rule.Conditions["amount_max"].(float64); ok {
+		if input.Amount > int64(maxAmount) {
+			return false
+		}
+	}
+
+	// 货币检查
+	if currency, ok := rule.Conditions["currency"].(string); ok {
+		if input.Currency != currency {
+			return false
+		}
+	}
+
+	// 支付方式检查
+	if payMethod, ok := rule.Conditions["payment_method"].(string); ok {
+		if input.PaymentMethod != payMethod {
+			return false
+		}
+	}
+
+	// IP前缀检查（简单实现）
+	if ipPrefix, ok := rule.Conditions["ip_prefix"].(string); ok {
+		if !s.ipMatchesPrefix(input.PayerIP, ipPrefix) {
+			return false
+		}
+	}
+
+	// 邮箱域名检查
+	if emailDomain, ok := rule.Conditions["email_domain"].(string); ok {
+		if !s.emailMatchesDomain(input.PayerEmail, emailDomain) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// sortRulesByPriority 按优先级排序规则
+func (s *riskService) sortRulesByPriority(rules []*model.RiskRule) []*model.RiskRule {
+	// 简单的冒泡排序（实际项目中应使用 sort.Slice）
+	sorted := make([]*model.RiskRule, len(rules))
+	copy(sorted, rules)
+
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[i].Priority < sorted[j].Priority {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+	return sorted
+}
+
+// 辅助函数：IP前缀匹配
+func (s *riskService) ipMatchesPrefix(ip, prefix string) bool {
+	if ip == "" || prefix == "" {
+		return false
+	}
+	return len(ip) >= len(prefix) && ip[:len(prefix)] == prefix
+}
+
+// 辅助函数：邮箱域名匹配
+func (s *riskService) emailMatchesDomain(email, domain string) bool {
+	if email == "" || domain == "" {
+		return false
+	}
+	parts := []rune(email)
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] == '@' {
+			emailDomain := string(parts[i+1:])
+			return emailDomain == domain
+		}
+	}
+	return false
+}
+
+// checkIPGeolocation 检查IP地理位置风险
+func (s *riskService) checkIPGeolocation(ip string) string {
+	if ip == "" {
+		return ""
+	}
+
+	// 注意：这是一个简化的示例实现
+	// 生产环境应该使用专业的GeoIP库，如 MaxMind GeoIP2
+	// https://github.com/oschwald/geoip2-golang
+
+	// 高风险IP段示例（仅供演示）
+	highRiskPrefixes := []string{
+		// Tor 出口节点示例
+		"104.200.",
+		"185.220.",
+		// 其他高风险段
+		// 实际应该从数据库或配置文件加载
+	}
+
+	for _, prefix := range highRiskPrefixes {
+		if s.ipMatchesPrefix(ip, prefix) {
+			return fmt.Sprintf("高风险地理位置: IP段 %s", prefix)
+		}
+	}
+
+	// TODO: 集成真实的GeoIP库
+	// 示例代码：
+	// geoInfo, err := s.geoipDB.Lookup(ip)
+	// if err == nil {
+	//     // 检查高风险国家
+	//     if isHighRiskCountry(geoInfo.Country.ISOCode) {
+	//         return fmt.Sprintf("高风险国家: %s", geoInfo.Country.Name)
+	//     }
+	//     // 检查是否使用代理/VPN
+	//     if geoInfo.Traits.IsAnonymousProxy {
+	//         return "检测到匿名代理/VPN"
+	//     }
+	// }
+
+	return ""
+}
+
+// isHighRiskCountry 判断是否为高风险国家（示例）
+func (s *riskService) isHighRiskCountry(countryCode string) bool {
+	// 这应该从配置或数据库加载
+	highRiskCountries := map[string]bool{
+		// 示例，实际应根据业务需求配置
+		// "XX": true,
+	}
+	return highRiskCountries[countryCode]
 }

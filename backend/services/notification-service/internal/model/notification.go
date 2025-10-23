@@ -163,3 +163,39 @@ const (
 	ProviderAliyun  = "aliyun"  // 阿里云
 	ProviderTencent = "tencent" // 腾讯云
 )
+
+// NotificationPreference 通知偏好设置表
+type NotificationPreference struct {
+	ID          uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID      uuid.UUID      `gorm:"type:uuid;index" json:"user_id"`               // 用户ID（可选）
+	MerchantID  uuid.UUID      `gorm:"type:uuid;index" json:"merchant_id"`           // 商户ID
+	Channel     string         `gorm:"type:varchar(50);not null;index" json:"channel"` // 通知渠道
+	EventType   string         `gorm:"type:varchar(100);not null;index" json:"event_type"` // 事件类型
+	IsEnabled   bool           `gorm:"default:true" json:"is_enabled"`               // 是否启用
+	Description string         `gorm:"type:text" json:"description"`                 // 描述
+	Extra       string         `gorm:"type:jsonb" json:"extra"`                      // 扩展信息
+	CreatedAt   time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	UpdatedAt   time.Time      `gorm:"type:timestamptz;default:now()" json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// TableName 指定表名
+func (NotificationPreference) TableName() string {
+	return "notification_preferences"
+}
+
+// 事件类型常量
+const (
+	EventTypeMerchantRegistered  = "merchant.registered"   // 商户注册
+	EventTypeKYCApproved         = "kyc.approved"          // KYC审核通过
+	EventTypeKYCRejected         = "kyc.rejected"          // KYC审核拒绝
+	EventTypeMerchantFrozen      = "merchant.frozen"       // 商户冻结
+	EventTypePasswordReset       = "password.reset"        // 密码重置
+	EventTypePaymentSuccess      = "payment.success"       // 支付成功
+	EventTypePaymentFailed       = "payment.failed"        // 支付失败
+	EventTypeRefundCompleted     = "refund.completed"      // 退款完成
+	EventTypeOrderCreated        = "order.created"         // 订单创建
+	EventTypeOrderCancelled      = "order.cancelled"       // 订单取消
+	EventTypeSettlementCompleted = "settlement.completed"  // 结算完成
+	EventTypeSystemMaintenance   = "system.maintenance"    // 系统维护
+)

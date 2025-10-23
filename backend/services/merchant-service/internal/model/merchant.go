@@ -28,7 +28,6 @@ type Merchant struct {
 
 	// 关联（不存储在数据库）
 	APIKeys        []APIKey        `gorm:"foreignKey:MerchantID" json:"api_keys,omitempty"`
-	WebhookConfig  *WebhookConfig  `gorm:"foreignKey:MerchantID" json:"webhook_config,omitempty"`
 	ChannelConfigs []ChannelConfig `gorm:"foreignKey:MerchantID" json:"channel_configs,omitempty"`
 }
 
@@ -55,25 +54,6 @@ type APIKey struct {
 // TableName 指定表名
 func (APIKey) TableName() string {
 	return "api_keys"
-}
-
-// WebhookConfig Webhook配置表
-type WebhookConfig struct {
-	ID             uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	MerchantID     uuid.UUID `gorm:"type:uuid;unique;not null" json:"merchant_id"`               // 商户ID（一个商户只有一个webhook配置）
-	URL            string    `gorm:"type:varchar(500);not null" json:"url"`                      // Webhook URL
-	Events         string    `gorm:"type:jsonb;not null" json:"events"`                          // 订阅的事件列表（JSON数组）
-	Secret         string    `gorm:"type:varchar(64);not null" json:"secret"`                    // 签名密钥（用于HMAC验证）
-	IsEnabled      bool      `gorm:"default:true" json:"is_enabled"`                             // 是否启用
-	MaxRetries     int       `gorm:"type:integer;default:3" json:"max_retries"`                  // 最大重试次数
-	TimeoutSeconds int       `gorm:"type:integer;default:30" json:"timeout_seconds"`             // 超时时间（秒）
-	CreatedAt      time.Time `gorm:"type:timestamptz;default:now()" json:"created_at"`
-	UpdatedAt      time.Time `gorm:"type:timestamptz;default:now()" json:"updated_at"`
-}
-
-// TableName 指定表名
-func (WebhookConfig) TableName() string {
-	return "webhook_configs"
 }
 
 // ChannelConfig 支付渠道配置表
@@ -128,19 +108,6 @@ const (
 	ChannelCrypto  = "crypto"  // 加密货币
 	ChannelAdyen   = "adyen"   // Adyen
 	ChannelSquare  = "square"  // Square
-)
-
-// Webhook事件常量
-const (
-	EventPaymentCreated      = "payment.created"       // 支付创建
-	EventPaymentSuccess      = "payment.success"       // 支付成功
-	EventPaymentFailed       = "payment.failed"        // 支付失败
-	EventPaymentCancelled    = "payment.cancelled"     // 支付取消
-	EventRefundCreated       = "refund.created"        // 退款创建
-	EventRefundCompleted     = "refund.completed"      // 退款完成
-	EventRefundFailed        = "refund.failed"         // 退款失败
-	EventChargebackCreated   = "chargeback.created"    // 拒付创建
-	EventChargebackResolved  = "chargeback.resolved"   // 拒付解决
 )
 
 // 唯一索引：一个商户同一渠道只能有一个配置
