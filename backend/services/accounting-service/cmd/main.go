@@ -18,6 +18,9 @@ import (
 	"payment-platform/accounting-service/internal/model"
 	"payment-platform/accounting-service/internal/repository"
 	"payment-platform/accounting-service/internal/service"
+	grpcServer "payment-platform/accounting-service/internal/grpc"
+	pb "github.com/payment-platform/proto/accounting"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -162,7 +165,20 @@ func main() {
 	// 注册账户路由
 	accountHandler.RegisterRoutes(r)
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50007)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	accountingGrpcServer := grpcServer.NewAccountingServer(accountService)
+	pb.RegisterAccountingServiceServer(gRPCServer, accountingGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40007)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Accounting Service 正在监听 %s", addr))
