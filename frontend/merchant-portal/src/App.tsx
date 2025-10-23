@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import Orders from './pages/Orders'
 import Account from './pages/Account'
+import CreatePayment from './pages/CreatePayment'
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="create-payment" element={<CreatePayment />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="orders" element={<Orders />} />
           <Route path="account" element={<Account />} />

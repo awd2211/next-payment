@@ -17,7 +17,9 @@ import {
   UserOutlined,
   LogoutOutlined,
   WalletOutlined,
+  PlusCircleOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
 import LanguageSwitcher from './LanguageSwitcher'
 import ThemeSwitcher from './ThemeSwitcher'
@@ -29,6 +31,7 @@ const { Text } = Typography
 const Layout = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation()
   const { merchant, clearAuth } = useAuthStore()
   const [collapsed, setCollapsed] = useState(false)
 
@@ -40,22 +43,27 @@ const Layout = () => {
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
-      label: '概览',
+      label: t('menu.dashboard'),
+    },
+    {
+      key: '/create-payment',
+      icon: <PlusCircleOutlined />,
+      label: t('menu.createPayment'),
     },
     {
       key: '/transactions',
       icon: <TransactionOutlined />,
-      label: '交易记录',
+      label: t('menu.transactions'),
     },
     {
       key: '/orders',
       icon: <ShoppingOutlined />,
-      label: '订单管理',
+      label: t('menu.orders'),
     },
     {
       key: '/account',
       icon: <WalletOutlined />,
-      label: '账户信息',
+      label: t('menu.account'),
     },
   ]
 
@@ -63,7 +71,7 @@ const Layout = () => {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: '商户信息',
+      label: t('layout.profile'),
     },
     {
       type: 'divider',
@@ -71,7 +79,7 @@ const Layout = () => {
     {
       key: 'logout',
       icon: <LogoutOutlined />,
-      label: '退出登录',
+      label: t('layout.logout'),
       danger: true,
     },
   ]
@@ -106,7 +114,7 @@ const Layout = () => {
             fontWeight: 'bold',
           }}
         >
-          {collapsed ? '商户' : '商户中心'}
+          {collapsed ? t('layout.logoShort') : t('layout.logo')}
         </div>
         <Menu
           theme="dark"
