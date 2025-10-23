@@ -108,6 +108,7 @@ func main() {
 
 	// 初始化Service
 	paymentService := service.NewPaymentService(
+		database, // 添加 db 参数，用于事务支持
 		paymentRepo,
 		orderClient,
 		channelClient,
