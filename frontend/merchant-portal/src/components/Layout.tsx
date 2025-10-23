@@ -19,6 +19,7 @@ import {
   WalletOutlined,
   PlusCircleOutlined,
   RollbackOutlined,
+  BankOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -65,6 +66,11 @@ const Layout = () => {
       key: '/refunds',
       icon: <RollbackOutlined />,
       label: t('menu.refunds'),
+    },
+    {
+      key: '/settlements',
+      icon: <BankOutlined />,
+      label: t('menu.settlement'),
     },
     {
       key: '/account',

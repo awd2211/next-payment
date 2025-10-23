@@ -10,6 +10,7 @@ import Orders from './pages/Orders'
 import Account from './pages/Account'
 import CreatePayment from './pages/CreatePayment'
 import Refunds from './pages/Refunds'
+import Settlements from './pages/Settlements'
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
           <Route path="transactions" element={<Transactions />} />
           <Route path="orders" element={<Orders />} />
           <Route path="refunds" element={<Refunds />} />
+          <Route path="settlements" element={<Settlements />} />
           <Route path="account" element={<Account />} />
         </Route>
       </Routes>
