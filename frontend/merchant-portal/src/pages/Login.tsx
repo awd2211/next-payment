@@ -2,22 +2,34 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Form, Input, Button, Card, Typography, App } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
+import { merchantService } from '../services/merchantService'
+import { useAuthStore } from '../stores/authStore'
 
 const { Title, Text } = Typography
 
 const Login = () => {
   const navigate = useNavigate()
   const { message } = App.useApp()
+  const { setAuth } = useAuthStore()
   const [loading, setLoading] = useState(false)
 
-  const onFinish = async (values: { merchant_code: string; password: string }) => {
+  const onFinish = async (values: { email: string; password: string }) => {
     setLoading(true)
     try {
-      // TODO: 实现实际登录API调用
-      message.success('登录成功')
-      navigate('/dashboard')
-    } catch (error) {
-      message.error('登录失败')
+      const response = await merchantService.login(values)
+
+      if (response.data) {
+        const { token, merchant } = response.data
+
+        // 保存登录信息到 store
+        setAuth(token, '', merchant)
+
+        message.success('登录成功')
+        navigate('/dashboard')
+      }
+    } catch (error: any) {
+      console.error('登录失败:', error)
+      message.error(error?.response?.data?.message || error?.message || '登录失败，请检查邮箱和密码')
     } finally {
       setLoading(false)
     }
@@ -53,12 +65,16 @@ const Login = () => {
           size="large"
         >
           <Form.Item
-            name="merchant_code"
-            rules={[{ required: true, message: '请输入商户代码' }]}
+            name="email"
+            rules={[
+              { required: true, message: '请输入邮箱' },
+              { type: 'email', message: '请输入有效的邮箱地址' }
+            ]}
           >
             <Input
               prefix={<UserOutlined />}
-              placeholder="商户代码"
+              placeholder="邮箱地址"
+              autoComplete="email"
             />
           </Form.Item>
 

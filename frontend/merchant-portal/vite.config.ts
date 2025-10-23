@@ -137,8 +137,18 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000, // 提高警告阈值
   },
   server: {
-    port: 5173, // 使用标准端口
+    port: 5174, // Merchant Portal 端口
     proxy: {
+      // Merchant Service (商户登录和管理)
+      '/api/v1/merchant': {
+        target: 'http://localhost:40002',
+        changeOrigin: true,
+      },
+      '/api/v1/merchants': {
+        target: 'http://localhost:40002',
+        changeOrigin: true,
+      },
+
       // Admin Service (管理员、角色、权限、审计、系统配置)
       '/api/v1/admins': {
         target: 'http://localhost:40001',
@@ -173,11 +183,7 @@ export default defineConfig({
         changeOrigin: true,
       },
 
-      // Merchant Service (商户管理)
-      '/api/v1/merchants': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
+      // API Keys and Webhooks (商户服务)
       '/api/v1/api-keys': {
         target: 'http://localhost:40002',
         changeOrigin: true,

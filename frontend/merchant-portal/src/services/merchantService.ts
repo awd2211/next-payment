@@ -81,7 +81,23 @@ export interface RegenerateApiKeyResponse {
   api_secret: string
 }
 
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface LoginResponse {
+  token: string
+  merchant: Merchant
+  require_2fa: boolean
+  temp_token?: string
+}
+
 export const merchantService = {
+  login: (data: LoginRequest) => {
+    return request.post<{ data: LoginResponse }>('/merchant/login', data)
+  },
+
   getProfile: () => {
     return request.get<{ data: Merchant }>('/merchant/profile')
   },
