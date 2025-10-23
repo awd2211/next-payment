@@ -20,6 +20,7 @@ import {
   PlusCircleOutlined,
   RollbackOutlined,
   BankOutlined,
+  KeyOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -71,6 +72,11 @@ const Layout = () => {
       key: '/settlements',
       icon: <BankOutlined />,
       label: t('menu.settlement'),
+    },
+    {
+      key: '/api-keys',
+      icon: <KeyOutlined />,
+      label: t('menu.apiKeys'),
     },
     {
       key: '/account',

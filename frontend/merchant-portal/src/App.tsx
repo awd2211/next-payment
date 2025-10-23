@@ -11,6 +11,7 @@ import Account from './pages/Account'
 import CreatePayment from './pages/CreatePayment'
 import Refunds from './pages/Refunds'
 import Settlements from './pages/Settlements'
+import ApiKeys from './pages/ApiKeys'
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route path="orders" element={<Orders />} />
           <Route path="refunds" element={<Refunds />} />
           <Route path="settlements" element={<Settlements />} />
+          <Route path="api-keys" element={<ApiKeys />} />
           <Route path="account" element={<Account />} />
         </Route>
       </Routes>
