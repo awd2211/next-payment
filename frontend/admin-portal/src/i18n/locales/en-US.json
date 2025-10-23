@@ -151,6 +151,28 @@
     "refundConfirmMessage": "Are you sure you want to refund this payment? This action cannot be undone.",
     "refundSuccess": "Refund successful"
   },
+  "orders": {
+    "title": "Order Management",
+    "orderNo": "Order No",
+    "merchantOrderNo": "Merchant Order No",
+    "merchantName": "Merchant Name",
+    "productName": "Product Name",
+    "amount": "Amount",
+    "status": "Status",
+    "paymentNo": "Payment No",
+    "notifyUrl": "Notify URL",
+    "returnUrl": "Return URL",
+    "expiredAt": "Expired At",
+    "statusPending": "Pending",
+    "statusPaid": "Paid",
+    "statusCancelled": "Cancelled",
+    "statusExpired": "Expired",
+    "viewDetail": "View Detail",
+    "orderDetail": "Order Detail",
+    "cancel": "Cancel Order",
+    "cancelConfirm": "Are you sure to cancel this order?",
+    "cancelSuccess": "Cancel successful"
+  },
   "notifications": {
     "title": "Notifications",
     "unread": "{{count}} unread",
