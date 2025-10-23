@@ -4,8 +4,11 @@ import { ConfigProvider, theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
 import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
 import 'dayjs/locale/en'
+
+dayjs.extend(relativeTime)
 import App from './App'
 import './index.css'
 import './i18n/config'
