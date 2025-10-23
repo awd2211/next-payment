@@ -105,90 +105,105 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'antd-vendor': ['antd', '@ant-design/icons'],
+          'chart-vendor': ['@ant-design/charts'],
+          'utils': ['axios', 'dayjs', 'zustand'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000, // 提高警告阈值
+  },
   server: {
-    port: 40101,
+    port: 5173, // 使用标准端口
     proxy: {
       // Admin Service (管理员、角色、权限、审计、系统配置)
       '/api/v1/admins': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
       '/api/v1/roles': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
       '/api/v1/permissions': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
       '/api/v1/audit-logs': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
       '/api/v1/system-configs': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
       '/api/v1/email-templates': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
       '/api/v1/preferences': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
       '/api/v1/security': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:40001',
         changeOrigin: true,
       },
 
       // Merchant Service (商户管理)
       '/api/v1/merchants': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:40002',
         changeOrigin: true,
       },
       '/api/v1/api-keys': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:40002',
         changeOrigin: true,
       },
       '/api/v1/webhooks': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:40002',
         changeOrigin: true,
       },
       '/api/v1/channels': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:40002',
         changeOrigin: true,
       },
 
       // Payment Gateway (支付)
       '/api/v1/payments': {
-        target: 'http://localhost:8003',
+        target: 'http://localhost:40003',
         changeOrigin: true,
       },
 
       // Order Service (订单)
       '/api/v1/orders': {
-        target: 'http://localhost:8004',
+        target: 'http://localhost:40004',
         changeOrigin: true,
       },
 
       // Analytics Service (数据分析)
       '/api/v1/analytics': {
-        target: 'http://localhost:8009',
+        target: 'http://localhost:40009',
         changeOrigin: true,
       },
       '/api/v1/metrics': {
-        target: 'http://localhost:8009',
+        target: 'http://localhost:40009',
         changeOrigin: true,
       },
 
       // Config Service (配置中心)
       '/api/v1/configs': {
-        target: 'http://localhost:8010',
+        target: 'http://localhost:40010',
         changeOrigin: true,
       },
       '/api/v1/feature-flags': {
-        target: 'http://localhost:8010',
+        target: 'http://localhost:40010',
         changeOrigin: true,
       },
     },
