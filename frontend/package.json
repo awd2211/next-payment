@@ -21,7 +21,8 @@
     ]
   },
   "dependencies": {
-    "@ant-design/charts": "^2.6.6"
+    "@ant-design/charts": "^2.6.6",
+    "web-vitals": "^5.1.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

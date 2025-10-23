@@ -11,6 +11,9 @@ importers:
       '@ant-design/charts':
         specifier: ^2.6.6
         version: 2.6.6(react-dom@18.3.1)(react@18.3.1)(workerize-loader@2.0.2)
+      web-vitals:
+        specifier: ^5.1.0
+        version: 5.1.0
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.9.1
@@ -7654,6 +7657,10 @@ packages:
     dependencies:
       glob-to-regexp: 0.4.1
       graceful-fs: 4.2.11
+    dev: false
+
+  /web-vitals@5.1.0:
+    resolution: {integrity: sha512-ArI3kx5jI0atlTtmV0fWU3fjpLmq/nD3Zr1iFFlJLaqa5wLBkUSzINwBPySCX/8jRyjlmy1Volw1kz1g9XE4Jg==}
     dev: false
 
   /webidl-conversions@4.0.2:
