@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/order-service/internal/repository"
 	"payment-platform/order-service/internal/service"
 )
@@ -54,17 +56,30 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine) {
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var input service.CreateOrderInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	order, err := h.orderService.CreateOrder(c.Request.Context(), &input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建订单失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(order))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(order).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetOrder 获取订单详情
@@ -73,11 +88,21 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 
 	order, err := h.orderService.GetOrder(c.Request.Context(), orderNo)
 	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeResourceNotFound, "订单不存在", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusNotFound, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(order))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(order).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // QueryOrders 查询订单列表
@@ -94,7 +119,10 @@ func (h *OrderHandler) QueryOrders(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
@@ -103,7 +131,10 @@ func (h *OrderHandler) QueryOrders(c *gin.Context) {
 	if customerIDStr := c.Query("customer_id"); customerIDStr != "" {
 		customerID, err := uuid.Parse(customerIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse("无效的客户ID"))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的客户ID", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.CustomerID = &customerID
@@ -140,16 +171,26 @@ func (h *OrderHandler) QueryOrders(c *gin.Context) {
 
 	orders, total, err := h.orderService.QueryOrders(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询订单列表失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(PageResponse{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(PageResponse{
 		List:     orders,
 		Total:    total,
 		Page:     query.Page,
 		PageSize: query.PageSize,
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CancelOrder 取消订单
@@ -158,7 +199,10 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 	var req CancelOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -172,11 +216,21 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 	err := h.orderService.CancelOrder(c.Request.Context(), orderNo, req.Reason, operatorID, req.OperatorType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "取消订单失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // PayOrder 支付订单
@@ -185,17 +239,30 @@ func (h *OrderHandler) PayOrder(c *gin.Context) {
 
 	var req PayOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err := h.orderService.PayOrder(c.Request.Context(), orderNo, req.PaymentNo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "支付订单失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // RefundOrder 退款订单
@@ -204,17 +271,30 @@ func (h *OrderHandler) RefundOrder(c *gin.Context) {
 
 	var req RefundOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err := h.orderService.RefundOrder(c.Request.Context(), orderNo, req.Amount, req.Reason)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "退款订单失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // ShipOrder 发货
@@ -223,17 +303,30 @@ func (h *OrderHandler) ShipOrder(c *gin.Context) {
 
 	var req ShipOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	err := h.orderService.ShipOrder(c.Request.Context(), orderNo, req.ShippingInfo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "发货失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // CompleteOrder 完成订单
@@ -242,11 +335,21 @@ func (h *OrderHandler) CompleteOrder(c *gin.Context) {
 
 	err := h.orderService.CompleteOrder(c.Request.Context(), orderNo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "完成订单失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // UpdateOrderStatus 更新订单状态（支付网关回调使用）
@@ -255,7 +358,10 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 
 	var req UpdateOrderStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -265,7 +371,10 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 		// 如果找不到，再尝试按订单号查询
 		order, err = h.orderService.GetOrder(c.Request.Context(), orderNoOrPaymentNo)
 		if err != nil {
-			c.JSON(http.StatusNotFound, ErrorResponse(err.Error()))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeResourceNotFound, "订单不存在", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusNotFound, resp)
 			return
 		}
 	}
@@ -274,24 +383,40 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 	operatorID := uuid.Nil
 	err = h.orderService.UpdateOrderStatus(c.Request.Context(), order.OrderNo, req.Status, operatorID, "system")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "更新订单状态失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetOrderStatistics 获取订单统计
 func (h *OrderHandler) GetOrderStatistics(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("缺少商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "缺少商户ID", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -300,13 +425,19 @@ func (h *OrderHandler) GetOrderStatistics(c *gin.Context) {
 
 	startTime, err := time.Parse(time.RFC3339, startTimeStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的开始时间"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的开始时间", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	endTime, err := time.Parse(time.RFC3339, endTimeStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的结束时间"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的结束时间", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -314,24 +445,40 @@ func (h *OrderHandler) GetOrderStatistics(c *gin.Context) {
 
 	statistics, err := h.orderService.GetOrderStatistics(c.Request.Context(), merchantID, startTime, endTime, currency)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取订单统计失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(statistics))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(statistics).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetDailySummary 获取每日汇总
 func (h *OrderHandler) GetDailySummary(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("缺少商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "缺少商户ID", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	merchantID, err := uuid.Parse(merchantIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
@@ -343,11 +490,21 @@ func (h *OrderHandler) GetDailySummary(c *gin.Context) {
 
 	summary, err := h.orderService.GetDailySummary(c.Request.Context(), merchantID, date)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取每日汇总失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(summary))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(summary).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Request structures
