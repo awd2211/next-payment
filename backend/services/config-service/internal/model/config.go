@@ -31,16 +31,17 @@ func (Config) TableName() string {
 
 // ConfigHistory 配置历史
 type ConfigHistory struct {
-	ID          uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	ConfigID    uuid.UUID `gorm:"type:uuid;not null;index:idx_config_history_config" json:"config_id"`
-	ServiceName string    `gorm:"type:varchar(100);not null" json:"service_name"`
-	ConfigKey   string    `gorm:"type:varchar(255);not null" json:"config_key"`
-	OldValue    string    `gorm:"type:text" json:"old_value"`
-	NewValue    string    `gorm:"type:text" json:"new_value"`
-	Version     int       `gorm:"default:1" json:"version"`
-	ChangedBy   string    `gorm:"type:varchar(100)" json:"changed_by"`
-	ChangeType  string    `gorm:"type:varchar(50)" json:"change_type"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ConfigID     uuid.UUID `gorm:"type:uuid;not null;index:idx_config_history_config" json:"config_id"`
+	ServiceName  string    `gorm:"type:varchar(100);not null" json:"service_name"`
+	ConfigKey    string    `gorm:"type:varchar(255);not null" json:"config_key"`
+	OldValue     string    `gorm:"type:text" json:"old_value"`
+	NewValue     string    `gorm:"type:text" json:"new_value"`
+	Version      int       `gorm:"default:1" json:"version"`
+	ChangedBy    string    `gorm:"type:varchar(100)" json:"changed_by"`
+	ChangeType   string    `gorm:"type:varchar(50)" json:"change_type"` // create, update, delete, rollback
+	ChangeReason string    `gorm:"type:text" json:"change_reason"`      // 变更原因
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 func (ConfigHistory) TableName() string {
