@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/risk-service/internal/repository"
 	"payment-platform/risk-service/internal/service"
 )
@@ -70,34 +72,56 @@ func (h *RiskHandler) RegisterRoutes(router *gin.Engine) {
 func (h *RiskHandler) CreateRule(c *gin.Context) {
 	var input service.CreateRuleInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	rule, err := h.riskService.CreateRule(c.Request.Context(), &input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建规则失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(rule))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(rule).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) GetRule(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的规则ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的规则ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	rule, err := h.riskService.GetRule(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeResourceNotFound, "规则不存在", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusNotFound, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(rule))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(rule).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) ListRules(c *gin.Context) {
@@ -111,87 +135,142 @@ func (h *RiskHandler) ListRules(c *gin.Context) {
 
 	rules, total, err := h.riskService.ListRules(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询规则列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(PageResponse{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(PageResponse{
 		List:     rules,
 		Total:    total,
 		Page:     query.Page,
 		PageSize: query.PageSize,
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) UpdateRule(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的规则ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的规则ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	var input service.UpdateRuleInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	rule, err := h.riskService.UpdateRule(c.Request.Context(), id, &input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "更新规则失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(rule))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(rule).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) DeleteRule(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的规则ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的规则ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.riskService.DeleteRule(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "删除规则失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) EnableRule(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的规则ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的规则ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.riskService.EnableRule(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "启用规则失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) DisableRule(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的规则ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的规则ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.riskService.DisableRule(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "禁用规则失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Risk Checks
@@ -199,13 +278,22 @@ func (h *RiskHandler) DisableRule(c *gin.Context) {
 func (h *RiskHandler) CheckPayment(c *gin.Context) {
 	var input service.PaymentCheckInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	check, err := h.riskService.CheckPayment(c.Request.Context(), &input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "风控检查失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
@@ -219,7 +307,9 @@ func (h *RiskHandler) CheckPayment(c *gin.Context) {
 		"extra":       check.CheckResult,
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(result))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(result).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) ReportPaymentResult(c *gin.Context) {
@@ -229,33 +319,48 @@ func (h *RiskHandler) ReportPaymentResult(c *gin.Context) {
 		Fraudulent bool   `json:"fraudulent"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	// TODO: 实现支付结果上报逻辑，用于风控模型训练
 	// 可以记录支付结果，用于后续的机器学习模型训练
 
-	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
 		"message": "上报成功",
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) GetCheck(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的检查ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的检查ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	check, err := h.riskService.GetCheck(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeResourceNotFound, "检查记录不存在", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusNotFound, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(check))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(check).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) ListChecks(c *gin.Context) {
@@ -268,7 +373,9 @@ func (h *RiskHandler) ListChecks(c *gin.Context) {
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse("无效的商户ID"))
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
@@ -292,16 +399,25 @@ func (h *RiskHandler) ListChecks(c *gin.Context) {
 
 	checks, total, err := h.riskService.ListChecks(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询检查记录失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(PageResponse{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(PageResponse{
 		List:     checks,
 		Total:    total,
 		Page:     query.Page,
 		PageSize: query.PageSize,
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Blacklist Management
@@ -309,33 +425,55 @@ func (h *RiskHandler) ListChecks(c *gin.Context) {
 func (h *RiskHandler) AddBlacklist(c *gin.Context) {
 	var input service.AddBlacklistInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	blacklist, err := h.riskService.AddBlacklist(c.Request.Context(), &input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "添加黑名单失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(blacklist))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(blacklist).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) RemoveBlacklist(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse("无效的黑名单ID"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的黑名单ID", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	if err := h.riskService.RemoveBlacklist(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "移除黑名单失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(nil))
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) CheckBlacklist(c *gin.Context) {
@@ -343,20 +481,31 @@ func (h *RiskHandler) CheckBlacklist(c *gin.Context) {
 	entityValue := c.Query("entity_value")
 
 	if entityType == "" || entityValue == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse("entity_type和entity_value不能为空"))
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "entity_type和entity_value不能为空", "").WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
 	hit, blacklist, err := h.riskService.CheckBlacklist(c.Request.Context(), entityType, entityValue)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "检查黑名单失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
 		"hit":       hit,
 		"blacklist": blacklist,
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RiskHandler) ListBlacklist(c *gin.Context) {
@@ -370,16 +519,25 @@ func (h *RiskHandler) ListBlacklist(c *gin.Context) {
 
 	blacklists, total, err := h.riskService.ListBlacklist(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询黑名单失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(PageResponse{
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(PageResponse{
 		List:     blacklists,
 		Total:    total,
 		Page:     query.Page,
 		PageSize: query.PageSize,
-	}))
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }
 
 // Response structures

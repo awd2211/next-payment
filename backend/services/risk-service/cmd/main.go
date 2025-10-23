@@ -14,10 +14,14 @@ import (
 	"github.com/payment-platform/pkg/middleware"
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"payment-platform/risk-service/internal/client"
 	"payment-platform/risk-service/internal/handler"
 	"payment-platform/risk-service/internal/model"
 	"payment-platform/risk-service/internal/repository"
 	"payment-platform/risk-service/internal/service"
+	grpcServer "payment-platform/risk-service/internal/grpc"
+	pb "github.com/payment-platform/proto/risk"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -115,8 +119,13 @@ func main() {
 	// 初始化Repository
 	riskRepo := repository.NewRiskRepository(database)
 
+	// 初始化 GeoIP 客户端
+	geoipCacheTTL := time.Duration(config.GetEnvInt("GEOIP_CACHE_TTL", 86400)) * time.Second // 默认24小时
+	geoipClient := client.NewIPAPIClient(redisClient, geoipCacheTTL)
+	logger.Info("GeoIP 客户端初始化完成 (ipapi.co)")
+
 	// 初始化Service
-	riskService := service.NewRiskService(riskRepo, redisClient)
+	riskService := service.NewRiskService(riskRepo, redisClient, geoipClient)
 
 	// 初始化Handler
 	riskHandler := handler.NewRiskHandler(riskService)
@@ -156,7 +165,20 @@ func main() {
 	// 注册风控路由
 	riskHandler.RegisterRoutes(r)
 
-	// 启动服务器
+	// 启动 gRPC 服务器（独立 goroutine）
+	grpcPort := config.GetEnvInt("GRPC_PORT", 50006)
+	gRPCServer := pkggrpc.NewSimpleServer()
+	riskGrpcServer := grpcServer.NewRiskServer(riskService)
+	pb.RegisterRiskServiceServer(gRPCServer, riskGrpcServer)
+
+	go func() {
+		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
+		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
+			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
+		}
+	}()
+
+	// 启动 HTTP 服务器
 	port := config.GetEnvInt("PORT", 40006)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Risk Service 正在监听 %s", addr))

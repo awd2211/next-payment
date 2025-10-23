@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"payment-platform/risk-service/internal/client"
 	"payment-platform/risk-service/internal/model"
 	"payment-platform/risk-service/internal/repository"
 )
@@ -37,13 +38,15 @@ type RiskService interface {
 type riskService struct {
 	riskRepo    repository.RiskRepository
 	redisClient *redis.Client
+	geoipClient *client.IPAPIClient
 }
 
 // NewRiskService 创建风控服务实例
-func NewRiskService(riskRepo repository.RiskRepository, redisClient *redis.Client) RiskService {
+func NewRiskService(riskRepo repository.RiskRepository, redisClient *redis.Client, geoipClient *client.IPAPIClient) RiskService {
 	return &riskService{
 		riskRepo:    riskRepo,
 		redisClient: redisClient,
+		geoipClient: geoipClient,
 	}
 }
 
@@ -268,7 +271,7 @@ func (s *riskService) CheckPayment(ctx context.Context, input *PaymentCheckInput
 	}
 
 	// 5. IP地理位置检查 (+10分)
-	geoRisk := s.checkIPGeolocation(input.PayerIP)
+	geoRisk := s.checkIPGeolocation(ctx, input.PayerIP)
 	if geoRisk != "" {
 		riskScore += 10
 		if check.Reason != "" {
@@ -745,7 +748,7 @@ func (s *riskService) emailMatchesDomain(email, domain string) bool {
 }
 
 // checkIPGeolocation 检查IP地理位置风险
-func (s *riskService) checkIPGeolocation(ip string) string {
+func (s *riskService) checkIPGeolocation(ctx context.Context, ip string) string {
 	if ip == "" {
 		return ""
 	}
@@ -769,19 +772,25 @@ func (s *riskService) checkIPGeolocation(ip string) string {
 		}
 	}
 
-	// TODO: 集成真实的GeoIP库
-	// 示例代码：
-	// geoInfo, err := s.geoipDB.Lookup(ip)
-	// if err == nil {
-	//     // 检查高风险国家
-	//     if isHighRiskCountry(geoInfo.Country.ISOCode) {
-	//         return fmt.Sprintf("高风险国家: %s", geoInfo.Country.Name)
-	//     }
-	//     // 检查是否使用代理/VPN
-	//     if geoInfo.Traits.IsAnonymousProxy {
-	//         return "检测到匿名代理/VPN"
-	//     }
-	// }
+	// 使用 ipapi.co 进行 GeoIP 查询
+	if s.geoipClient != nil {
+		geoInfo, err := s.geoipClient.LookupIP(ctx, ip)
+		if err == nil && geoInfo != nil {
+			// 检查高风险国家
+			if client.IsHighRiskCountry(geoInfo.CountryCode) {
+				return fmt.Sprintf("高风险国家: %s (%s)", geoInfo.Country, geoInfo.CountryCode)
+			}
+
+			// 检查IP是否属于已知的高风险段
+			if client.IsHighRiskIP(ip) {
+				return fmt.Sprintf("高风险IP段: %s (来源: %s, %s)", ip, geoInfo.City, geoInfo.Country)
+			}
+
+			// 注：ipapi.co 免费版不提供代理/VPN检测
+			// 如需此功能，可升级到付费版或集成其他服务
+		}
+		// GeoIP 查询失败不影响整体风控流程，继续后续检查
+	}
 
 	return ""
 }
