@@ -36,6 +36,10 @@ declare -A SERVICES=(
     ["accounting-service"]=40007
     ["notification-service"]=40008
     ["analytics-service"]=40009
+    ["merchant-auth-service"]=40011
+    ["settlement-service"]=40013
+    ["withdrawal-service"]=40014
+    ["kyc-service"]=40015
 )
 
 # 日志目录

@@ -109,7 +109,7 @@ const Layout = () => {
     {
       key: 'change-password',
       icon: <KeyOutlined />,
-      label: '修改密码',
+      label: t('layout.changePassword'),
     },
     {
       type: 'divider',
@@ -152,7 +152,7 @@ const Layout = () => {
             fontWeight: 'bold',
           }}
         >
-          {collapsed ? '支付' : '支付平台管理'}
+          {collapsed ? t('layout.logoShort') : t('layout.logo')}
         </div>
         <Menu
           theme="dark"

@@ -30,7 +30,7 @@ import (
 //	@contact.email				support@payment-platform.com
 //	@license.name				Apache 2.0
 //	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
-//	@host						localhost:8012
+//	@host						localhost:40013
 //	@BasePath					/api/v1
 //	@securityDefinitions.apikey	BearerAuth
 //	@in							header
@@ -157,7 +157,7 @@ func main() {
 	settlementHandler.RegisterRoutes(r)
 
 	// 启动服务器
-	port := config.GetEnvInt("PORT", 8012)
+	port := config.GetEnvInt("PORT", 40013)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Settlement Service 正在监听 %s", addr))
 

@@ -39,9 +39,12 @@
     "settlements": "结算管理"
   },
   "layout": {
+    "logo": "支付平台管理",
+    "logoShort": "支付",
     "profile": "个人信息",
     "settings": "设置",
     "logout": "退出登录",
+    "changePassword": "修改密码",
     "language": "语言",
     "theme": "主题",
     "lightMode": "浅色模式",

@@ -39,9 +39,12 @@
     "settlements": "Settlements"
   },
   "layout": {
+    "logo": "Payment Platform Admin",
+    "logoShort": "Admin",
     "profile": "Profile",
     "settings": "Settings",
     "logout": "Logout",
+    "changePassword": "Change Password",
     "language": "Language",
     "theme": "Theme",
     "lightMode": "Light Mode",

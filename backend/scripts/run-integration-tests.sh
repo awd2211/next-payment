@@ -164,9 +164,44 @@ run_suite() {
             echo -e "${CYAN}Running KYC Flow Tests${NC}"
             run_tests "TestKYC" false
             ;;
+        merchant)
+            echo -e "${CYAN}Running Merchant Management Tests${NC}"
+            run_tests "TestMerchant" false
+            ;;
+        admin)
+            echo -e "${CYAN}Running Admin Service Tests${NC}"
+            run_tests "TestAdmin" false
+            ;;
+        order)
+            echo -e "${CYAN}Running Order Service Tests${NC}"
+            run_tests "TestOrder" false
+            ;;
+        risk)
+            echo -e "${CYAN}Running Risk Assessment Tests${NC}"
+            run_tests "TestRisk|TestBlacklist" false
+            ;;
+        notification)
+            echo -e "${CYAN}Running Notification Tests${NC}"
+            run_tests "TestNotification" false
+            ;;
+        config)
+            echo -e "${CYAN}Running Configuration Tests${NC}"
+            run_tests "TestConfig" false
+            ;;
+        accounting)
+            echo -e "${CYAN}Running Accounting Tests${NC}"
+            run_tests "TestAccounting" false
+            ;;
+        analytics)
+            echo -e "${CYAN}Running Analytics Tests${NC}"
+            run_tests "TestAnalytics" false
+            ;;
         *)
             echo -e "${RED}Unknown test suite: $suite${NC}"
-            echo "Available suites: payment, withdrawal, settlement, kyc"
+            echo "Available suites:"
+            echo "  payment, withdrawal, settlement, kyc"
+            echo "  merchant, admin, order, risk"
+            echo "  notification, config, accounting, analytics"
             exit 1
             ;;
     esac
@@ -178,16 +213,36 @@ usage() {
     echo ""
     echo "Options:"
     echo "  -a, --all           Run all integration tests (default)"
-    echo "  -s, --suite NAME    Run specific test suite (payment|withdrawal|settlement|kyc)"
+    echo "  -s, --suite NAME    Run specific test suite"
     echo "  -t, --test PATTERN  Run tests matching pattern"
     echo "  -v, --verbose       Verbose output"
     echo "  -r, --report        Generate test report"
     echo "  -c, --check         Only check if services are running"
     echo "  -h, --help          Show this help message"
     echo ""
+    echo "Available Test Suites:"
+    echo "  Core Flows:"
+    echo "    payment       - Payment flow tests (4 tests)"
+    echo "    withdrawal    - Withdrawal flow tests (4 tests)"
+    echo "    settlement    - Settlement flow tests (2 tests)"
+    echo "    kyc           - KYC verification tests (4 tests)"
+    echo ""
+    echo "  Service Management:"
+    echo "    merchant      - Merchant management tests (8 tests)"
+    echo "    admin         - Admin service tests (2 tests)"
+    echo "    order         - Order service tests (5 tests)"
+    echo "    risk          - Risk assessment tests (5 tests)"
+    echo ""
+    echo "  System Services:"
+    echo "    notification  - Notification tests (5 tests)"
+    echo "    config        - Configuration tests (3 tests)"
+    echo "    accounting    - Accounting tests (2 tests)"
+    echo "    analytics     - Analytics tests (1 test)"
+    echo ""
     echo "Examples:"
-    echo "  $0                        # Run all tests"
+    echo "  $0                        # Run all 42 tests"
     echo "  $0 -s payment             # Run payment tests only"
+    echo "  $0 -s merchant            # Run merchant tests"
     echo "  $0 -t TestPaymentFlow     # Run specific test"
     echo "  $0 -v -r                  # Verbose output with report"
     exit 0

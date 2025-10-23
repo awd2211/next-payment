@@ -231,11 +231,11 @@ The `backend/pkg/` directory contains 20 reusable packages:
 **New Services** (Phase 3 - In Development):
 | Service | Port | Database | Status |
 |---------|------|----------|--------|
-| merchant-auth-service | 40011 | payment_merchant | ✅ Auth |
-| merchant-config-service | 40012 | payment_merchant | ✅ Config |
-| kyc-service | 40013 | payment_kyc | ⏳ Basic |
-| settlement-service | 40014 | payment_settlement | ⏳ Basic |
-| withdrawal-service | 40015 | payment_withdrawal | ⏳ Basic |
+| merchant-auth-service | 40011 | payment_merchant_auth | ✅ Full |
+| merchant-config-service | 40012 | payment_merchant_config | ⏳ Planning |
+| settlement-service | 40013 | payment_settlement | ✅ Full |
+| withdrawal-service | 40014 | payment_withdrawal | ✅ Full |
+| kyc-service | 40015 | payment_kyc | ✅ Full |
 
 **Frontend Applications**:
 | Application | Port | Tech Stack | Status |

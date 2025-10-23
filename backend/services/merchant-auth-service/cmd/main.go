@@ -32,7 +32,7 @@ import (
 //	@contact.email				support@payment-platform.com
 //	@license.name				Apache 2.0
 //	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
-//	@host						localhost:8011
+//	@host						localhost:40011
 //	@BasePath					/api/v1
 //	@securityDefinitions.apikey	BearerAuth
 //	@in							header
@@ -190,7 +190,7 @@ func main() {
 	}()
 
 	// 启动服务器
-	port := config.GetEnvInt("PORT", 8011)
+	port := config.GetEnvInt("PORT", 40011)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Merchant Auth Service 正在监听 %s", addr))
 
