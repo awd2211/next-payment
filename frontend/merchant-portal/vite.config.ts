@@ -5,15 +5,31 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: true,
+    coverage: {
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.d.ts',
+        '**/*.config.*',
+        '**/mockData',
+      ],
+    },
+  },
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: '支付平台商户中心',
-        short_name: '商户中心',
-        description: '全球支付平台商户管理系统',
+        name: '支付平台管理后台',
+        short_name: '管理后台',
+        description: '全球支付平台管理后台系统',
         theme_color: '#1890ff',
         background_color: '#ffffff',
         display: 'standalone',
@@ -118,12 +134,46 @@ export default defineConfig({
         },
       },
     },
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 1000, // 提高警告阈值
   },
   server: {
-    port: 5174, // 使用标准端口
+    port: 5173, // 使用标准端口
     proxy: {
-      // Merchant Service (商户相关)
+      // Admin Service (管理员、角色、权限、审计、系统配置)
+      '/api/v1/admins': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+      '/api/v1/roles': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+      '/api/v1/permissions': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+      '/api/v1/audit-logs': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+      '/api/v1/system-configs': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+      '/api/v1/email-templates': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+      '/api/v1/preferences': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+      '/api/v1/security': {
+        target: 'http://localhost:40001',
+        changeOrigin: true,
+      },
+
+      // Merchant Service (商户管理)
       '/api/v1/merchants': {
         target: 'http://localhost:40002',
         changeOrigin: true,
@@ -153,20 +203,6 @@ export default defineConfig({
         changeOrigin: true,
       },
 
-      // Accounting Service (账务)
-      '/api/v1/accounts': {
-        target: 'http://localhost:40007',
-        changeOrigin: true,
-      },
-      '/api/v1/transactions': {
-        target: 'http://localhost:40007',
-        changeOrigin: true,
-      },
-      '/api/v1/settlements': {
-        target: 'http://localhost:40007',
-        changeOrigin: true,
-      },
-
       // Analytics Service (数据分析)
       '/api/v1/analytics': {
         target: 'http://localhost:40009',
@@ -174,6 +210,16 @@ export default defineConfig({
       },
       '/api/v1/metrics': {
         target: 'http://localhost:40009',
+        changeOrigin: true,
+      },
+
+      // Config Service (配置中心)
+      '/api/v1/configs': {
+        target: 'http://localhost:40010',
+        changeOrigin: true,
+      },
+      '/api/v1/feature-flags': {
+        target: 'http://localhost:40010',
         changeOrigin: true,
       },
     },

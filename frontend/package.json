@@ -1,8 +1,36 @@
 {
-	"dependencies": {
-		"@ant-design/charts": "^2.6.6"
-	},
-	"devDependencies": {
-		"prettier": "^3.6.2"
-	}
+  "name": "payment-platform-frontend",
+  "version": "1.0.0",
+  "description": "Payment Platform Frontend Monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter admin-portal dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "test": "pnpm -r test",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,scss,md}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@ant-design/charts": "^2.6.6"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "husky": "^9.1.7",
+    "jsdom": "^27.0.1",
+    "lint-staged": "^16.2.6",
+    "prettier": "^3.6.2",
+    "vitest": "^4.0.2"
+  }
 }

@@ -2,5 +2,5 @@ packages:
   - 'admin-portal'
   - 'merchant-portal'
   - 'website'
-  - 'shared/*'
+  - 'shared'
 

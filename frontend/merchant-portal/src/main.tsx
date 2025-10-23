@@ -11,6 +11,7 @@ import './index.css'
 import './i18n/config'
 import { getThemeConfig } from './theme/config'
 import type { ThemeMode } from './hooks/useTheme'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // 动态设置 dayjs 语言
 const getAntdLocale = (lang: string) => {
@@ -76,6 +77,8 @@ const AppWithI18n = () => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AppWithI18n />
+    <ErrorBoundary>
+      <AppWithI18n />
+    </ErrorBoundary>
   </React.StrictMode>,
 )
