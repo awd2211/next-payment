@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/payment-platform/pkg/httpclient"
 )
 
 // HTTPClient HTTP客户端封装
@@ -150,12 +152,97 @@ func (r *Response) ParseResponse(v interface{}) error {
 
 // ServiceClient 微服务客户端基类
 type ServiceClient struct {
-	http *HTTPClient
+	http    *HTTPClient
+	breaker *httpclient.BreakerClient
+	baseURL string // 保存baseURL用于构建完整URL
 }
 
-// NewServiceClient 创建微服务客户端
+// NewServiceClient 创建微服务客户端（不带熔断器，用于向后兼容）
 func NewServiceClient(baseURL string) *ServiceClient {
 	return &ServiceClient{
-		http: NewHTTPClient(baseURL, 30*time.Second),
+		http:    NewHTTPClient(baseURL, 30*time.Second),
+		baseURL: baseURL,
 	}
+}
+
+// NewServiceClientWithBreaker 创建带熔断器的微服务客户端
+func NewServiceClientWithBreaker(baseURL string, breakerName string) *ServiceClient {
+	// 创建 pkg/httpclient 配置
+	config := &httpclient.Config{
+		Timeout:    30 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: time.Second,
+	}
+
+	// 创建熔断器配置
+	breakerConfig := httpclient.DefaultBreakerConfig(breakerName)
+
+	// 创建带熔断器的客户端
+	breakerClient := httpclient.NewBreakerClient(config, breakerConfig)
+
+	return &ServiceClient{
+		http:    NewHTTPClient(baseURL, 30*time.Second), // 保留旧客户端用于向后兼容
+		breaker: breakerClient,
+		baseURL: baseURL,
+	}
+}
+
+// Get 执行GET请求（自动使用熔断器）
+func (sc *ServiceClient) Get(ctx context.Context, path string, headers map[string]string) (*Response, error) {
+	if sc.breaker != nil {
+		return sc.doWithBreaker(ctx, http.MethodGet, path, nil, headers)
+	}
+	return sc.http.Get(ctx, path, headers)
+}
+
+// Post 执行POST请求（自动使用熔断器）
+func (sc *ServiceClient) Post(ctx context.Context, path string, body interface{}, headers map[string]string) (*Response, error) {
+	if sc.breaker != nil {
+		return sc.doWithBreaker(ctx, http.MethodPost, path, body, headers)
+	}
+	return sc.http.Post(ctx, path, body, headers)
+}
+
+// Put 执行PUT请求（自动使用熔断器）
+func (sc *ServiceClient) Put(ctx context.Context, path string, body interface{}, headers map[string]string) (*Response, error) {
+	if sc.breaker != nil {
+		return sc.doWithBreaker(ctx, http.MethodPut, path, body, headers)
+	}
+	return sc.http.Put(ctx, path, body, headers)
+}
+
+// Delete 执行DELETE请求（自动使用熔断器）
+func (sc *ServiceClient) Delete(ctx context.Context, path string, headers map[string]string) (*Response, error) {
+	if sc.breaker != nil {
+		return sc.doWithBreaker(ctx, http.MethodDelete, path, nil, headers)
+	}
+	return sc.http.Delete(ctx, path, headers)
+}
+
+// doWithBreaker 通过熔断器执行请求
+func (sc *ServiceClient) doWithBreaker(ctx context.Context, method, path string, body interface{}, headers map[string]string) (*Response, error) {
+	// 构建完整URL
+	fullURL := sc.baseURL + path
+
+	// 创建 pkg/httpclient 请求
+	req := &httpclient.Request{
+		Method:  method,
+		URL:     fullURL,
+		Body:    body,
+		Headers: headers,
+		Ctx:     ctx,
+	}
+
+	// 通过熔断器执行请求
+	resp, err := sc.breaker.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换响应格式
+	return &Response{
+		StatusCode: resp.StatusCode,
+		Body:       resp.Body,
+		Headers:    resp.Headers,
+	}, nil
 }

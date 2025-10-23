@@ -12,10 +12,10 @@ type OrderClient struct {
 	*ServiceClient
 }
 
-// NewOrderClient 创建Order服务客户端
+// NewOrderClient 创建Order服务客户端（带熔断器）
 func NewOrderClient(baseURL string) *OrderClient {
 	return &OrderClient{
-		ServiceClient: NewServiceClient(baseURL),
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "order-service"),
 	}
 }
 

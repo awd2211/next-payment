@@ -12,10 +12,10 @@ type ChannelClient struct {
 	*ServiceClient
 }
 
-// NewChannelClient 创建Channel服务客户端
+// NewChannelClient 创建Channel服务客户端（带熔断器）
 func NewChannelClient(baseURL string) *ChannelClient {
 	return &ChannelClient{
-		ServiceClient: NewServiceClient(baseURL),
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "channel-adapter"),
 	}
 }
 

@@ -12,10 +12,10 @@ type RiskClient struct {
 	*ServiceClient
 }
 
-// NewRiskClient 创建Risk服务客户端
+// NewRiskClient 创建Risk服务客户端（带熔断器）
 func NewRiskClient(baseURL string) *RiskClient {
 	return &RiskClient{
-		ServiceClient: NewServiceClient(baseURL),
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "risk-service"),
 	}
 }
 
