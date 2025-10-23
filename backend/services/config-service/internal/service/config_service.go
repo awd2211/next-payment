@@ -19,10 +19,12 @@ type ConfigService interface {
 	// 配置管理
 	CreateConfig(ctx context.Context, input *CreateConfigInput) (*model.Config, error)
 	GetConfig(ctx context.Context, serviceName, configKey, environment string) (*model.Config, error)
+	GetConfigByID(ctx context.Context, id uuid.UUID) (*model.Config, error)
 	ListConfigs(ctx context.Context, query *repository.ConfigQuery) ([]*model.Config, int64, error)
 	UpdateConfig(ctx context.Context, id uuid.UUID, input *UpdateConfigInput) (*model.Config, error)
 	DeleteConfig(ctx context.Context, id uuid.UUID, deletedBy string) error
 	GetConfigHistory(ctx context.Context, configID uuid.UUID, limit int) ([]*model.ConfigHistory, error)
+	RollbackConfig(ctx context.Context, configID uuid.UUID, targetVersion int, rolledBy, reason string) (*model.Config, error)
 
 	// 功能开关
 	CreateFeatureFlag(ctx context.Context, input *CreateFeatureFlagInput) (*model.FeatureFlag, error)
@@ -67,9 +69,10 @@ type CreateConfigInput struct {
 }
 
 type UpdateConfigInput struct {
-	ConfigValue string `json:"config_value"`
-	Description string `json:"description"`
-	UpdatedBy   string `json:"updated_by"`
+	ConfigValue  string `json:"config_value"`
+	Description  string `json:"description"`
+	UpdatedBy    string `json:"updated_by"`
+	ChangeReason string `json:"change_reason"` // 变更原因
 }
 
 type CreateFeatureFlagInput struct {
@@ -162,6 +165,27 @@ func (s *configService) GetConfig(ctx context.Context, serviceName, configKey, e
 	return config, nil
 }
 
+func (s *configService) GetConfigByID(ctx context.Context, id uuid.UUID) (*model.Config, error) {
+	config, err := s.configRepo.GetConfigByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("获取配置失败: %w", err)
+	}
+	if config == nil {
+		return nil, fmt.Errorf("配置不存在")
+	}
+
+	// 如果配置是加密的，解密后返回
+	if config.IsEncrypted {
+		decrypted, err := s.decrypt(config.ConfigValue)
+		if err != nil {
+			return nil, fmt.Errorf("解密配置值失败: %w", err)
+		}
+		config.ConfigValue = decrypted
+	}
+
+	return config, nil
+}
+
 func (s *configService) ListConfigs(ctx context.Context, query *repository.ConfigQuery) ([]*model.Config, int64, error) {
 	if query.Page < 1 {
 		query.Page = 1
@@ -183,14 +207,15 @@ func (s *configService) UpdateConfig(ctx context.Context, id uuid.UUID, input *U
 
 	// 记录历史
 	history := &model.ConfigHistory{
-		ConfigID:    config.ID,
-		ServiceName: config.ServiceName,
-		ConfigKey:   config.ConfigKey,
-		OldValue:    config.ConfigValue,
-		NewValue:    input.ConfigValue,
-		Version:     config.Version,
-		ChangedBy:   input.UpdatedBy,
-		ChangeType:  "update",
+		ConfigID:     config.ID,
+		ServiceName:  config.ServiceName,
+		ConfigKey:    config.ConfigKey,
+		OldValue:     config.ConfigValue,
+		NewValue:     input.ConfigValue,
+		Version:      config.Version,
+		ChangedBy:    input.UpdatedBy,
+		ChangeType:   "update",
+		ChangeReason: input.ChangeReason,
 	}
 	if err := s.configRepo.CreateConfigHistory(ctx, history); err != nil {
 		return nil, fmt.Errorf("记录配置历史失败: %w", err)
@@ -251,6 +276,70 @@ func (s *configService) GetConfigHistory(ctx context.Context, configID uuid.UUID
 	return s.configRepo.ListConfigHistory(ctx, configID, limit)
 }
 
+func (s *configService) RollbackConfig(ctx context.Context, configID uuid.UUID, targetVersion int, rolledBy, reason string) (*model.Config, error) {
+	// 1. 获取当前配置
+	config, err := s.configRepo.GetConfigByID(ctx, configID)
+	if err != nil {
+		return nil, fmt.Errorf("获取配置失败: %w", err)
+	}
+	if config == nil {
+		return nil, fmt.Errorf("配置不存在")
+	}
+
+	// 2. 查询历史记录，找到目标版本
+	histories, err := s.configRepo.ListConfigHistory(ctx, configID, 100)
+	if err != nil {
+		return nil, fmt.Errorf("查询配置历史失败: %w", err)
+	}
+
+	var targetHistory *model.ConfigHistory
+	for _, h := range histories {
+		if h.Version == targetVersion {
+			targetHistory = h
+			break
+		}
+	}
+
+	if targetHistory == nil {
+		return nil, fmt.Errorf("未找到版本 %d 的历史记录", targetVersion)
+	}
+
+	// 3. 记录回滚操作的历史
+	rollbackHistory := &model.ConfigHistory{
+		ConfigID:     config.ID,
+		ServiceName:  config.ServiceName,
+		ConfigKey:    config.ConfigKey,
+		OldValue:     config.ConfigValue,
+		NewValue:     targetHistory.NewValue, // 回滚到目标版本的值
+		Version:      config.Version,
+		ChangedBy:    rolledBy,
+		ChangeType:   "rollback",
+		ChangeReason: fmt.Sprintf("回滚到版本 %d: %s", targetVersion, reason),
+	}
+	if err := s.configRepo.CreateConfigHistory(ctx, rollbackHistory); err != nil {
+		return nil, fmt.Errorf("记录回滚历史失败: %w", err)
+	}
+
+	// 4. 更新配置到目标版本的值
+	if config.IsEncrypted {
+		encrypted, err := s.encrypt(targetHistory.NewValue)
+		if err != nil {
+			return nil, fmt.Errorf("加密配置值失败: %w", err)
+		}
+		config.ConfigValue = encrypted
+	} else {
+		config.ConfigValue = targetHistory.NewValue
+	}
+	config.Version++
+	config.UpdatedBy = rolledBy
+
+	if err := s.configRepo.UpdateConfig(ctx, config); err != nil {
+		return nil, fmt.Errorf("回滚配置失败: %w", err)
+	}
+
+	return config, nil
+}
+
 // Feature Flags
 
 func (s *configService) CreateFeatureFlag(ctx context.Context, input *CreateFeatureFlagInput) (*model.FeatureFlag, error) {
@@ -300,8 +389,40 @@ func (s *configService) ListFeatureFlags(ctx context.Context, query *repository.
 }
 
 func (s *configService) UpdateFeatureFlag(ctx context.Context, id uuid.UUID, input *UpdateFeatureFlagInput) (*model.FeatureFlag, error) {
-	// TODO: Implement update logic
-	return nil, nil
+	// 先查询功能开关
+	flag, err := s.configRepo.GetFeatureFlagByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("获取功能开关失败: %w", err)
+	}
+	if flag == nil {
+		return nil, fmt.Errorf("功能开关不存在")
+	}
+
+	// 更新字段
+	if input.FlagName != "" {
+		flag.FlagName = input.FlagName
+	}
+	if input.Description != "" {
+		flag.Description = input.Description
+	}
+	if input.Conditions != nil {
+		flag.Conditions = input.Conditions
+	}
+	if input.Percentage > 0 {
+		flag.Percentage = input.Percentage
+	}
+	if input.Enabled != nil {
+		flag.Enabled = *input.Enabled
+	}
+	if input.UpdatedBy != "" {
+		flag.UpdatedBy = input.UpdatedBy
+	}
+
+	if err := s.configRepo.UpdateFeatureFlag(ctx, flag); err != nil {
+		return nil, fmt.Errorf("更新功能开关失败: %w", err)
+	}
+
+	return flag, nil
 }
 
 func (s *configService) DeleteFeatureFlag(ctx context.Context, id uuid.UUID) error {
@@ -321,7 +442,95 @@ func (s *configService) IsFeatureEnabled(ctx context.Context, flagKey string, co
 		return false, nil
 	}
 
-	// TODO: 实现条件判断和百分比控制
+	// 1. 百分比控制（灰度发布）
+	if flag.Percentage > 0 && flag.Percentage < 100 {
+		// 使用用户ID或其他唯一标识计算hash，确保同一用户总是得到相同结果
+		var hashKey string
+		if userID, ok := context["user_id"].(string); ok && userID != "" {
+			hashKey = userID
+		} else if merchantID, ok := context["merchant_id"].(string); ok && merchantID != "" {
+			hashKey = merchantID
+		} else {
+			// 如果没有唯一标识，随机决定
+			hashKey = flagKey
+		}
+
+		// 简单的hash算法：将字符串转为数字
+		hash := 0
+		for _, c := range hashKey {
+			hash = (hash*31 + int(c)) % 100
+		}
+
+		// 如果hash值大于百分比，不启用
+		if hash >= flag.Percentage {
+			return false, nil
+		}
+	}
+
+	// 2. 条件判断（白名单、黑名单等）
+	if flag.Conditions != nil && len(flag.Conditions) > 0 {
+		// 白名单检查
+		if whitelist, ok := flag.Conditions["whitelist"].([]interface{}); ok {
+			isInWhitelist := false
+			userID, hasUserID := context["user_id"].(string)
+			merchantID, hasMerchantID := context["merchant_id"].(string)
+
+			for _, item := range whitelist {
+				itemStr, ok := item.(string)
+				if !ok {
+					continue
+				}
+				if (hasUserID && userID == itemStr) || (hasMerchantID && merchantID == itemStr) {
+					isInWhitelist = true
+					break
+				}
+			}
+
+			// 如果有白名单但不在白名单中，不启用
+			if !isInWhitelist {
+				return false, nil
+			}
+		}
+
+		// 黑名单检查
+		if blacklist, ok := flag.Conditions["blacklist"].([]interface{}); ok {
+			userID, hasUserID := context["user_id"].(string)
+			merchantID, hasMerchantID := context["merchant_id"].(string)
+
+			for _, item := range blacklist {
+				itemStr, ok := item.(string)
+				if !ok {
+					continue
+				}
+				if (hasUserID && userID == itemStr) || (hasMerchantID && merchantID == itemStr) {
+					// 在黑名单中，不启用
+					return false, nil
+				}
+			}
+		}
+
+		// 地区限制
+		if regions, ok := flag.Conditions["regions"].([]interface{}); ok && len(regions) > 0 {
+			region, hasRegion := context["region"].(string)
+			if !hasRegion {
+				return false, nil
+			}
+
+			isInRegion := false
+			for _, r := range regions {
+				regionStr, ok := r.(string)
+				if ok && regionStr == region {
+					isInRegion = true
+					break
+				}
+			}
+
+			if !isInRegion {
+				return false, nil
+			}
+		}
+	}
+
 	return true, nil
 }
 

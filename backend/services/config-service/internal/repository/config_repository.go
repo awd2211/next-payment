@@ -24,6 +24,7 @@ type ConfigRepository interface {
 
 	// 功能开关
 	CreateFeatureFlag(ctx context.Context, flag *model.FeatureFlag) error
+	GetFeatureFlagByID(ctx context.Context, id uuid.UUID) (*model.FeatureFlag, error)
 	GetFeatureFlagByKey(ctx context.Context, flagKey string) (*model.FeatureFlag, error)
 	ListFeatureFlags(ctx context.Context, query *FeatureFlagQuery) ([]*model.FeatureFlag, int64, error)
 	UpdateFeatureFlag(ctx context.Context, flag *model.FeatureFlag) error
@@ -142,6 +143,15 @@ func (r *configRepository) ListConfigHistory(ctx context.Context, configID uuid.
 
 func (r *configRepository) CreateFeatureFlag(ctx context.Context, flag *model.FeatureFlag) error {
 	return r.db.WithContext(ctx).Create(flag).Error
+}
+
+func (r *configRepository) GetFeatureFlagByID(ctx context.Context, id uuid.UUID) (*model.FeatureFlag, error) {
+	var flag model.FeatureFlag
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&flag).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &flag, err
 }
 
 func (r *configRepository) GetFeatureFlagByKey(ctx context.Context, flagKey string) (*model.FeatureFlag, error) {
