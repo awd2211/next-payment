@@ -113,5 +113,12 @@
     "changePassword": "修改密码",
     "twoFactorAuth": "双因素认证",
     "loginHistory": "登录历史"
+  },
+  "notifications": {
+    "title": "通知",
+    "unread": "{{count}} 条未读",
+    "markAllRead": "全部已读",
+    "clearAll": "清空",
+    "empty": "暂无通知"
   }
 }

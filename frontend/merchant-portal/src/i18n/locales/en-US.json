@@ -113,5 +113,12 @@
     "changePassword": "Change Password",
     "twoFactorAuth": "Two-Factor Authentication",
     "loginHistory": "Login History"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "unread": "{{count}} unread",
+    "markAllRead": "Mark all as read",
+    "clearAll": "Clear all",
+    "empty": "No notifications"
   }
 }

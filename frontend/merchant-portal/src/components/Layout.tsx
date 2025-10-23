@@ -8,7 +8,6 @@ import {
   theme,
   Space,
   Typography,
-  Badge,
 } from 'antd'
 import type { MenuProps } from 'antd'
 import {
@@ -17,12 +16,12 @@ import {
   ShoppingOutlined,
   UserOutlined,
   LogoutOutlined,
-  BellOutlined,
   WalletOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import LanguageSwitcher from './LanguageSwitcher'
 import ThemeSwitcher from './ThemeSwitcher'
+import NotificationDropdown from './NotificationDropdown'
 
 const { Header, Sider, Content } = AntLayout
 const { Text } = Typography
@@ -131,9 +130,7 @@ const Layout = () => {
           <Space size="large">
             <ThemeSwitcher />
             <LanguageSwitcher />
-            <Badge count={0}>
-              <BellOutlined style={{ fontSize: 20, cursor: 'pointer' }} />
-            </Badge>
+            <NotificationDropdown />
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }}>
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar icon={<UserOutlined />} />

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import Layout from './components/Layout'
+import WebSocketProvider from './components/WebSocketProvider'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
@@ -38,7 +39,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
-  return <>{children}</>
+  return <WebSocketProvider>{children}</WebSocketProvider>
 }
 
 export default App

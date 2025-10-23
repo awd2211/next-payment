@@ -129,5 +129,12 @@
     "statusActive": "已激活",
     "statusSuspended": "已冻结",
     "statusRejected": "已拒绝"
+  },
+  "notifications": {
+    "title": "通知",
+    "unread": "{{count}} 条未读",
+    "markAllRead": "全部已读",
+    "clearAll": "清空",
+    "empty": "暂无通知"
   }
 }

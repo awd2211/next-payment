@@ -129,5 +129,12 @@
     "statusActive": "Active",
     "statusSuspended": "Suspended",
     "statusRejected": "Rejected"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "unread": "{{count}} unread",
+    "markAllRead": "Mark all as read",
+    "clearAll": "Clear all",
+    "empty": "No notifications"
   }
 }

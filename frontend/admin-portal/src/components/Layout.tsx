@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
 import LanguageSwitcher from './LanguageSwitcher'
 import ThemeSwitcher from './ThemeSwitcher'
+import NotificationDropdown from './NotificationDropdown'
 
 const { Header, Sider, Content } = AntLayout
 const { Text } = Typography
@@ -151,6 +152,7 @@ const Layout = () => {
           <Space size="large">
             <ThemeSwitcher />
             <LanguageSwitcher />
+            <NotificationDropdown />
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }}>
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar src={admin?.avatar} icon={<UserOutlined />} />
