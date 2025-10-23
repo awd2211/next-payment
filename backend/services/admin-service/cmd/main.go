@@ -9,13 +9,35 @@ import (
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
+	"github.com/payment-platform/pkg/email"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
-	"github.com/payment-platform/services/admin-service/internal/handler"
-	"github.com/payment-platform/services/admin-service/internal/model"
-	"github.com/payment-platform/services/admin-service/internal/repository"
-	"github.com/payment-platform/services/admin-service/internal/service"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
+	"payment-platform/admin-service/internal/handler"
+	"payment-platform/admin-service/internal/model"
+	"payment-platform/admin-service/internal/repository"
+	"payment-platform/admin-service/internal/service"
+
+	_ "payment-platform/admin-service/api-docs" // Import generated swagger docs
 )
+
+//	@title						Admin Service API
+//	@version					1.0
+//	@description				支付平台管理后台服务API文档
+//	@termsOfService				http://swagger.io/terms/
+//	@contact.name				API Support
+//	@contact.url				http://www.swagger.io/support
+//	@contact.email				support@swagger.io
+//	@license.name				Apache 2.0
+//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+//	@host						localhost:40001
+//	@BasePath					/api/v1
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Bearer JWT token
 
 func main() {
 	// 初始化日志
@@ -40,7 +62,7 @@ func main() {
 
 	database, err := db.NewPostgresDB(dbConfig)
 	if err != nil {
-		logger.Fatal("数据库连接失败", logger.Log.With().Err(err).Logger())
+		logger.Fatal("数据库连接失败", zap.Error(err))
 	}
 	logger.Info("数据库连接成功")
 
@@ -56,7 +78,7 @@ func main() {
 		&model.MerchantReview{},
 		&model.ApprovalFlow{},
 	); err != nil {
-		logger.Fatal("数据库迁移失败", logger.Log.With().Err(err).Logger())
+		logger.Fatal("数据库迁移失败", zap.Error(err))
 	}
 	logger.Info("数据库迁移完成")
 
@@ -70,7 +92,7 @@ func main() {
 
 	redisClient, err := db.NewRedisClient(redisConfig)
 	if err != nil {
-		logger.Fatal("Redis连接失败", logger.Log.With().Err(err).Logger())
+		logger.Fatal("Redis连接失败", zap.Error(err))
 	}
 	logger.Info("Redis连接成功")
 
@@ -78,15 +100,50 @@ func main() {
 	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 
+	// 初始化邮件客户端
+	// 初始化邮件客户端
+	emailClient, err := email.NewClient(&email.Config{
+		Provider:     "smtp",
+		SMTPHost:     config.GetEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:     config.GetEnvInt("SMTP_PORT", 587),
+		SMTPUsername: config.GetEnv("SMTP_USERNAME", ""),
+		SMTPPassword: config.GetEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     config.GetEnv("SMTP_FROM", "noreply@payment-platform.com"),
+		SMTPFromName: config.GetEnv("SMTP_FROM_NAME", "Payment Platform"),
+	})
+	if err != nil {
+		logger.Warn("SMTP 邮件客户端初始化失败，邮件功能将不可用", zap.Error(err))
+	}
+
 	// 初始化Repository
 	adminRepo := repository.NewAdminRepository(database)
 	roleRepo := repository.NewRoleRepository(database)
+	permissionRepo := repository.NewPermissionRepository(database)
+	auditLogRepo := repository.NewAuditLogRepository(database)
+	systemConfigRepo := repository.NewSystemConfigRepository(database)
+	securityRepo := repository.NewSecurityRepository(database)
+	preferencesRepo := repository.NewPreferencesRepository(database)
+	emailTemplateRepo := repository.NewEmailTemplateRepository(database)
 
 	// 初始化Service
 	adminService := service.NewAdminService(adminRepo, roleRepo, jwtManager)
+	roleService := service.NewRoleService(roleRepo, permissionRepo, adminRepo)
+	permissionService := service.NewPermissionService(permissionRepo)
+	auditLogService := service.NewAuditLogService(auditLogRepo)
+	systemConfigService := service.NewSystemConfigService(systemConfigRepo)
+	securityService := service.NewSecurityService(securityRepo, adminRepo)
+	preferencesService := service.NewPreferencesService(preferencesRepo)
+	emailTemplateService := service.NewEmailTemplateService(emailTemplateRepo, emailClient)
 
 	// 初始化Handler
 	adminHandler := handler.NewAdminHandler(adminService)
+	roleHandler := handler.NewRoleHandler(roleService)
+	permissionHandler := handler.NewPermissionHandler(permissionService)
+	auditLogHandler := handler.NewAuditLogHandler(auditLogService)
+	systemConfigHandler := handler.NewSystemConfigHandler(systemConfigService)
+	securityHandler := handler.NewSecurityHandler(securityService)
+	preferencesHandler := handler.NewPreferencesHandler(preferencesService)
+	emailTemplateHandler := handler.NewEmailTemplateHandler(emailTemplateService)
 
 	// 初始化Gin
 	if env == "production" {
@@ -112,24 +169,32 @@ func main() {
 		})
 	})
 
+	// Swagger文档
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// API路由
 	api := r.Group("/api/v1")
 	{
 		// 认证中间件
 		authMiddleware := middleware.AuthMiddleware(jwtManager)
 
-		// 注册管理员路由
+		// 注册所有路由
 		adminHandler.RegisterRoutes(api, authMiddleware)
-
-		// TODO: 注册其他路由（角色、权限、系统配置等）
+		roleHandler.RegisterRoutes(api, authMiddleware)
+		permissionHandler.RegisterRoutes(api, authMiddleware)
+		auditLogHandler.RegisterRoutes(api, authMiddleware)
+		systemConfigHandler.RegisterRoutes(api, authMiddleware)
+		securityHandler.RegisterRoutes(api.Group("/security", authMiddleware))
+		preferencesHandler.RegisterRoutes(api.Group("/preferences", authMiddleware))
+		emailTemplateHandler.RegisterRoutes(api, authMiddleware)
 	}
 
 	// 启动服务器
-	port := config.GetEnvInt("PORT", 8001)
+	port := config.GetEnvInt("PORT", 40001)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info(fmt.Sprintf("Admin Service 正在监听 %s", addr))
 
 	if err := r.Run(addr); err != nil {
-		logger.Fatal("服务启动失败", logger.Log.With().Err(err).Logger())
+		logger.Fatal("服务启动失败", zap.Error(err))
 	}
 }

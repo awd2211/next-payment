@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/merchant-service/internal/service"
+	"payment-platform/merchant-service/internal/service"
 )
 
 // APIKeyHandler API密钥处理器
@@ -26,7 +26,7 @@ func NewAPIKeyHandler(apiKeyService service.APIKeyService) *APIKeyHandler {
 // @Accept json
 // @Produce json
 // @Param request body service.CreateAPIKeyInput true "API密钥信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/api-keys [post]
 func (h *APIKeyHandler) Create(c *gin.Context) {
 	// 从JWT中获取商户ID
@@ -59,7 +59,7 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 // @Tags APIKey
 // @Produce json
 // @Param id path string true "API密钥ID"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/api-keys/{id} [get]
 func (h *APIKeyHandler) GetByID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -87,7 +87,7 @@ func (h *APIKeyHandler) GetByID(c *gin.Context) {
 // @Tags APIKey
 // @Produce json
 // @Param environment query string false "环境筛选（test/production）"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/api-keys [get]
 func (h *APIKeyHandler) List(c *gin.Context) {
 	// 从JWT中获取商户ID
@@ -117,7 +117,7 @@ func (h *APIKeyHandler) List(c *gin.Context) {
 // @Produce json
 // @Param id path string true "API密钥ID"
 // @Param request body service.UpdateAPIKeyInput true "更新信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/api-keys/{id} [put]
 func (h *APIKeyHandler) Update(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -149,7 +149,7 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 // @Tags APIKey
 // @Produce json
 // @Param id path string true "API密钥ID"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/api-keys/{id}/revoke [post]
 func (h *APIKeyHandler) Revoke(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -173,7 +173,7 @@ func (h *APIKeyHandler) Revoke(c *gin.Context) {
 // @Tags APIKey
 // @Produce json
 // @Param id path string true "API密钥ID"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/api-keys/{id} [delete]
 func (h *APIKeyHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -197,7 +197,7 @@ func (h *APIKeyHandler) Delete(c *gin.Context) {
 // @Tags APIKey
 // @Produce json
 // @Param id path string true "API密钥ID"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/api-keys/{id}/rotate [post]
 func (h *APIKeyHandler) Rotate(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))

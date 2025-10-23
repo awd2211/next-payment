@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/channel-adapter/internal/service"
+	"payment-platform/channel-adapter/internal/service"
 )
 
 // ChannelHandler 渠道处理器
@@ -64,6 +64,42 @@ func (h *ChannelHandler) CreatePayment(c *gin.Context) {
 // @Router /api/v1/channel/payments/{payment_no} [get]
 func (h *ChannelHandler) QueryPayment(c *gin.Context) {
 	paymentNo := c.Param("payment_no")
+	if paymentNo == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "支付流水号不能为空"})
+		return
+	}
+
+	// 查询支付
+	resp, err := h.channelService.QueryPayment(c.Request.Context(), paymentNo)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// QueryPaymentCompat 查询支付（兼容 Payment-Gateway 的请求格式）
+// @Summary 查询支付状态（兼容接口）
+// @Tags Channel
+// @Accept json
+// @Produce json
+// @Param request body map[string]interface{} true "查询请求"
+// @Success 200 {object} service.QueryPaymentResponse
+// @Router /api/v1/channel/query [post]
+func (h *ChannelHandler) QueryPaymentCompat(c *gin.Context) {
+	var req struct {
+		PaymentNo      string `json:"payment_no"`
+		ChannelOrderNo string `json:"channel_order_no"`
+		Channel        string `json:"channel"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		return
+	}
+
+	// 优先使用 payment_no
+	paymentNo := req.PaymentNo
 	if paymentNo == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "支付流水号不能为空"})
 		return
@@ -245,7 +281,7 @@ func (h *ChannelHandler) HandlePayPalWebhook(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param channel path string true "渠道名称"
-// @Success 200 {object} model.ChannelConfig
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/channel/config/{channel} [get]
 func (h *ChannelHandler) GetChannelConfig(c *gin.Context) {
 	channel := c.Param("channel")
@@ -280,7 +316,7 @@ func (h *ChannelHandler) GetChannelConfig(c *gin.Context) {
 // @Tags Channel
 // @Accept json
 // @Produce json
-// @Success 200 {array} model.ChannelConfig
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/channel/config [get]
 func (h *ChannelHandler) ListChannelConfigs(c *gin.Context) {
 	// 从上下文获取商户ID
@@ -304,14 +340,19 @@ func (h *ChannelHandler) ListChannelConfigs(c *gin.Context) {
 func (h *ChannelHandler) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api/v1")
 	{
-		// 支付相关
+		// 支付相关（完整RESTful路由）
 		api.POST("/channel/payments", h.CreatePayment)
 		api.GET("/channel/payments/:payment_no", h.QueryPayment)
 		api.POST("/channel/payments/:payment_no/cancel", h.CancelPayment)
 
-		// 退款相关
+		// 退款相关（完整RESTful路由）
 		api.POST("/channel/refunds", h.CreateRefund)
 		api.GET("/channel/refunds/:refund_no", h.QueryRefund)
+
+		// Payment-Gateway 兼容路由（简化版）
+		api.POST("/channel/payment", h.CreatePayment)      // 别名路由
+		api.POST("/channel/refund", h.CreateRefund)        // 别名路由
+		api.POST("/channel/query", h.QueryPaymentCompat)   // 查询接口
 
 		// Webhook 回调（不需要认证）
 		api.POST("/webhooks/stripe", h.HandleStripeWebhook)

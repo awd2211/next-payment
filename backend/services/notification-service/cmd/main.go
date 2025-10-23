@@ -1,90 +1,151 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/payment-platform/services/notification-service/internal/handler"
-	"github.com/payment-platform/services/notification-service/internal/model"
-	"github.com/payment-platform/services/notification-service/internal/provider"
-	"github.com/payment-platform/services/notification-service/internal/repository"
-	"github.com/payment-platform/services/notification-service/internal/service"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/db"
+	"github.com/payment-platform/pkg/logger"
+	"github.com/payment-platform/pkg/middleware"
+	"payment-platform/notification-service/internal/handler"
+	"payment-platform/notification-service/internal/model"
+	"payment-platform/notification-service/internal/provider"
+	"payment-platform/notification-service/internal/repository"
+	"payment-platform/notification-service/internal/service"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func main() {
-	// 加载配置
-	config := loadConfig()
+//	@title						Notification Service API
+//	@version					1.0
+//	@description				支付平台通知服务API文档
+//	@termsOfService				http://swagger.io/terms/
+//	@contact.name				API Support
+//	@contact.email				support@payment-platform.com
+//	@license.name				Apache 2.0
+//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+//	@host						localhost:40008
+//	@BasePath					/api/v1
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Type "Bearer" followed by a space and JWT token.
 
-	// 连接数据库
-	db, err := connectDB(config.DatabaseURL)
-	if err != nil {
-		log.Fatalf("连接数据库失败: %v", err)
+func main() {
+	// 初始化日志
+	env := config.GetEnv("ENV", "development")
+	if err := logger.InitLogger(env); err != nil {
+		log.Fatalf("初始化日志失败: %v", err)
+	}
+	defer logger.Sync()
+
+	logger.Info("正在启动 Notification Service...")
+
+	// 初始化数据库
+	dbConfig := db.Config{
+		Host:     config.GetEnv("DB_HOST", "localhost"),
+		Port:     config.GetEnvInt("DB_PORT", 5432),
+		User:     config.GetEnv("DB_USER", "postgres"),
+		Password: config.GetEnv("DB_PASSWORD", "postgres"),
+		DBName:   config.GetEnv("DB_NAME", "payment_notification"),
+		SSLMode:  config.GetEnv("DB_SSL_MODE", "disable"),
+		TimeZone: config.GetEnv("DB_TIMEZONE", "UTC"),
 	}
 
-	// 自动迁移
-	if err := db.AutoMigrate(
+	database, err := db.NewPostgresDB(dbConfig)
+	if err != nil {
+		logger.Fatal("数据库连接失败")
+		log.Fatalf("Error: %v", err)
+	}
+	logger.Info("数据库连接成功")
+
+	// 自动迁移数据库表
+	if err := database.AutoMigrate(
 		&model.Notification{},
 		&model.NotificationTemplate{},
 		&model.WebhookEndpoint{},
 		&model.WebhookDelivery{},
 	); err != nil {
-		log.Fatalf("数据库迁移失败: %v", err)
+		logger.Fatal("数据库迁移失败")
+		log.Fatalf("Error: %v", err)
 	}
+	logger.Info("数据库迁移完成")
+
+	// 初始化Redis
+	redisConfig := db.RedisConfig{
+		Host:     config.GetEnv("REDIS_HOST", "localhost"),
+		Port:     config.GetEnvInt("REDIS_PORT", 6379),
+		Password: config.GetEnv("REDIS_PASSWORD", ""),
+		DB:       config.GetEnvInt("REDIS_DB", 0),
+	}
+
+	redisClient, err := db.NewRedisClient(redisConfig)
+	if err != nil {
+		logger.Fatal("Redis连接失败")
+		log.Fatalf("Error: %v", err)
+	}
+	logger.Info("Redis连接成功")
 
 	// 创建邮件提供商工厂
 	emailFactory := provider.NewEmailProviderFactory()
 
 	// 注册 SMTP 提供商
-	if config.SMTPHost != "" {
+	smtpHost := config.GetEnv("SMTP_HOST", "")
+	if smtpHost != "" {
 		smtpProvider := provider.NewSMTPProvider(
-			config.SMTPHost,
-			config.SMTPPort,
-			config.SMTPUsername,
-			config.SMTPPassword,
-			config.SMTPFrom,
+			smtpHost,
+			config.GetEnvInt("SMTP_PORT", 587),
+			config.GetEnv("SMTP_USERNAME", ""),
+			config.GetEnv("SMTP_PASSWORD", ""),
+			config.GetEnv("SMTP_FROM", ""),
 		)
 		emailFactory.Register("smtp", smtpProvider)
+		logger.Info("SMTP 邮件提供商已注册")
 	}
 
 	// 注册 Mailgun 提供商
-	if config.MailgunDomain != "" {
+	mailgunDomain := config.GetEnv("MAILGUN_DOMAIN", "")
+	if mailgunDomain != "" {
 		mailgunProvider := provider.NewMailgunProvider(
-			config.MailgunDomain,
-			config.MailgunAPIKey,
-			config.MailgunFrom,
+			mailgunDomain,
+			config.GetEnv("MAILGUN_API_KEY", ""),
+			config.GetEnv("MAILGUN_FROM", ""),
 		)
 		emailFactory.Register("mailgun", mailgunProvider)
+		logger.Info("Mailgun 邮件提供商已注册")
 	}
 
 	// 创建短信提供商工厂
 	smsFactory := provider.NewSMSProviderFactory()
 
 	// 注册 Twilio 提供商
-	if config.TwilioAccountSID != "" {
+	twilioAccountSID := config.GetEnv("TWILIO_ACCOUNT_SID", "")
+	if twilioAccountSID != "" {
 		twilioProvider := provider.NewTwilioProvider(
-			config.TwilioAccountSID,
-			config.TwilioAuthToken,
-			config.TwilioFrom,
+			twilioAccountSID,
+			config.GetEnv("TWILIO_AUTH_TOKEN", ""),
+			config.GetEnv("TWILIO_FROM", ""),
 		)
 		smsFactory.Register("twilio", twilioProvider)
+		logger.Info("Twilio 短信提供商已注册")
 	}
 
 	// 注册模拟短信提供商（用于测试）
 	mockSMSProvider := provider.NewMockSMSProvider()
 	smsFactory.Register("mock", mockSMSProvider)
+	logger.Info("Mock 短信提供商已注册")
 
 	// 创建 Webhook 提供商
 	webhookProvider := provider.NewWebhookProvider()
 
-	// 创建仓储层
-	notificationRepo := repository.NewNotificationRepository(db)
+	// 初始化Repository
+	notificationRepo := repository.NewNotificationRepository(database)
 
-	// 创建服务层
+	// 初始化Service
 	notificationService := service.NewNotificationService(
 		notificationRepo,
 		emailFactory,
@@ -92,108 +153,51 @@ func main() {
 		webhookProvider,
 	)
 
-	// 创建处理器层
+	// 初始化Handler
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 
-	// 创建 HTTP 服务器
-	router := gin.Default()
+	// 初始化Gin
+	if env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.Default()
+
+	// 全局中间件
+	r.Use(middleware.CORS())
+	r.Use(middleware.RequestID())
+	r.Use(middleware.Logger(logger.Log))
+
+	// 限流中间件
+	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
+	r.Use(rateLimiter.RateLimit())
 
 	// 健康检查
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"service": "notification-service",
+			"time":    time.Now().Unix(),
+		})
+	// Swagger UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	})
 
-	// 注册路由
-	notificationHandler.RegisterRoutes(router)
+	// 注册通知路由
+	notificationHandler.RegisterRoutes(r)
 
 	// 启动后台任务
 	go startBackgroundWorkers(notificationService)
 
 	// 启动服务器
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8007"
+	port := config.GetEnvInt("PORT", 40008)
+	addr := fmt.Sprintf(":%d", port)
+	logger.Info(fmt.Sprintf("Notification Service 正在监听 %s", addr))
+
+	if err := r.Run(addr); err != nil {
+		logger.Fatal("服务启动失败")
+		log.Fatalf("Error: %v", err)
 	}
-	addr := fmt.Sprintf(":%s", port)
-	log.Printf("Notification Service 启动在 %s", addr)
-	if err := router.Run(addr); err != nil {
-		log.Fatalf("启动服务器失败: %v", err)
-	}
-}
-
-// Config 配置结构
-type Config struct {
-	DatabaseURL string
-
-	// SMTP 配置
-	SMTPHost     string
-	SMTPPort     int
-	SMTPUsername string
-	SMTPPassword string
-	SMTPFrom     string
-
-	// Mailgun 配置
-	MailgunDomain string
-	MailgunAPIKey string
-	MailgunFrom   string
-
-	// Twilio 配置
-	TwilioAccountSID string
-	TwilioAuthToken  string
-	TwilioFrom       string
-}
-
-// loadConfig 加载配置
-func loadConfig() *Config {
-	return &Config{
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/payment_platform?sslmode=disable"),
-
-		// SMTP
-		SMTPHost:     getEnv("SMTP_HOST", ""),
-		SMTPPort:     getEnvInt("SMTP_PORT", 587),
-		SMTPUsername: getEnv("SMTP_USERNAME", ""),
-		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-		SMTPFrom:     getEnv("SMTP_FROM", ""),
-
-		// Mailgun
-		MailgunDomain: getEnv("MAILGUN_DOMAIN", ""),
-		MailgunAPIKey: getEnv("MAILGUN_API_KEY", ""),
-		MailgunFrom:   getEnv("MAILGUN_FROM", ""),
-
-		// Twilio
-		TwilioAccountSID: getEnv("TWILIO_ACCOUNT_SID", ""),
-		TwilioAuthToken:  getEnv("TWILIO_AUTH_TOKEN", ""),
-		TwilioFrom:       getEnv("TWILIO_FROM", ""),
-	}
-}
-
-// connectDB 连接数据库
-func connectDB(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
-// getEnv 获取环境变量
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
-}
-
-// getEnvInt 获取整数环境变量
-func getEnvInt(key string, defaultValue int) int {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	var intValue int
-	fmt.Sscanf(value, "%d", &intValue)
-	return intValue
 }
 
 // startBackgroundWorkers 启动后台任务
@@ -201,15 +205,16 @@ func startBackgroundWorkers(notificationService service.NotificationService) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
+	ctx := context.Background()
 	for range ticker.C {
 		// 处理待发送的通知
-		if err := notificationService.ProcessPendingNotifications(nil); err != nil {
-			log.Printf("处理待发送通知失败: %v", err)
+		if err := notificationService.ProcessPendingNotifications(ctx); err != nil {
+			logger.Error(fmt.Sprintf("处理待发送通知失败: %v", err))
 		}
 
 		// 处理待投递的 Webhook
-		if err := notificationService.ProcessPendingWebhookDeliveries(nil); err != nil {
-			log.Printf("处理待投递 Webhook 失败: %v", err)
+		if err := notificationService.ProcessPendingWebhookDeliveries(ctx); err != nil {
+			logger.Error(fmt.Sprintf("处理待投递 Webhook 失败: %v", err))
 		}
 	}
 }

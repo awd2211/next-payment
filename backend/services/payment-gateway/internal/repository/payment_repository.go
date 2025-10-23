@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/payment-gateway/internal/model"
+	"payment-platform/payment-gateway/internal/model"
 	"gorm.io/gorm"
 )
 
@@ -16,10 +16,12 @@ type PaymentRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Payment, error)
 	GetByPaymentNo(ctx context.Context, paymentNo string) (*model.Payment, error)
 	GetByOrderNo(ctx context.Context, merchantID uuid.UUID, orderNo string) (*model.Payment, error)
+	GetByChannelOrderNo(ctx context.Context, channelOrderNo string) (*model.Payment, error)
 	List(ctx context.Context, query *PaymentQuery) ([]*model.Payment, int64, error)
 	Update(ctx context.Context, payment *model.Payment) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	UpdateNotifyStatus(ctx context.Context, id uuid.UUID, status string, times int) error
+	Delete(ctx context.Context, id uuid.UUID) error
 
 	// 退款管理
 	CreateRefund(ctx context.Context, refund *model.Refund) error
@@ -31,6 +33,7 @@ type PaymentRepository interface {
 
 	// 回调记录
 	CreateCallback(ctx context.Context, callback *model.PaymentCallback) error
+	UpdateCallback(ctx context.Context, callback *model.PaymentCallback) error
 	GetCallbacksByPaymentID(ctx context.Context, paymentID uuid.UUID) ([]*model.PaymentCallback, error)
 
 	// 路由规则
@@ -113,6 +116,19 @@ func (r *paymentRepository) GetByOrderNo(ctx context.Context, merchantID uuid.UU
 	var payment model.Payment
 	err := r.db.WithContext(ctx).
 		First(&payment, "merchant_id = ? AND order_no = ?", merchantID, orderNo).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &payment, nil
+}
+
+// GetByChannelOrderNo 根据渠道订单号获取
+func (r *paymentRepository) GetByChannelOrderNo(ctx context.Context, channelOrderNo string) (*model.Payment, error) {
+	var payment model.Payment
+	err := r.db.WithContext(ctx).First(&payment, "channel_order_no = ?", channelOrderNo).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
@@ -212,6 +228,11 @@ func (r *paymentRepository) UpdateNotifyStatus(ctx context.Context, id uuid.UUID
 		}).Error
 }
 
+// Delete 删除支付记录（软删除）
+func (r *paymentRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&model.Payment{}, "id = ?", id).Error
+}
+
 // CreateRefund 创建退款记录
 func (r *paymentRepository) CreateRefund(ctx context.Context, refund *model.Refund) error {
 	return r.db.WithContext(ctx).Create(refund).Error
@@ -308,6 +329,11 @@ func (r *paymentRepository) UpdateRefundStatus(ctx context.Context, id uuid.UUID
 // CreateCallback 创建回调记录
 func (r *paymentRepository) CreateCallback(ctx context.Context, callback *model.PaymentCallback) error {
 	return r.db.WithContext(ctx).Create(callback).Error
+}
+
+// UpdateCallback 更新回调记录
+func (r *paymentRepository) UpdateCallback(ctx context.Context, callback *model.PaymentCallback) error {
+	return r.db.WithContext(ctx).Save(callback).Error
 }
 
 // GetCallbacksByPaymentID 获取支付的所有回调记录

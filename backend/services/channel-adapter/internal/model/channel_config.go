@@ -61,6 +61,19 @@ type CryptoConfig struct {
 	APIKey        string   `json:"api_key"`           // API 密钥
 }
 
+// AlipayConfig 支付宝配置结构
+type AlipayConfig struct {
+	AppID        string `json:"app_id"`         // 应用ID
+	PrivateKey   string `json:"private_key"`    // 应用私钥
+	PublicKey    string `json:"public_key"`     // 支付宝公钥
+	NotifyURL    string `json:"notify_url"`     // 异步通知地址
+	ReturnURL    string `json:"return_url"`     // 同步返回地址
+	SignType     string `json:"sign_type"`      // 签名类型：RSA2
+	Format       string `json:"format"`         // 格式：json
+	Charset      string `json:"charset"`        // 字符集：utf-8
+	APIGateway   string `json:"api_gateway"`    // API网关：https://openapi.alipay.com/gateway.do
+}
+
 // 渠道类型常量
 const (
 	ChannelStripe  = "stripe"

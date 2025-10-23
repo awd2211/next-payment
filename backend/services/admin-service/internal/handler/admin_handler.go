@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/middleware"
-	"github.com/payment-platform/services/admin-service/internal/service"
+	"payment-platform/admin-service/internal/service"
 )
 
 // AdminHandler 管理员HTTP处理器
@@ -40,6 +40,7 @@ func (h *AdminHandler) RegisterRoutes(r *gin.RouterGroup, authMiddleware gin.Han
 		protected.PUT("/:id", h.UpdateAdmin)
 		protected.DELETE("/:id", h.DeleteAdmin)
 		protected.POST("/change-password", h.ChangePassword)
+		protected.POST("/:id/reset-password", h.ResetPassword)
 	}
 }
 
@@ -261,4 +262,45 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
+}
+
+// ResetPasswordRequest 重置密码请求
+type ResetPasswordRequest struct {
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+// ResetPassword 重置密码（管理员为其他用户重置密码）
+func (h *AdminHandler) ResetPassword(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID格式错误"})
+		return
+	}
+
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误", "details": err.Error()})
+		return
+	}
+
+	// 获取当前登录用户ID
+	claims, err := middleware.GetClaims(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+
+	// 检查是否重置自己的密码（应该使用change-password接口）
+	if claims.UserID == id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "不能重置自己的密码，请使用修改密码功能"})
+		return
+	}
+
+	if err := h.adminService.ResetPassword(c.Request.Context(), id, req.NewPassword); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "密码重置成功"})
 }

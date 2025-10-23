@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/config-service/internal/model"
+	"payment-platform/config-service/internal/model"
 	"gorm.io/gorm"
 )
 

@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
-	"github.com/payment-platform/services/channel-adapter/internal/model"
+	"payment-platform/channel-adapter/internal/model"
 	"github.com/stripe/stripe-go/v76"
+	"github.com/stripe/stripe-go/v76/charge"
 	"github.com/stripe/stripe-go/v76/paymentintent"
 	"github.com/stripe/stripe-go/v76/refund"
 	"github.com/stripe/stripe-go/v76/webhook"
@@ -108,22 +108,22 @@ func (a *StripeAdapter) QueryPayment(ctx context.Context, channelTradeNo string)
 		response.PaidAt = &created
 	}
 
-	// 支付方式详情
-	if pi.Charges != nil && len(pi.Charges.Data) > 0 {
-		charge := pi.Charges.Data[0]
-		if charge.PaymentMethodDetails != nil {
-			response.PaymentMethod = string(charge.PaymentMethodDetails.Type)
+	// 支付方式详情 - 通过 LatestCharge 获取
+	if pi.LatestCharge != nil && pi.LatestCharge.ID != "" {
+		ch, err := charge.Get(pi.LatestCharge.ID, nil)
+		if err == nil && ch.PaymentMethodDetails != nil {
+			response.PaymentMethod = string(ch.PaymentMethodDetails.Type)
 
 			// 根据支付方式类型提取详情
 			details := make(map[string]interface{})
-			switch charge.PaymentMethodDetails.Type {
+			switch ch.PaymentMethodDetails.Type {
 			case stripe.ChargePaymentMethodDetailsTypeCard:
-				if charge.PaymentMethodDetails.Card != nil {
-					details["brand"] = charge.PaymentMethodDetails.Card.Brand
-					details["last4"] = charge.PaymentMethodDetails.Card.Last4
-					details["exp_month"] = charge.PaymentMethodDetails.Card.ExpMonth
-					details["exp_year"] = charge.PaymentMethodDetails.Card.ExpYear
-					details["country"] = charge.PaymentMethodDetails.Card.Country
+				if ch.PaymentMethodDetails.Card != nil {
+					details["brand"] = ch.PaymentMethodDetails.Card.Brand
+					details["last4"] = ch.PaymentMethodDetails.Card.Last4
+					details["exp_month"] = ch.PaymentMethodDetails.Card.ExpMonth
+					details["exp_year"] = ch.PaymentMethodDetails.Card.ExpYear
+					details["country"] = ch.PaymentMethodDetails.Card.Country
 				}
 			}
 			response.PaymentMethodDetails = details
@@ -151,7 +151,7 @@ func (a *StripeAdapter) CreateRefund(ctx context.Context, req *CreateRefundReque
 	params := &stripe.RefundParams{
 		PaymentIntent: stripe.String(req.ChannelTradeNo),
 		Amount:        stripe.Int64(req.Amount),
-		Reason:        stripe.String(stripe.RefundReasonRequestedByCustomer),
+		Reason:        stripe.String(string(stripe.RefundReasonRequestedByCustomer)),
 		Metadata: map[string]string{
 			"refund_no":  req.RefundNo,
 			"payment_no": req.PaymentNo,

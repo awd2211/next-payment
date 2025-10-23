@@ -3,6 +3,7 @@ package email
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/smtp"
 	"strings"
 
@@ -89,7 +90,7 @@ func (p *SMTPProvider) Send(to []string, subject, htmlBody, textBody string, att
 
 	// 添加附件
 	for _, attachment := range attachments {
-		m.Attach(attachment.Filename, gomail.SetCopyFunc(func(w gomail.WriterTo) error {
+		m.Attach(attachment.Filename, gomail.SetCopyFunc(func(w io.Writer) error {
 			_, err := w.Write(attachment.Content)
 			return err
 		}))
@@ -184,7 +185,7 @@ func (p *SMTPProvider) BatchSend(messages []*EmailMessage) error {
 
 		// 添加附件
 		for _, attachment := range msg.Attachments {
-			m.Attach(attachment.Filename, gomail.SetCopyFunc(func(w gomail.WriterTo) error {
+			m.Attach(attachment.Filename, gomail.SetCopyFunc(func(w io.Writer) error {
 				_, err := w.Write(attachment.Content)
 				return err
 			}))

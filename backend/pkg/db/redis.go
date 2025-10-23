@@ -17,17 +17,16 @@ type RedisConfig struct {
 
 // NewRedisClient creates a new Redis client
 func NewRedisClient(cfg RedisConfig) (*redis.Client, error) {
-	client := redis.NewOptions()
-	client.Addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-	client.Password = cfg.Password
-	client.DB = cfg.DB
-	client.DialTimeout = 5 * time.Second
-	client.ReadTimeout = 3 * time.Second
-	client.WriteTimeout = 3 * time.Second
-	client.PoolSize = 10
-	client.MinIdleConns = 5
-
-	rdb := redis.NewClient(client)
+	rdb := redis.NewClient(&redis.Options{
+		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		PoolSize:     10,
+		MinIdleConns: 5,
+	})
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

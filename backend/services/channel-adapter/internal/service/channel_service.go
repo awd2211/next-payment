@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/channel-adapter/internal/adapter"
-	"github.com/payment-platform/services/channel-adapter/internal/model"
-	"github.com/payment-platform/services/channel-adapter/internal/repository"
+	"payment-platform/channel-adapter/internal/adapter"
+	"payment-platform/channel-adapter/internal/model"
+	"payment-platform/channel-adapter/internal/repository"
 )
 
 // ChannelService 渠道服务接口

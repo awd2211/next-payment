@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/auth"
-	"github.com/payment-platform/services/admin-service/internal/model"
-	"github.com/payment-platform/services/admin-service/internal/repository"
+	"payment-platform/admin-service/internal/model"
+	"payment-platform/admin-service/internal/repository"
 	"github.com/ua-parser/uap-go/uaparser"
 )
 

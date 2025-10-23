@@ -216,43 +216,23 @@ func (p *MailgunProvider) TestConnection() error {
 }
 
 // GetStats 获取邮件统计信息
-func (p *MailgunProvider) GetStats(event string, startDate, endDate time.Time) ([]mailgun.Stats, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	it := p.client.ListStats(&mailgun.StatsOptions{
-		Event:      []string{event},
-		Start:      &startDate,
-		End:        &endDate,
-		Resolution: "day",
-	})
-
-	var stats []mailgun.Stats
-	var page []mailgun.Stats
-
-	for it.Next(ctx, &page) {
-		stats = append(stats, page...)
-	}
-
-	if it.Err() != nil {
-		return nil, fmt.Errorf("获取统计信息失败: %w", it.Err())
-	}
-
-	return stats, nil
+// 注意: mailgun-go v4 API 已移除 ListStats 方法，需要使用 REST API 直接调用
+func (p *MailgunProvider) GetStats(event string, startDate, endDate time.Time) (interface{}, error) {
+	// TODO: 实现使用 REST API 调用统计接口
+	// 参考: https://documentation.mailgun.com/en/latest/api-stats.html
+	return nil, fmt.Errorf("此功能需要使用 Mailgun REST API 直接实现")
 }
 
 // ValidateEmail 验证邮箱地址（使用Mailgun验证API）
-func (p *MailgunProvider) ValidateEmail(email string) (*mailgun.EmailVerification, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	validator := p.client
-	verification, err := validator.ValidateEmail(ctx, email, false)
-	if err != nil {
-		return nil, fmt.Errorf("邮箱验证失败: %w", err)
+// 注意: mailgun-go v4 API 已移除 ValidateEmail 方法，需要使用独立的验证服务
+func (p *MailgunProvider) ValidateEmail(email string) (bool, error) {
+	// 使用简单的邮箱格式验证
+	// TODO: 如需完整验证，使用 Mailgun Email Validation API
+	// 参考: https://documentation.mailgun.com/en/latest/api-email-validation.html
+	if email == "" || !ValidateEmail(email) {
+		return false, fmt.Errorf("邮箱格式无效")
 	}
-
-	return &verification, nil
+	return true, nil
 }
 
 // getFrom 获取完整的发件人地址
@@ -315,15 +295,13 @@ func (p *MailgunProvider) GetBounces() ([]mailgun.Bounce, error) {
 }
 
 // AddToSuppressionList 添加邮箱到抑制列表
+// 注意: mailgun-go v4 API 需要使用 REST API 直接调用
 func (p *MailgunProvider) AddToSuppressionList(email, reason string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := p.client.CreateBounce(ctx, &mailgun.Bounce{
-		Address: email,
-		Error:   reason,
-	})
-
+	// 使用 AddBounce 方法
+	err := p.client.AddBounce(ctx, email, "550", reason)
 	if err != nil {
 		return fmt.Errorf("添加到抑制列表失败: %w", err)
 	}

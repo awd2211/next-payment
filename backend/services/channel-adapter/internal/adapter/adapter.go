@@ -2,8 +2,6 @@ package adapter
 
 import (
 	"context"
-
-	"github.com/payment-platform/services/channel-adapter/internal/model"
 )
 
 // PaymentAdapter 支付适配器接口

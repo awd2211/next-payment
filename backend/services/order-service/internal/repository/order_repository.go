@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/order-service/internal/model"
+	"payment-platform/order-service/internal/model"
 	"gorm.io/gorm"
 )
 
@@ -15,6 +15,7 @@ type OrderRepository interface {
 	Create(ctx context.Context, order *model.Order) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Order, error)
 	GetByOrderNo(ctx context.Context, orderNo string) (*model.Order, error)
+	GetByPaymentNo(ctx context.Context, paymentNo string) (*model.Order, error)
 	List(ctx context.Context, query *OrderQuery) ([]*model.Order, int64, error)
 	Update(ctx context.Context, order *model.Order) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
@@ -89,6 +90,21 @@ func (r *orderRepository) GetByOrderNo(ctx context.Context, orderNo string) (*mo
 	err := r.db.WithContext(ctx).
 		Preload("Items").
 		First(&order, "order_no = ?", orderNo).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &order, nil
+}
+
+// GetByPaymentNo 根据支付流水号获取订单
+func (r *orderRepository) GetByPaymentNo(ctx context.Context, paymentNo string) (*model.Order, error) {
+	var order model.Order
+	err := r.db.WithContext(ctx).
+		Preload("Items").
+		First(&order, "payment_no = ?", paymentNo).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil

@@ -55,7 +55,7 @@ type FeatureFlag struct {
 	Description string         `gorm:"type:text" json:"description"`
 	Enabled     bool           `gorm:"default:false" json:"enabled"`
 	Environment string         `gorm:"type:varchar(50);default:'production'" json:"environment"`
-	Conditions  map[string]interface{} `gorm:"type:jsonb" json:"conditions,omitempty"`
+	Conditions  map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"conditions,omitempty"`
 	Percentage  int            `gorm:"default:0" json:"percentage"`
 	CreatedBy   string         `gorm:"type:varchar(100)" json:"created_by"`
 	UpdatedBy   string         `gorm:"type:varchar(100)" json:"updated_by"`
@@ -77,7 +77,7 @@ type ServiceRegistry struct {
 	ServicePort int            `gorm:"default:0" json:"service_port"`
 	Status      string         `gorm:"type:varchar(50);default:'active'" json:"status"`
 	HealthCheck string         `gorm:"type:varchar(500)" json:"health_check"`
-	Metadata    map[string]interface{} `gorm:"type:jsonb" json:"metadata,omitempty"`
+	Metadata    map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"metadata,omitempty"`
 	LastHeartbeat time.Time    `json:"last_heartbeat"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/notification-service/internal/model"
-	"github.com/payment-platform/services/notification-service/internal/provider"
-	"github.com/payment-platform/services/notification-service/internal/repository"
+	"payment-platform/notification-service/internal/model"
+	"payment-platform/notification-service/internal/provider"
+	"payment-platform/notification-service/internal/repository"
 )
 
 // NotificationService 通知服务接口

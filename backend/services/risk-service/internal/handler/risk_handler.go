@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/risk-service/internal/repository"
-	"github.com/payment-platform/services/risk-service/internal/service"
+	"payment-platform/risk-service/internal/repository"
+	"payment-platform/risk-service/internal/service"
 )
 
 // RiskHandler 风控处理器
@@ -27,6 +27,13 @@ func NewRiskHandler(riskService service.RiskService) *RiskHandler {
 func (h *RiskHandler) RegisterRoutes(router *gin.Engine) {
 	v1 := router.Group("/api/v1")
 	{
+		// 风控核心接口（Payment-Gateway 使用）
+		risk := v1.Group("/risk")
+		{
+			risk.POST("/check", h.CheckPayment)
+			risk.POST("/report", h.ReportPaymentResult)
+		}
+
 		// 风控规则管理
 		rules := v1.Group("/rules")
 		{
@@ -39,7 +46,7 @@ func (h *RiskHandler) RegisterRoutes(router *gin.Engine) {
 			rules.POST("/:id/disable", h.DisableRule)
 		}
 
-		// 风控检查
+		// 风控检查记录
 		checks := v1.Group("/checks")
 		{
 			checks.POST("/payment", h.CheckPayment)
@@ -202,7 +209,36 @@ func (h *RiskHandler) CheckPayment(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(check))
+	// 返回格式化的风控结果（兼容 Payment-Gateway）
+	result := gin.H{
+		"decision":    check.Decision,
+		"score":       check.RiskScore,
+		"reasons":     []string{check.Reason},
+		"risk_level":  check.RiskLevel,
+		"suggestions": []string{},
+		"extra":       check.CheckResult,
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse(result))
+}
+
+func (h *RiskHandler) ReportPaymentResult(c *gin.Context) {
+	var input struct {
+		PaymentNo  string `json:"payment_no" binding:"required"`
+		Success    bool   `json:"success"`
+		Fraudulent bool   `json:"fraudulent"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		return
+	}
+
+	// TODO: 实现支付结果上报逻辑，用于风控模型训练
+	// 可以记录支付结果，用于后续的机器学习模型训练
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"message": "上报成功",
+	}))
 }
 
 func (h *RiskHandler) GetCheck(c *gin.Context) {

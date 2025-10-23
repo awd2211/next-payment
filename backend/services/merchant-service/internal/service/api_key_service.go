@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/merchant-service/internal/model"
-	"github.com/payment-platform/services/merchant-service/internal/repository"
+	"payment-platform/merchant-service/internal/model"
+	"payment-platform/merchant-service/internal/repository"
 )
 
 // APIKeyService API密钥服务接口

@@ -1,0 +1,21 @@
+basePath: /api/v1
+host: localhost:8007
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 支付平台财务核算服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Accounting Service API
+  version: "1.0"
+paths: {}
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

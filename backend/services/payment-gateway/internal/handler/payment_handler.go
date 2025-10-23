@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/payment-gateway/internal/repository"
-	"github.com/payment-platform/services/payment-gateway/internal/service"
+	"payment-platform/payment-gateway/internal/repository"
+	"payment-platform/payment-gateway/internal/service"
 )
 
 // PaymentHandler 支付处理器

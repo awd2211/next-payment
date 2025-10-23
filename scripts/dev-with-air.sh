@@ -3,6 +3,14 @@
 # 开发模式下使用 Air 热加载运行所有微服务
 # 需要先安装 Air: go install github.com/cosmtrek/air@latest
 
+# 设置 Go PATH
+export PATH=$PATH:$(go env GOPATH)/bin
+
+# 加载 .env 文件
+if [ -f "$(dirname "$0")/../.env" ]; then
+    export $(cat "$(dirname "$0")/../.env" | grep -v '^#' | grep -v '^$' | xargs)
+fi
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,7 +25,7 @@ echo -e "${BLUE}========================================${NC}\n"
 # 检查 Air 是否已安装
 if ! command -v air &> /dev/null; then
     echo -e "${RED}错误: Air 未安装${NC}"
-    echo -e "${YELLOW}请先安装 Air: go install github.com/cosmtrek/air@latest${NC}"
+    echo -e "${YELLOW}请先安装 Air: go install github.com/cosmtrek/air@v1.49.0${NC}"
     exit 1
 fi
 
@@ -46,8 +54,8 @@ for service_info in "${services[@]}"; do
         echo -e "${GREEN}启动 $service (端口: $external_port)...${NC}"
         cd "$service" || continue
 
-        # 设置端口环境变量并在后台启动 air
-        PORT=$external_port air > "../../logs/${service}.log" 2>&1 &
+        # 设置端口环境变量和 GOWORK 路径并在后台启动 air
+        PORT=$external_port GOWORK=/home/eric/payment/backend/go.work air > "../../logs/${service}.log" 2>&1 &
         echo $! > "/tmp/${service}.pid"
 
         cd ..

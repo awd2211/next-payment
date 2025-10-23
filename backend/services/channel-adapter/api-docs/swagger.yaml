@@ -1,0 +1,320 @@
+basePath: /api/v1
+definitions:
+  payment-platform_channel-adapter_internal_service.CreatePaymentRequest:
+    properties:
+      amount:
+        type: integer
+      callback_url:
+        type: string
+      cancel_url:
+        type: string
+      channel:
+        type: string
+      currency:
+        type: string
+      customer_email:
+        type: string
+      customer_name:
+        type: string
+      description:
+        type: string
+      extra:
+        additionalProperties: true
+        type: object
+      merchant_id:
+        type: string
+      order_no:
+        type: string
+      payment_no:
+        type: string
+      success_url:
+        type: string
+    type: object
+  payment-platform_channel-adapter_internal_service.CreatePaymentResponse:
+    properties:
+      channel_trade_no:
+        type: string
+      client_secret:
+        type: string
+      extra:
+        additionalProperties: true
+        type: object
+      payment_no:
+        type: string
+      payment_url:
+        type: string
+      qr_code_url:
+        type: string
+      status:
+        type: string
+    type: object
+  payment-platform_channel-adapter_internal_service.CreateRefundRequest:
+    properties:
+      amount:
+        type: integer
+      currency:
+        type: string
+      merchant_id:
+        type: string
+      payment_no:
+        type: string
+      reason:
+        type: string
+      refund_no:
+        type: string
+    type: object
+  payment-platform_channel-adapter_internal_service.CreateRefundResponse:
+    properties:
+      channel_refund_no:
+        type: string
+      refund_no:
+        type: string
+      status:
+        type: string
+    type: object
+  payment-platform_channel-adapter_internal_service.QueryPaymentResponse:
+    properties:
+      amount:
+        type: integer
+      channel_trade_no:
+        type: string
+      currency:
+        type: string
+      paid_at:
+        type: string
+      payment_method:
+        type: string
+      payment_method_details:
+        additionalProperties: true
+        type: object
+      payment_no:
+        type: string
+      status:
+        type: string
+    type: object
+  payment-platform_channel-adapter_internal_service.QueryRefundResponse:
+    properties:
+      amount:
+        type: integer
+      channel_refund_no:
+        type: string
+      currency:
+        type: string
+      refund_no:
+        type: string
+      refunded_at:
+        type: string
+      status:
+        type: string
+    type: object
+host: localhost:8005
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 支付平台支付渠道适配器服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Channel Adapter API
+  version: "1.0"
+paths:
+  /api/v1/channel/config:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 列出所有渠道配置
+      tags:
+      - Channel
+  /api/v1/channel/config/{channel}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 渠道名称
+        in: path
+        name: channel
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取渠道配置
+      tags:
+      - Channel
+  /api/v1/channel/payments:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建支付请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_channel-adapter_internal_service.CreatePaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_channel-adapter_internal_service.CreatePaymentResponse'
+      summary: 创建支付
+      tags:
+      - Channel
+  /api/v1/channel/payments/{payment_no}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 支付流水号
+        in: path
+        name: payment_no
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_channel-adapter_internal_service.QueryPaymentResponse'
+      summary: 查询支付状态
+      tags:
+      - Channel
+  /api/v1/channel/payments/{payment_no}/cancel:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 支付流水号
+        in: path
+        name: payment_no
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 取消支付
+      tags:
+      - Channel
+  /api/v1/channel/query:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 查询请求
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_channel-adapter_internal_service.QueryPaymentResponse'
+      summary: 查询支付状态（兼容接口）
+      tags:
+      - Channel
+  /api/v1/channel/refunds:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建退款请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_channel-adapter_internal_service.CreateRefundRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_channel-adapter_internal_service.CreateRefundResponse'
+      summary: 创建退款
+      tags:
+      - Channel
+  /api/v1/channel/refunds/{refund_no}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 退款流水号
+        in: path
+        name: refund_no
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_channel-adapter_internal_service.QueryRefundResponse'
+      summary: 查询退款状态
+      tags:
+      - Channel
+  /api/v1/webhooks/paypal:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 处理 PayPal Webhook 回调
+      tags:
+      - Webhook
+  /api/v1/webhooks/stripe:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 处理 Stripe Webhook 回调
+      tags:
+      - Webhook
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

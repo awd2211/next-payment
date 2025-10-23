@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/risk-service/internal/model"
-	"github.com/payment-platform/services/risk-service/internal/repository"
+	"payment-platform/risk-service/internal/model"
+	"payment-platform/risk-service/internal/repository"
 )
 
 // RiskService 风控服务接口

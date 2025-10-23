@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/analytics-service/internal/repository"
-	"github.com/payment-platform/services/analytics-service/internal/service"
+	"payment-platform/analytics-service/internal/repository"
+	"payment-platform/analytics-service/internal/service"
 )
 
 // AnalyticsHandler 分析处理器

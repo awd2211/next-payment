@@ -10,8 +10,8 @@ import (
 	"io"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/config-service/internal/model"
-	"github.com/payment-platform/services/config-service/internal/repository"
+	"payment-platform/config-service/internal/model"
+	"payment-platform/config-service/internal/repository"
 )
 
 // ConfigService 配置服务接口

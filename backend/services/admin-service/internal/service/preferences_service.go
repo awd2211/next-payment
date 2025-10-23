@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/admin-service/internal/model"
-	"github.com/payment-platform/services/admin-service/internal/repository"
+	"payment-platform/admin-service/internal/model"
+	"payment-platform/admin-service/internal/repository"
 )
 
 // PreferencesService 用户偏好设置服务接口

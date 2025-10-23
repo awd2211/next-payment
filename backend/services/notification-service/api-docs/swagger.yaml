@@ -1,0 +1,229 @@
+basePath: /api/v1
+definitions:
+  payment-platform_notification-service_internal_service.SendEmailByTemplateRequest:
+    properties:
+      merchant_id:
+        type: string
+      priority:
+        type: integer
+      provider:
+        type: string
+      template_code:
+        type: string
+      template_data:
+        additionalProperties: true
+        type: object
+      to:
+        items:
+          type: string
+        type: array
+    type: object
+  payment-platform_notification-service_internal_service.SendEmailRequest:
+    properties:
+      html_body:
+        type: string
+      merchant_id:
+        type: string
+      priority:
+        type: integer
+      provider:
+        description: smtp, mailgun
+        type: string
+      subject:
+        type: string
+      text_body:
+        type: string
+      to:
+        items:
+          type: string
+        type: array
+    type: object
+  payment-platform_notification-service_internal_service.SendSMSRequest:
+    properties:
+      content:
+        type: string
+      merchant_id:
+        type: string
+      priority:
+        type: integer
+      provider:
+        description: twilio, aliyun
+        type: string
+      to:
+        type: string
+    type: object
+  payment-platform_notification-service_internal_service.SendWebhookRequest:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      event_id:
+        type: string
+      event_type:
+        type: string
+      merchant_id:
+        type: string
+    type: object
+host: localhost:8008
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 支付平台通知服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Notification Service API
+  version: "1.0"
+paths:
+  /api/v1/notifications:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 列出通知
+      tags:
+      - Notification
+  /api/v1/notifications/email:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 发送邮件请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_service.SendEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 发送邮件
+      tags:
+      - Notification
+  /api/v1/notifications/email/template:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 使用模板发送邮件请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_service.SendEmailByTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 使用模板发送邮件
+      tags:
+      - Notification
+  /api/v1/notifications/sms:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 发送短信请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_service.SendSMSRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 发送短信
+      tags:
+      - Notification
+  /api/v1/notifications/webhook:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 发送 Webhook 请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_service.SendWebhookRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 发送 Webhook
+      tags:
+      - Notification
+  /api/v1/webhooks/endpoints:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: 列出 Webhook 端点
+      tags:
+      - Webhook
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建 Webhook 端点
+      tags:
+      - Webhook
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

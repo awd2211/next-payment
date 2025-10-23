@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/auth"
-	"github.com/payment-platform/services/admin-service/internal/model"
-	"github.com/payment-platform/services/admin-service/internal/repository"
+	"payment-platform/admin-service/internal/model"
+	"payment-platform/admin-service/internal/repository"
 )
 
 var (
@@ -28,6 +28,7 @@ type AdminService interface {
 	DeleteAdmin(ctx context.Context, id uuid.UUID) error
 	Login(ctx context.Context, username, password, ip string) (*LoginResponse, error)
 	ChangePassword(ctx context.Context, id uuid.UUID, oldPassword, newPassword string) error
+	ResetPassword(ctx context.Context, adminID uuid.UUID, newPassword string) error
 }
 
 type adminService struct {
@@ -306,6 +307,31 @@ func (s *adminService) ChangePassword(ctx context.Context, id uuid.UUID, oldPass
 	// 验证旧密码
 	if err := auth.VerifyPassword(oldPassword, admin.PasswordHash); err != nil {
 		return errors.New("旧密码错误")
+	}
+
+	// 哈希新密码
+	hashedPassword, err := auth.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	admin.PasswordHash = hashedPassword
+	return s.adminRepo.Update(ctx, admin)
+}
+
+// ResetPassword 重置密码（管理员为其他用户重置密码）
+func (s *adminService) ResetPassword(ctx context.Context, adminID uuid.UUID, newPassword string) error {
+	admin, err := s.adminRepo.GetByID(ctx, adminID)
+	if err != nil {
+		return err
+	}
+	if admin == nil {
+		return ErrAdminNotFound
+	}
+
+	// 超级管理员密码不能被重置
+	if admin.IsSuper {
+		return errors.New("超级管理员密码不能被重置")
 	}
 
 	// 哈希新密码

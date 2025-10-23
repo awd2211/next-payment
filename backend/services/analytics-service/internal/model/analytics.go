@@ -83,7 +83,7 @@ type RealtimeStats struct {
 	StatType          string         `gorm:"type:varchar(50);not null;index:idx_realtime_stats_type" json:"stat_type"`
 	StatKey           string         `gorm:"type:varchar(255);not null;index:idx_realtime_stats_key" json:"stat_key"`
 	StatValue         int64          `gorm:"default:0" json:"stat_value"`
-	AdditionalData    map[string]interface{} `gorm:"type:jsonb" json:"additional_data,omitempty"`
+	AdditionalData    map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"additional_data,omitempty"`
 	Period            string         `gorm:"type:varchar(20)" json:"period"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/accounting-service/internal/model"
-	"github.com/payment-platform/services/accounting-service/internal/repository"
+	"payment-platform/accounting-service/internal/model"
+	"payment-platform/accounting-service/internal/repository"
 )
 
 // AccountService 账户服务接口

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/notification-service/internal/service"
+	"payment-platform/notification-service/internal/service"
 )
 
 // NotificationHandler 通知处理器
@@ -179,7 +179,7 @@ func (h *NotificationHandler) CreateWebhookEndpoint(c *gin.Context) {
 // @Tags Webhook
 // @Accept json
 // @Produce json
-// @Success 200 {array} model.WebhookEndpoint
+// @Success 200 {array} map[string]interface{}
 // @Router /api/v1/webhooks/endpoints [get]
 func (h *NotificationHandler) ListWebhookEndpoints(c *gin.Context) {
 	// 从上下文获取商户ID

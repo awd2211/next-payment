@@ -3,84 +3,137 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/payment-platform/services/analytics-service/internal/handler"
-	"github.com/payment-platform/services/analytics-service/internal/model"
-	"github.com/payment-platform/services/analytics-service/internal/repository"
-	"github.com/payment-platform/services/analytics-service/internal/service"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/db"
+	"github.com/payment-platform/pkg/logger"
+	"github.com/payment-platform/pkg/middleware"
+	"payment-platform/analytics-service/internal/handler"
+	"payment-platform/analytics-service/internal/model"
+	"payment-platform/analytics-service/internal/repository"
+	"payment-platform/analytics-service/internal/service"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func main() {
-	config := loadConfig()
+//	@title						Analytics Service API
+//	@version					1.0
+//	@description				支付平台数据分析服务API文档
+//	@termsOfService				http://swagger.io/terms/
+//	@contact.name				API Support
+//	@contact.email				support@payment-platform.com
+//	@license.name				Apache 2.0
+//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+//	@host						localhost:40009
+//	@BasePath					/api/v1
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Type "Bearer" followed by a space and JWT token.
 
-	db, err := connectDB(config.DatabaseURL)
-	if err != nil {
-		log.Fatalf("连接数据库失败: %v", err)
+func main() {
+	// 初始化日志
+	env := config.GetEnv("ENV", "development")
+	if err := logger.InitLogger(env); err != nil {
+		log.Fatalf("初始化日志失败: %v", err)
+	}
+	defer logger.Sync()
+
+	logger.Info("正在启动 Analytics Service...")
+
+	// 初始化数据库
+	dbConfig := db.Config{
+		Host:     config.GetEnv("DB_HOST", "localhost"),
+		Port:     config.GetEnvInt("DB_PORT", 5432),
+		User:     config.GetEnv("DB_USER", "postgres"),
+		Password: config.GetEnv("DB_PASSWORD", "postgres"),
+		DBName:   config.GetEnv("DB_NAME", "payment_analytics"),
+		SSLMode:  config.GetEnv("DB_SSL_MODE", "disable"),
+		TimeZone: config.GetEnv("DB_TIMEZONE", "UTC"),
 	}
 
-	if err := db.AutoMigrate(
+	database, err := db.NewPostgresDB(dbConfig)
+	if err != nil {
+		logger.Fatal("数据库连接失败")
+		log.Fatalf("Error: %v", err)
+	}
+	logger.Info("数据库连接成功")
+
+	// 自动迁移数据库表
+	if err := database.AutoMigrate(
 		&model.PaymentMetrics{},
 		&model.MerchantMetrics{},
 		&model.ChannelMetrics{},
 		&model.RealtimeStats{},
 	); err != nil {
-		log.Fatalf("数据库迁移失败: %v", err)
+		logger.Fatal("数据库迁移失败")
+		log.Fatalf("Error: %v", err)
+	}
+	logger.Info("数据库迁移完成")
+
+	// 初始化Redis
+	redisConfig := db.RedisConfig{
+		Host:     config.GetEnv("REDIS_HOST", "localhost"),
+		Port:     config.GetEnvInt("REDIS_PORT", 6379),
+		Password: config.GetEnv("REDIS_PASSWORD", ""),
+		DB:       config.GetEnvInt("REDIS_DB", 0),
 	}
 
-	// 创建仓储层
-	analyticsRepo := repository.NewAnalyticsRepository(db)
+	redisClient, err := db.NewRedisClient(redisConfig)
+	if err != nil {
+		logger.Fatal("Redis连接失败")
+		log.Fatalf("Error: %v", err)
+	}
+	logger.Info("Redis连接成功")
 
-	// 创建服务层
+	// 初始化Repository
+	analyticsRepo := repository.NewAnalyticsRepository(database)
+
+	// 初始化Service
 	analyticsService := service.NewAnalyticsService(analyticsRepo)
 
-	// 创建处理器层
+	// 初始化Handler
 	analyticsHandler := handler.NewAnalyticsHandler(analyticsService)
 
-	router := gin.Default()
+	// 初始化Gin
+	if env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.Default()
 
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok", "service": "analytics-service"})
+	// 全局中间件
+	r.Use(middleware.CORS())
+	r.Use(middleware.RequestID())
+	r.Use(middleware.Logger(logger.Log))
+
+	// 限流中间件
+	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
+	r.Use(rateLimiter.RateLimit())
+
+	// 健康检查
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"service": "analytics-service",
+			"time":    time.Now().Unix(),
+		})
+	// Swagger UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	})
 
-	// 注册路由
-	analyticsHandler.RegisterRoutes(router)
+	// 注册分析路由
+	analyticsHandler.RegisterRoutes(r)
 
-	port := config.ServerPort
-	addr := fmt.Sprintf(":%s", port)
-	log.Printf("Analytics Service 服务启动在 %s", addr)
-	if err := router.Run(addr); err != nil {
-		log.Fatalf("启动服务器失败: %v", err)
+	// 启动服务器
+	port := config.GetEnvInt("PORT", 40009)
+	addr := fmt.Sprintf(":%d", port)
+	logger.Info(fmt.Sprintf("Analytics Service 正在监听 %s", addr))
+
+	if err := r.Run(addr); err != nil {
+		logger.Fatal("服务启动失败")
+		log.Fatalf("Error: %v", err)
 	}
-}
-
-type Config struct {
-	DatabaseURL string
-	ServerPort  string
-}
-
-func loadConfig() *Config {
-	return &Config{
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/payment_platform?sslmode=disable"),
-		ServerPort:  getEnv("PORT", "8008"),
-	}
-}
-
-func connectDB(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
 }

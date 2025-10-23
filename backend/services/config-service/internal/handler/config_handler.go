@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/config-service/internal/repository"
-	"github.com/payment-platform/services/config-service/internal/service"
+	"payment-platform/config-service/internal/repository"
+	"payment-platform/config-service/internal/service"
 )
 
 type ConfigHandler struct {

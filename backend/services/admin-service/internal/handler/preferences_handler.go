@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/admin-service/internal/service"
+	"payment-platform/admin-service/internal/service"
 )
 
 // PreferencesHandler 用户偏好设置处理器
@@ -24,7 +24,7 @@ func NewPreferencesHandler(prefsService service.PreferencesService) *Preferences
 // @Summary 获取用户偏好设置
 // @Tags Preferences
 // @Produce json
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/preferences [get]
 func (h *PreferencesHandler) GetPreferences(c *gin.Context) {
 	userID, _ := c.Get("user_id")
@@ -52,7 +52,7 @@ func (h *PreferencesHandler) GetPreferences(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body service.UpdatePreferencesInput true "更新偏好设置请求"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/preferences [put]
 func (h *PreferencesHandler) UpdatePreferences(c *gin.Context) {
 	var req service.UpdatePreferencesInput

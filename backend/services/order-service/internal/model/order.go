@@ -164,6 +164,14 @@ const (
 	ShippingMethodDigital  = "digital"  // 数字商品（无需配送）
 )
 
+// 操作人类型常量
+const (
+	OperatorTypeSystem   = "system"   // 系统
+	OperatorTypeMerchant = "merchant" // 商户
+	OperatorTypeAdmin    = "admin"    // 管理员
+	OperatorTypeCustomer = "customer" // 客户
+)
+
 // Address 地址结构（用于JSON存储）
 type Address struct {
 	Country    string `json:"country"`     // 国家

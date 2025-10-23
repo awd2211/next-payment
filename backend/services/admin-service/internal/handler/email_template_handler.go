@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/middleware"
-	"github.com/payment-platform/services/admin-service/internal/model"
-	"github.com/payment-platform/services/admin-service/internal/service"
+	"payment-platform/admin-service/internal/model"
+	"payment-platform/admin-service/internal/service"
 )
 
 // EmailTemplateHandler 邮件模板HTTP处理器

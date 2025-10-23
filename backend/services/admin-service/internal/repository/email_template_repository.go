@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/admin-service/internal/model"
+	"payment-platform/admin-service/internal/model"
 	"gorm.io/gorm"
 )
 
@@ -20,6 +20,7 @@ type EmailTemplateRepository interface {
 
 	// 邮件日志
 	CreateLog(ctx context.Context, log *model.EmailLog) error
+	UpdateLog(ctx context.Context, log *model.EmailLog) error
 	GetLogByID(ctx context.Context, id uuid.UUID) (*model.EmailLog, error)
 	ListLogs(ctx context.Context, page, pageSize int, status, to string) ([]*model.EmailLog, int64, error)
 }
@@ -119,6 +120,11 @@ func (r *emailTemplateRepository) Delete(ctx context.Context, id uuid.UUID) erro
 // CreateLog 创建邮件发送日志
 func (r *emailTemplateRepository) CreateLog(ctx context.Context, log *model.EmailLog) error {
 	return r.db.WithContext(ctx).Create(log).Error
+}
+
+// UpdateLog 更新邮件发送日志
+func (r *emailTemplateRepository) UpdateLog(ctx context.Context, log *model.EmailLog) error {
+	return r.db.WithContext(ctx).Save(log).Error
 }
 
 // GetLogByID 根据ID获取日志

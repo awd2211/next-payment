@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/merchant-service/internal/service"
+	"payment-platform/merchant-service/internal/service"
 )
 
 // MerchantHandler 商户处理器
@@ -27,7 +27,7 @@ func NewMerchantHandler(merchantService service.MerchantService) *MerchantHandle
 // @Accept json
 // @Produce json
 // @Param request body service.RegisterMerchantInput true "注册信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/register [post]
 func (h *MerchantHandler) Register(c *gin.Context) {
 	var req service.RegisterMerchantInput
@@ -54,7 +54,7 @@ func (h *MerchantHandler) Register(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body LoginRequest true "登录信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/login [post]
 func (h *MerchantHandler) Login(c *gin.Context) {
 	var req LoginRequest
@@ -87,7 +87,7 @@ type LoginRequest struct {
 // @Accept json
 // @Produce json
 // @Param request body service.CreateMerchantInput true "商户信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant [post]
 func (h *MerchantHandler) Create(c *gin.Context) {
 	var req service.CreateMerchantInput
@@ -113,7 +113,7 @@ func (h *MerchantHandler) Create(c *gin.Context) {
 // @Tags Merchant
 // @Produce json
 // @Param id path string true "商户ID"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/{id} [get]
 func (h *MerchantHandler) GetByID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -142,7 +142,7 @@ func (h *MerchantHandler) GetByID(c *gin.Context) {
 // @Param status query string false "状态筛选"
 // @Param kyc_status query string false "KYC状态筛选"
 // @Param keyword query string false "关键词搜索"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant [get]
 func (h *MerchantHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -174,7 +174,7 @@ func (h *MerchantHandler) List(c *gin.Context) {
 // @Produce json
 // @Param id path string true "商户ID"
 // @Param request body service.UpdateMerchantInput true "更新信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/{id} [put]
 func (h *MerchantHandler) Update(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -213,7 +213,7 @@ type UpdateStatusRequest struct {
 // @Produce json
 // @Param id path string true "商户ID"
 // @Param request body UpdateStatusRequest true "状态信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/{id}/status [put]
 func (h *MerchantHandler) UpdateStatus(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -250,7 +250,7 @@ type UpdateKYCStatusRequest struct {
 // @Produce json
 // @Param id path string true "商户ID"
 // @Param request body UpdateKYCStatusRequest true "KYC状态信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/{id}/kyc-status [put]
 func (h *MerchantHandler) UpdateKYCStatus(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -280,7 +280,7 @@ func (h *MerchantHandler) UpdateKYCStatus(c *gin.Context) {
 // @Tags Merchant
 // @Produce json
 // @Param id path string true "商户ID"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/{id} [delete]
 func (h *MerchantHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -303,7 +303,7 @@ func (h *MerchantHandler) Delete(c *gin.Context) {
 // @Summary 获取当前商户信息
 // @Tags Merchant
 // @Produce json
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/profile [get]
 func (h *MerchantHandler) GetProfile(c *gin.Context) {
 	// 从JWT中获取商户ID
@@ -330,7 +330,7 @@ func (h *MerchantHandler) GetProfile(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body service.UpdateMerchantInput true "更新信息"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/merchant/profile [put]
 func (h *MerchantHandler) UpdateProfile(c *gin.Context) {
 	// 从JWT中获取商户ID

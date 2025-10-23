@@ -1,0 +1,575 @@
+basePath: /api/v1
+definitions:
+  internal_handler.ChangePasswordRequest:
+    properties:
+      new_password:
+        minLength: 8
+        type: string
+      old_password:
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  internal_handler.CreateConfigRequest:
+    properties:
+      category:
+        type: string
+      description:
+        type: string
+      is_public:
+        type: boolean
+      key:
+        type: string
+      type:
+        type: string
+      value:
+        type: string
+    required:
+    - category
+    - key
+    - type
+    - value
+    type: object
+  internal_handler.DeactivateSessionRequest:
+    properties:
+      session_id:
+        type: string
+    required:
+    - session_id
+    type: object
+  internal_handler.Disable2FARequest:
+    properties:
+      password:
+        description: 密码验证
+        type: string
+    required:
+    - password
+    type: object
+  internal_handler.Setup2FARequest:
+    properties:
+      account_name:
+        description: 账户名称（如邮箱）
+        type: string
+    required:
+    - account_name
+    type: object
+  internal_handler.Verify2FARequest:
+    properties:
+      code:
+        description: 6位验证码
+        type: string
+    required:
+    - code
+    type: object
+  payment-platform_admin-service_internal_response.ErrorCode:
+    enum:
+    - BAD_REQUEST
+    - UNAUTHORIZED
+    - FORBIDDEN
+    - NOT_FOUND
+    - CONFLICT
+    - INTERNAL_SERVER_ERROR
+    - VALIDATION_ERROR
+    - INVALID_CREDENTIALS
+    - ACCOUNT_LOCKED
+    - PERMISSION_DENIED
+    - RESOURCE_EXISTS
+    - RESOURCE_NOT_FOUND
+    - OPERATION_FAILED
+    type: string
+    x-enum-varnames:
+    - ErrCodeBadRequest
+    - ErrCodeUnauthorized
+    - ErrCodeForbidden
+    - ErrCodeNotFound
+    - ErrCodeConflict
+    - ErrCodeInternalServer
+    - ErrCodeValidation
+    - ErrCodeInvalidCredentials
+    - ErrCodeAccountLocked
+    - ErrCodePermissionDenied
+    - ErrCodeResourceExists
+    - ErrCodeResourceNotFound
+    - ErrCodeOperationFailed
+  payment-platform_admin-service_internal_response.ErrorInfo:
+    properties:
+      code:
+        allOf:
+        - $ref: '#/definitions/payment-platform_admin-service_internal_response.ErrorCode'
+        description: 错误代码
+      details:
+        description: 详细信息（用于调试）
+        type: string
+      message:
+        description: 错误消息
+        type: string
+    type: object
+  payment-platform_admin-service_internal_response.ListResponse:
+    properties:
+      data:
+        description: 数据列表
+      message:
+        description: 消息
+        type: string
+      pagination:
+        allOf:
+        - $ref: '#/definitions/payment-platform_admin-service_internal_response.PaginationInfo'
+        description: 分页信息
+      success:
+        description: 是否成功
+        type: boolean
+    type: object
+  payment-platform_admin-service_internal_response.PaginationInfo:
+    properties:
+      page:
+        description: 当前页
+        type: integer
+      page_size:
+        description: 每页数量
+        type: integer
+      total:
+        description: 总数
+        type: integer
+      total_page:
+        description: 总页数
+        type: integer
+    type: object
+  payment-platform_admin-service_internal_response.Response:
+    properties:
+      code:
+        allOf:
+        - $ref: '#/definitions/payment-platform_admin-service_internal_response.ErrorCode'
+        description: 错误代码
+      data:
+        description: 数据
+      error:
+        allOf:
+        - $ref: '#/definitions/payment-platform_admin-service_internal_response.ErrorInfo'
+        description: 错误详情
+      message:
+        description: 消息
+        type: string
+      success:
+        description: 是否成功
+        type: boolean
+    type: object
+  payment-platform_admin-service_internal_service.Setup2FAResponse:
+    properties:
+      backup_codes:
+        description: 备用恢复代码
+        items:
+          type: string
+        type: array
+      qr_code_url:
+        description: 二维码URL
+        type: string
+      secret:
+        description: TOTP密钥
+        type: string
+    type: object
+  payment-platform_admin-service_internal_service.UpdatePreferencesInput:
+    properties:
+      currency:
+        description: 货币
+        type: string
+      dashboard_layout:
+        additionalProperties: true
+        description: 仪表板布局
+        type: object
+      date_format:
+        description: 日期格式
+        type: string
+      language:
+        description: 语言
+        type: string
+      notification_prefs:
+        additionalProperties: true
+        description: 通知偏好
+        type: object
+      number_format:
+        description: 数字格式
+        type: string
+      theme:
+        description: 主题
+        type: string
+      time_format:
+        description: 时间格式
+        type: string
+      timezone:
+        description: 时区
+        type: string
+    type: object
+  payment-platform_admin-service_internal_service.UpdateSecuritySettingsInput:
+    properties:
+      abnormal_notification:
+        type: boolean
+      allowed_countries:
+        items:
+          type: string
+        type: array
+      blocked_countries:
+        items:
+          type: string
+        type: array
+      ip_whitelist:
+        items:
+          type: string
+        type: array
+      login_notification:
+        type: boolean
+      max_concurrent_sessions:
+        type: integer
+      password_expiry_days:
+        type: integer
+      session_timeout_minutes:
+        type: integer
+    type: object
+host: localhost:8001
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: 支付平台管理后台服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Admin Service API
+  version: "1.0"
+paths:
+  /api/v1/preferences:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取用户偏好设置
+      tags:
+      - Preferences
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 更新偏好设置请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_admin-service_internal_service.UpdatePreferencesInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新用户偏好设置
+      tags:
+      - Preferences
+  /api/v1/security/2fa/backup-codes:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 重新生成备用恢复代码
+      tags:
+      - Security
+  /api/v1/security/2fa/disable:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 禁用2FA请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.Disable2FARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 禁用双因素认证
+      tags:
+      - Security
+  /api/v1/security/2fa/setup:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 设置2FA请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.Setup2FARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_service.Setup2FAResponse'
+      summary: 设置双因素认证
+      tags:
+      - Security
+  /api/v1/security/2fa/verify:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 验证2FA请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.Verify2FARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 验证并启用2FA
+      tags:
+      - Security
+  /api/v1/security/abnormal-activities:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取异常登录活动
+      tags:
+      - Security
+  /api/v1/security/change-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 修改密码请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 修改密码
+      tags:
+      - Security
+  /api/v1/security/login-activities:
+    get:
+      parameters:
+      - default: 50
+        description: 记录数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取登录活动记录
+      tags:
+      - Security
+  /api/v1/security/sessions:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取活跃会话列表
+      tags:
+      - Security
+  /api/v1/security/sessions/deactivate:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 停用会话请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.DeactivateSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 停用指定会话
+      tags:
+      - Security
+  /api/v1/security/sessions/deactivate-others:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 停用其他所有会话
+      tags:
+      - Security
+  /api/v1/security/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取安全设置
+      tags:
+      - Security
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 更新安全设置请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_admin-service_internal_service.UpdateSecuritySettingsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新安全设置
+      tags:
+      - Security
+  /system-configs:
+    get:
+      consumes:
+      - application/json
+      description: 分页查询系统配置列表，支持按类别过滤
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 配置类别
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.ListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取系统配置列表
+      tags:
+      - 系统配置
+    post:
+      consumes:
+      - application/json
+      description: 创建新的系统配置项
+      parameters:
+      - description: 配置信息
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/payment-platform_admin-service_internal_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建系统配置
+      tags:
+      - 系统配置
+securityDefinitions:
+  BearerAuth:
+    description: Bearer JWT token
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -9,17 +9,17 @@ import (
 
 // RiskRule 风控规则
 type RiskRule struct {
-	ID          uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Name        string         `gorm:"type:varchar(100);not null" json:"name"`
-	RuleType    string         `gorm:"type:varchar(50);not null" json:"rule_type"`    // 规则类型：amount_limit, frequency_limit, blacklist等
-	Priority    int            `gorm:"type:integer;default:0" json:"priority"`
-	Conditions  string         `gorm:"type:jsonb" json:"conditions"`
-	Action      string         `gorm:"type:varchar(50)" json:"action"`               // 动作：block, review, alert
-	IsEnabled   bool           `gorm:"default:true" json:"is_enabled"`
-	Description string         `gorm:"type:text" json:"description"`
-	CreatedAt   time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
-	UpdatedAt   time.Time      `gorm:"type:timestamptz;default:now()" json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID          uuid.UUID              `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	RuleName    string                 `gorm:"type:varchar(100);not null" json:"rule_name"`
+	RuleType    string                 `gorm:"type:varchar(50);not null" json:"rule_type"`    // 规则类型：amount_limit, frequency_limit, blacklist等
+	Priority    int                    `gorm:"type:integer;default:0" json:"priority"`
+	Conditions  map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"conditions"`
+	Actions     map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"actions"`     // 动作：block, review, alert
+	Status      string                 `gorm:"type:varchar(20);default:'active'" json:"status"` // active, inactive
+	Description string                 `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time              `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	UpdatedAt   time.Time              `gorm:"type:timestamptz;default:now()" json:"updated_at"`
+	DeletedAt   gorm.DeletedAt         `gorm:"index" json:"-"`
 }
 
 func (RiskRule) TableName() string {
@@ -28,17 +28,18 @@ func (RiskRule) TableName() string {
 
 // RiskCheck 风控检查记录
 type RiskCheck struct {
-	ID          uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	PaymentID   uuid.UUID      `gorm:"type:uuid;index" json:"payment_id"`
-	MerchantID  uuid.UUID      `gorm:"type:uuid;index" json:"merchant_id"`
-	CheckType   string         `gorm:"type:varchar(50)" json:"check_type"`
-	RiskScore   int            `gorm:"type:integer" json:"risk_score"`               // 风险评分 0-100
-	RiskLevel   string         `gorm:"type:varchar(20)" json:"risk_level"`           // low, medium, high, critical
-	MatchedRules string        `gorm:"type:jsonb" json:"matched_rules"`
-	Decision    string         `gorm:"type:varchar(20)" json:"decision"`             // pass, reject, review
-	Reason      string         `gorm:"type:text" json:"reason"`
-	CreatedAt   time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID          uuid.UUID              `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	MerchantID  uuid.UUID              `gorm:"type:uuid;index" json:"merchant_id"`
+	RelatedID   uuid.UUID              `gorm:"type:uuid;index" json:"related_id"`     // 关联的支付/订单ID
+	RelatedType string                 `gorm:"type:varchar(50)" json:"related_type"` // payment, order
+	CheckData   map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"check_data"`
+	RiskScore   int                    `gorm:"type:integer;default:0" json:"risk_score"`               // 风险评分 0-100
+	RiskLevel   string                 `gorm:"type:varchar(20)" json:"risk_level"`           // low, medium, high, critical
+	CheckResult map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"check_result"`
+	Decision    string                 `gorm:"type:varchar(20)" json:"decision"`             // pass, reject, review
+	Reason      string                 `gorm:"type:text" json:"reason"`
+	CreatedAt   time.Time              `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	DeletedAt   gorm.DeletedAt         `gorm:"index" json:"-"`
 }
 
 func (RiskCheck) TableName() string {
@@ -47,13 +48,16 @@ func (RiskCheck) TableName() string {
 
 // Blacklist 黑名单
 type Blacklist struct {
-	ID         uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	ListType   string         `gorm:"type:varchar(50);not null;index" json:"list_type"` // email, ip, card等
-	Value      string         `gorm:"type:varchar(255);not null;index" json:"value"`
-	Reason     string         `gorm:"type:text" json:"reason"`
-	ExpiredAt  *time.Time     `gorm:"type:timestamptz" json:"expired_at"`
-	CreatedAt  time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
-	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+	ID          uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	EntityType  string         `gorm:"type:varchar(50);not null;index" json:"entity_type"` // email, ip, card, device等
+	EntityValue string         `gorm:"type:varchar(255);not null;index" json:"entity_value"`
+	Reason      string         `gorm:"type:text" json:"reason"`
+	AddedBy     string         `gorm:"type:varchar(100)" json:"added_by"`
+	Status      string         `gorm:"type:varchar(20);default:'active'" json:"status"` // active, removed
+	ExpireAt    *time.Time     `gorm:"type:timestamptz" json:"expire_at"`
+	RemovedAt   *time.Time     `gorm:"type:timestamptz" json:"removed_at"`
+	CreatedAt   time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Blacklist) TableName() string {
@@ -73,4 +77,10 @@ const (
 	DecisionPass   = "pass"
 	DecisionReject = "reject"
 	DecisionReview = "review"
+)
+
+// 规则状态常量
+const (
+	RuleStatusActive   = "active"
+	RuleStatusInactive = "inactive"
 )

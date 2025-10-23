@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/order-service/internal/model"
-	"github.com/payment-platform/services/order-service/internal/repository"
+	"payment-platform/order-service/internal/model"
+	"payment-platform/order-service/internal/repository"
 )
 
 // OrderService 订单服务接口
@@ -19,6 +19,7 @@ type OrderService interface {
 	CreateOrder(ctx context.Context, input *CreateOrderInput) (*model.Order, error)
 	GetOrder(ctx context.Context, orderNo string) (*model.Order, error)
 	GetOrderByID(ctx context.Context, id uuid.UUID) (*model.Order, error)
+	GetOrderByPaymentNo(ctx context.Context, paymentNo string) (*model.Order, error)
 	QueryOrders(ctx context.Context, query *repository.OrderQuery) ([]*model.Order, int64, error)
 	CancelOrder(ctx context.Context, orderNo string, reason string, operatorID uuid.UUID, operatorType string) error
 	UpdateOrderStatus(ctx context.Context, orderNo string, status string, operatorID uuid.UUID, operatorType string) error
@@ -216,6 +217,18 @@ func (s *orderService) GetOrder(ctx context.Context, orderNo string) (*model.Ord
 // GetOrderByID 根据ID获取订单
 func (s *orderService) GetOrderByID(ctx context.Context, id uuid.UUID) (*model.Order, error) {
 	order, err := s.orderRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("获取订单失败: %w", err)
+	}
+	if order == nil {
+		return nil, fmt.Errorf("订单不存在")
+	}
+	return order, nil
+}
+
+// GetOrderByPaymentNo 根据支付流水号获取订单
+func (s *orderService) GetOrderByPaymentNo(ctx context.Context, paymentNo string) (*model.Order, error) {
+	order, err := s.orderRepo.GetByPaymentNo(ctx, paymentNo)
 	if err != nil {
 		return nil, fmt.Errorf("获取订单失败: %w", err)
 	}

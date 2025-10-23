@@ -5,12 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/auth"
-	"github.com/payment-platform/services/merchant-service/internal/model"
-	"github.com/payment-platform/services/merchant-service/internal/repository"
+	"payment-platform/merchant-service/internal/model"
+	"payment-platform/merchant-service/internal/repository"
 )
 
 // MerchantService 商户服务接口
@@ -33,6 +32,7 @@ type MerchantService interface {
 type merchantService struct {
 	merchantRepo repository.MerchantRepository
 	apiKeyRepo   repository.APIKeyRepository
+	securityRepo repository.SecurityRepository
 	jwtManager   *auth.JWTManager
 }
 
@@ -40,11 +40,13 @@ type merchantService struct {
 func NewMerchantService(
 	merchantRepo repository.MerchantRepository,
 	apiKeyRepo repository.APIKeyRepository,
+	securityRepo repository.SecurityRepository,
 	jwtManager *auth.JWTManager,
 ) MerchantService {
 	return &merchantService{
 		merchantRepo: merchantRepo,
 		apiKeyRepo:   apiKeyRepo,
+		securityRepo: securityRepo,
 		jwtManager:   jwtManager,
 	}
 }
@@ -85,8 +87,10 @@ type RegisterMerchantInput struct {
 
 // LoginResponse 登录响应
 type LoginResponse struct {
-	Token    string           `json:"token"`
-	Merchant *model.Merchant  `json:"merchant"`
+	Token          string          `json:"token,omitempty"`
+	Merchant       *model.Merchant `json:"merchant,omitempty"`
+	Require2FA     bool            `json:"require_2fa"`
+	TempToken      string          `json:"temp_token,omitempty"` // 临时token，用于2FA验证
 }
 
 // Create 创建商户
@@ -283,14 +287,14 @@ func (s *merchantService) Login(ctx context.Context, email, password string) (*L
 	}
 
 	// 生成JWT Token
-	claims := &auth.Claims{
-		UserID:   merchant.ID,
-		Username: merchant.Email,
-		UserType: "merchant",
-		Roles:    []string{"merchant"},
-	}
-
-	token, err := s.jwtManager.GenerateToken(claims, 24*time.Hour)
+	token, err := s.jwtManager.GenerateToken(
+		merchant.ID,
+		merchant.Email,
+		"merchant",
+		&merchant.ID, // tenantID 使用 merchant.ID
+		[]string{"merchant"},
+		[]string{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("生成Token失败: %w", err)
 	}

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/email"
-	"github.com/payment-platform/services/admin-service/internal/model"
-	"github.com/payment-platform/services/admin-service/internal/repository"
+	"payment-platform/admin-service/internal/model"
+	"payment-platform/admin-service/internal/repository"
 )
 
 var (
@@ -254,7 +254,7 @@ func (s *emailTemplateService) SendEmail(ctx context.Context, req *SendEmailRequ
 		log.SentAt = &now
 	}
 
-	s.templateRepo.Update(ctx, log)
+	s.templateRepo.UpdateLog(ctx, log)
 
 	return err
 }
@@ -335,7 +335,7 @@ func (s *emailTemplateService) SendTemplateEmail(ctx context.Context, req *SendT
 		log.SentAt = &now
 	}
 
-	s.templateRepo.Update(ctx, log)
+	s.templateRepo.UpdateLog(ctx, log)
 
 	return err
 }

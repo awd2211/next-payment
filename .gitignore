@@ -30,6 +30,19 @@ go.work.sum
 /dist/
 /build/
 
+# 服务编译产物（与服务同名的二进制文件）
+backend/services/*/admin-service
+backend/services/*/merchant-service
+backend/services/*/payment-gateway
+backend/services/*/order-service
+backend/services/*/channel-adapter
+backend/services/*/risk-service
+backend/services/*/accounting-service
+backend/services/*/notification-service
+backend/services/*/analytics-service
+backend/services/*/config-service
+backend/services/*/main
+
 # 测试覆盖率
 *.cover
 coverage.txt

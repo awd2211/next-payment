@@ -2,11 +2,11 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/admin-service/internal/model"
-	"github.com/payment-platform/services/admin-service/internal/service"
+	"payment-platform/admin-service/internal/service"
 )
 
 // SecurityHandler 安全功能处理器
@@ -21,19 +21,13 @@ func NewSecurityHandler(securityService service.SecurityService) *SecurityHandle
 	}
 }
 
-// ChangePasswordRequest 修改密码请求
-type ChangePasswordRequest struct {
-	OldPassword string `json:"old_password" binding:"required"`
-	NewPassword string `json:"new_password" binding:"required"`
-}
-
 // ChangePassword 修改密码
 // @Summary 修改密码
 // @Tags Security
 // @Accept json
 // @Produce json
 // @Param request body ChangePasswordRequest true "修改密码请求"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/change-password [post]
 func (h *SecurityHandler) ChangePassword(c *gin.Context) {
 	var req ChangePasswordRequest
@@ -116,7 +110,7 @@ type Verify2FARequest struct {
 // @Accept json
 // @Produce json
 // @Param request body Verify2FARequest true "验证2FA请求"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/2fa/verify [post]
 func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 	var req Verify2FARequest
@@ -156,7 +150,7 @@ type Disable2FARequest struct {
 // @Accept json
 // @Produce json
 // @Param request body Disable2FARequest true "禁用2FA请求"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/2fa/disable [post]
 func (h *SecurityHandler) Disable2FA(c *gin.Context) {
 	var req Disable2FARequest
@@ -189,7 +183,7 @@ func (h *SecurityHandler) Disable2FA(c *gin.Context) {
 // @Summary 重新生成备用恢复代码
 // @Tags Security
 // @Produce json
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/2fa/backup-codes [post]
 func (h *SecurityHandler) RegenerateBackupCodes(c *gin.Context) {
 	userID, _ := c.Get("user_id")
@@ -219,7 +213,7 @@ func (h *SecurityHandler) RegenerateBackupCodes(c *gin.Context) {
 // @Tags Security
 // @Produce json
 // @Param limit query int false "记录数量" default(50)
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/login-activities [get]
 func (h *SecurityHandler) GetLoginActivities(c *gin.Context) {
 	userID, _ := c.Get("user_id")
@@ -227,10 +221,9 @@ func (h *SecurityHandler) GetLoginActivities(c *gin.Context) {
 
 	limit := 50
 	if l, ok := c.GetQuery("limit"); ok {
-		if parsedLimit, err := c.GetInt("limit"); err == nil && parsedLimit > 0 {
+		if parsedLimit, err := strconv.Atoi(l); err == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
-		_ = l
 	}
 
 	activities, err := h.securityService.GetLoginActivities(
@@ -254,7 +247,7 @@ func (h *SecurityHandler) GetLoginActivities(c *gin.Context) {
 // @Summary 获取异常登录活动
 // @Tags Security
 // @Produce json
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/abnormal-activities [get]
 func (h *SecurityHandler) GetAbnormalActivities(c *gin.Context) {
 	userID, _ := c.Get("user_id")
@@ -280,7 +273,7 @@ func (h *SecurityHandler) GetAbnormalActivities(c *gin.Context) {
 // @Summary 获取安全设置
 // @Tags Security
 // @Produce json
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/settings [get]
 func (h *SecurityHandler) GetSecuritySettings(c *gin.Context) {
 	userID, _ := c.Get("user_id")
@@ -308,7 +301,7 @@ func (h *SecurityHandler) GetSecuritySettings(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body service.UpdateSecuritySettingsInput true "更新安全设置请求"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/settings [put]
 func (h *SecurityHandler) UpdateSecuritySettings(c *gin.Context) {
 	var req service.UpdateSecuritySettingsInput
@@ -341,7 +334,7 @@ func (h *SecurityHandler) UpdateSecuritySettings(c *gin.Context) {
 // @Summary 获取活跃会话列表
 // @Tags Security
 // @Produce json
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/sessions [get]
 func (h *SecurityHandler) GetActiveSessions(c *gin.Context) {
 	userID, _ := c.Get("user_id")
@@ -374,7 +367,7 @@ type DeactivateSessionRequest struct {
 // @Accept json
 // @Produce json
 // @Param request body DeactivateSessionRequest true "停用会话请求"
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/sessions/deactivate [post]
 func (h *SecurityHandler) DeactivateSession(c *gin.Context) {
 	var req DeactivateSessionRequest
@@ -398,7 +391,7 @@ func (h *SecurityHandler) DeactivateSession(c *gin.Context) {
 // @Summary 停用其他所有会话
 // @Tags Security
 // @Produce json
-// @Success 200 {object} Response
+// @Success 200 {object} map[string]interface{}
 // @Router /api/v1/security/sessions/deactivate-others [post]
 func (h *SecurityHandler) DeactivateAllOtherSessions(c *gin.Context) {
 	userID, _ := c.Get("user_id")

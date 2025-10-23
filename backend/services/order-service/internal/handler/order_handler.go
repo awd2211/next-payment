@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/order-service/internal/repository"
-	"github.com/payment-platform/services/order-service/internal/service"
+	"payment-platform/order-service/internal/repository"
+	"payment-platform/order-service/internal/service"
 )
 
 // OrderHandler 订单处理器
@@ -38,6 +38,7 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine) {
 			orders.POST("/:orderNo/refund", h.RefundOrder)
 			orders.POST("/:orderNo/ship", h.ShipOrder)
 			orders.POST("/:orderNo/complete", h.CompleteOrder)
+			orders.PUT("/:orderNo/status", h.UpdateOrderStatus)
 		}
 
 		// 统计分析
@@ -248,6 +249,38 @@ func (h *OrderHandler) CompleteOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, SuccessResponse(nil))
 }
 
+// UpdateOrderStatus 更新订单状态（支付网关回调使用）
+func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
+	orderNoOrPaymentNo := c.Param("orderNo") // 可以是订单号或支付流水号
+
+	var req UpdateOrderStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse(err.Error()))
+		return
+	}
+
+	// 尝试先按支付流水号查询
+	order, err := h.orderService.GetOrderByPaymentNo(c.Request.Context(), orderNoOrPaymentNo)
+	if err != nil || order == nil {
+		// 如果找不到，再尝试按订单号查询
+		order, err = h.orderService.GetOrder(c.Request.Context(), orderNoOrPaymentNo)
+		if err != nil {
+			c.JSON(http.StatusNotFound, ErrorResponse(err.Error()))
+			return
+		}
+	}
+
+	// 更新订单状态
+	operatorID := uuid.Nil
+	err = h.orderService.UpdateOrderStatus(c.Request.Context(), order.OrderNo, req.Status, operatorID, "system")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse(nil))
+}
+
 // GetOrderStatistics 获取订单统计
 func (h *OrderHandler) GetOrderStatistics(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
@@ -336,6 +369,14 @@ type RefundOrderRequest struct {
 
 type ShipOrderRequest struct {
 	ShippingInfo map[string]interface{} `json:"shipping_info" binding:"required"`
+}
+
+type UpdateOrderStatusRequest struct {
+	Status         string `json:"status" binding:"required"`
+	ChannelOrderNo string `json:"channel_order_no,omitempty"`
+	PaidAt         string `json:"paid_at,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	ErrorMsg       string `json:"error_msg,omitempty"`
 }
 
 // Response structures

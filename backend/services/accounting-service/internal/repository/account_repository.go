@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/accounting-service/internal/model"
+	"payment-platform/accounting-service/internal/model"
 	"gorm.io/gorm"
 )
 

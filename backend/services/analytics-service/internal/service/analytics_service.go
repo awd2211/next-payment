@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/analytics-service/internal/model"
-	"github.com/payment-platform/services/analytics-service/internal/repository"
+	"payment-platform/analytics-service/internal/model"
+	"payment-platform/analytics-service/internal/repository"
 )
 
 // AnalyticsService 分析服务接口

@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/merchant-service/internal/model"
+	"payment-platform/merchant-service/internal/model"
 	"gorm.io/gorm"
 )
 

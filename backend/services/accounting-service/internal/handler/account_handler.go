@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/payment-platform/services/accounting-service/internal/repository"
-	"github.com/payment-platform/services/accounting-service/internal/service"
+	"payment-platform/accounting-service/internal/repository"
+	"payment-platform/accounting-service/internal/service"
 )
 
 // AccountHandler 账户处理器
