@@ -9,6 +9,7 @@ import Transactions from './pages/Transactions'
 import Orders from './pages/Orders'
 import Account from './pages/Account'
 import CreatePayment from './pages/CreatePayment'
+import Refunds from './pages/Refunds'
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
           <Route path="create-payment" element={<CreatePayment />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="refunds" element={<Refunds />} />
           <Route path="account" element={<Account />} />
         </Route>
       </Routes>

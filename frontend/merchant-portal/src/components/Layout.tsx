@@ -18,6 +18,7 @@ import {
   LogoutOutlined,
   WalletOutlined,
   PlusCircleOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -59,6 +60,11 @@ const Layout = () => {
       key: '/orders',
       icon: <ShoppingOutlined />,
       label: t('menu.orders'),
+    },
+    {
+      key: '/refunds',
+      icon: <RollbackOutlined />,
+      label: t('menu.refunds'),
     },
     {
       key: '/account',
