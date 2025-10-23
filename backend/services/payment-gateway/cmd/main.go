@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -8,8 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
+	"github.com/payment-platform/pkg/health"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"payment-platform/payment-gateway/internal/client"
 	"payment-platform/payment-gateway/internal/handler"
 	localMiddleware "payment-platform/payment-gateway/internal/middleware"
@@ -90,6 +95,32 @@ func main() {
 	}
 	logger.Info("Redis连接成功")
 
+	// 初始化 Prometheus 指标
+	httpMetrics := metrics.NewHTTPMetrics("payment_gateway")
+	paymentMetrics := metrics.NewPaymentMetrics("payment_gateway")
+	logger.Info("Prometheus 指标初始化完成")
+
+	// 初始化 Jaeger 分布式追踪
+	jaegerEndpoint := config.GetEnv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
+	samplingRate := float64(config.GetEnvInt("JAEGER_SAMPLING_RATE", 100)) / 100.0 // 默认 100% 采样
+	tracerShutdown, err := tracing.InitTracer(tracing.Config{
+		ServiceName:    "payment-gateway",
+		ServiceVersion: "1.0.0",
+		Environment:    env,
+		JaegerEndpoint: jaegerEndpoint,
+		SamplingRate:   samplingRate,
+	})
+	if err != nil {
+		logger.Error(fmt.Sprintf("Jaeger 初始化失败: %v", err))
+	} else {
+		logger.Info("Jaeger 追踪初始化完成")
+		defer func() {
+			if err := tracerShutdown(context.Background()); err != nil {
+				logger.Error(fmt.Sprintf("Jaeger shutdown 失败: %v", err))
+			}
+		}()
+	}
+
 	// 初始化Repository
 	paymentRepo := repository.NewPaymentRepository(database)
 
@@ -114,6 +145,7 @@ func main() {
 		channelClient,
 		riskClient,
 		redisClient,
+		paymentMetrics, // 添加 Prometheus 指标
 	)
 
 	// 初始化Handler
@@ -126,6 +158,29 @@ func main() {
 		return "test-secret-key", nil
 	})
 
+	// 初始化健康检查器
+	healthChecker := health.NewHealthChecker()
+
+	// 注册数据库健康检查
+	healthChecker.Register(health.NewDBChecker("database", database))
+
+	// 注册Redis健康检查
+	healthChecker.Register(health.NewRedisChecker("redis", redisClient))
+
+	// 注册下游服务健康检查
+	if orderServiceURL != "" {
+		healthChecker.Register(health.NewServiceHealthChecker("order-service", orderServiceURL))
+	}
+	if channelServiceURL != "" {
+		healthChecker.Register(health.NewServiceHealthChecker("channel-adapter", channelServiceURL))
+	}
+	if riskServiceURL != "" {
+		healthChecker.Register(health.NewServiceHealthChecker("risk-service", riskServiceURL))
+	}
+
+	// 创建健康检查处理器
+	healthHandler := health.NewGinHandler(healthChecker)
+
 	// 初始化Gin
 	if env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -135,23 +190,24 @@ func main() {
 	// 全局中间件
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
+	r.Use(tracing.TracingMiddleware("payment-gateway"))     // Jaeger 分布式追踪
 	r.Use(middleware.Logger(logger.Log))
+	r.Use(metrics.PrometheusMiddleware(httpMetrics)) // Prometheus HTTP 指标收集
 
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
 
-	// 健康检查
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":  "ok",
-			"service": "payment-gateway",
-			"time":    time.Now().Unix(),
-		})
+	// Prometheus 指标端点
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// 健康检查端点
+	r.GET("/health", healthHandler.Handle)           // 完整健康检查
+	r.GET("/health/live", healthHandler.HandleLiveness)    // 存活探针（Kubernetes）
+	r.GET("/health/ready", healthHandler.HandleReadiness)  // 就绪探针（Kubernetes）
+
 	// Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
-	})
 
 	// 注册支付路由
 	// 公开路由（Webhook回调，不需要签名验证）
