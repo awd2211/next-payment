@@ -16,6 +16,7 @@ import (
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"payment-platform/channel-adapter/internal/adapter"
+	"payment-platform/channel-adapter/internal/client"
 	"payment-platform/channel-adapter/internal/handler"
 	"payment-platform/channel-adapter/internal/model"
 	"payment-platform/channel-adapter/internal/repository"
@@ -169,6 +170,11 @@ func main() {
 		}
 	}
 
+	// 初始化汇率客户端（用于 Crypto 适配器的法币转换）
+	exchangeRateCacheTTL := time.Duration(config.GetEnvInt("EXCHANGE_RATE_CACHE_TTL", 3600)) * time.Second
+	exchangeRateClient := client.NewExchangeRateClient(redisClient, exchangeRateCacheTTL)
+	logger.Info("汇率客户端初始化完成 (exchangerate-api.com)")
+
 	// 注册加密货币适配器
 	cryptoWallet := config.GetEnv("CRYPTO_WALLET_ADDRESS", "")
 	if cryptoWallet != "" {
@@ -186,7 +192,7 @@ func main() {
 			APIEndpoint:   config.GetEnv("CRYPTO_API_ENDPOINT", ""),
 			APIKey:        config.GetEnv("CRYPTO_API_KEY", ""),
 		}
-		cryptoAdapter := adapter.NewCryptoAdapter(cryptoConfig)
+		cryptoAdapter := adapter.NewCryptoAdapter(cryptoConfig, exchangeRateClient)
 		adapterFactory.Register(model.ChannelCrypto, cryptoAdapter)
 		logger.Info(fmt.Sprintf("Crypto 适配器已注册，支持网络: %s", networksStr))
 	}
