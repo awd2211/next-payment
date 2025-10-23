@@ -76,6 +76,8 @@ func main() {
 		&model.ChannelConfig{},
 		&model.Transaction{},
 		&model.WebhookLog{},
+		&model.ExchangeRate{},
+		&model.ExchangeRateSnapshot{},
 	); err != nil {
 		logger.Fatal("数据库迁移失败")
 		log.Fatalf("Error: %v", err)
@@ -170,10 +172,17 @@ func main() {
 		}
 	}
 
+	// 初始化汇率存储仓库
+	exchangeRateRepo := repository.NewExchangeRateRepository(database)
+
 	// 初始化汇率客户端（用于 Crypto 适配器的法币转换）
 	exchangeRateCacheTTL := time.Duration(config.GetEnvInt("EXCHANGE_RATE_CACHE_TTL", 3600)) * time.Second
-	exchangeRateClient := client.NewExchangeRateClient(redisClient, exchangeRateCacheTTL)
-	logger.Info("汇率客户端初始化完成 (exchangerate-api.com)")
+	exchangeRateClient := client.NewExchangeRateClient(redisClient, exchangeRateRepo, exchangeRateCacheTTL)
+	logger.Info("汇率客户端初始化完成 (exchangerate-api.com + 历史存储)")
+
+	// 启动汇率定期更新任务（默认每2小时更新一次）
+	exchangeRateUpdateInterval := time.Duration(config.GetEnvInt("EXCHANGE_RATE_UPDATE_INTERVAL", 7200)) * time.Second
+	exchangeRateClient.StartPeriodicUpdate(context.Background(), exchangeRateUpdateInterval)
 
 	// 注册加密货币适配器
 	cryptoWallet := config.GetEnv("CRYPTO_WALLET_ADDRESS", "")

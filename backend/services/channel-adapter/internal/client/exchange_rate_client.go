@@ -10,6 +10,8 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"payment-platform/channel-adapter/internal/model"
+	"payment-platform/channel-adapter/internal/repository"
 )
 
 // ExchangeRateClient 汇率API客户端
@@ -17,6 +19,7 @@ type ExchangeRateClient struct {
 	baseURL    string
 	httpClient *http.Client
 	redis      *redis.Client
+	repo       repository.ExchangeRateRepository
 	cacheTTL   time.Duration
 }
 
@@ -35,13 +38,14 @@ type ExchangeRateResponse struct {
 
 // NewExchangeRateClient 创建汇率API客户端
 // 使用 exchangerate-api.com 免费版（1500次/月）
-func NewExchangeRateClient(redis *redis.Client, cacheTTL time.Duration) *ExchangeRateClient {
+func NewExchangeRateClient(redis *redis.Client, repo repository.ExchangeRateRepository, cacheTTL time.Duration) *ExchangeRateClient {
 	return &ExchangeRateClient{
 		baseURL: "https://api.exchangerate-api.com/v4/latest",
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 		redis:    redis,
+		repo:     repo,
 		cacheTTL: cacheTTL,
 	}
 }
@@ -124,6 +128,22 @@ func (c *ExchangeRateClient) GetRates(ctx context.Context, baseCurrency string) 
 	// 写入缓存
 	if data, err := json.Marshal(rates); err == nil {
 		c.redis.Set(ctx, cacheKey, string(data), c.cacheTTL)
+	}
+
+	// 保存历史快照到数据库（如果配置了repository）
+	if c.repo != nil {
+		snapshot := &model.ExchangeRateSnapshot{
+			BaseCurrency: baseCurrency,
+			Rates:        rates,
+			Source:       "exchangerate-api",
+			SnapshotTime: time.Now(),
+		}
+		if err := c.repo.SaveSnapshot(ctx, snapshot); err != nil {
+			logger.Warn("保存汇率快照失败",
+				zap.String("base", baseCurrency),
+				zap.Error(err))
+			// 不影响正常返回
+		}
 	}
 
 	return rates, nil
@@ -233,4 +253,131 @@ func (c *ExchangeRateClient) SupportedCurrencies() []string {
 		"ILS", "PLN", "CZK", "HUF", "RON", "DKK", "SEK", "NOK",
 		"TWD", "NZD", "ARS", "CLP", "COP", "PEN",
 	}
+}
+
+// PreloadRates 预加载常用货币对的汇率到缓存
+// 这个方法可以在服务启动时或定期调用，以确保缓存中有最新的汇率数据
+func (c *ExchangeRateClient) PreloadRates(ctx context.Context) error {
+	// 定义需要预加载的基准货币
+	baseCurrencies := []string{"USD", "EUR", "CNY", "GBP", "JPY"}
+
+	successCount := 0
+	failureCount := 0
+
+	for _, base := range baseCurrencies {
+		rates, err := c.GetRates(ctx, base)
+		if err != nil {
+			logger.Error("预加载汇率失败",
+				zap.String("base", base),
+				zap.Error(err))
+			failureCount++
+			continue
+		}
+
+		// 统计成功缓存的货币对数量
+		successCount += len(rates)
+		logger.Info("预加载汇率成功",
+			zap.String("base", base),
+			zap.Int("pairs", len(rates)))
+	}
+
+	logger.Info("汇率预加载完成",
+		zap.Int("success_pairs", successCount),
+		zap.Int("failed_bases", failureCount))
+
+	if failureCount == len(baseCurrencies) {
+		return fmt.Errorf("所有基准货币汇率获取失败")
+	}
+
+	return nil
+}
+
+// StartPeriodicUpdate 启动定期更新任务
+// interval: 更新间隔（建议 1-6 小时）
+func (c *ExchangeRateClient) StartPeriodicUpdate(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+
+	// 启动时立即执行一次
+	if err := c.PreloadRates(ctx); err != nil {
+		logger.Error("初始汇率预加载失败", zap.Error(err))
+	}
+
+	go func() {
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				logger.Info("开始定期更新汇率...")
+				if err := c.PreloadRates(ctx); err != nil {
+					logger.Error("定期汇率更新失败", zap.Error(err))
+				}
+			case <-ctx.Done():
+				logger.Info("汇率定期更新任务已停止")
+				return
+			}
+		}
+	}()
+
+	logger.Info("汇率定期更新任务已启动",
+		zap.Duration("interval", interval))
+}
+
+// GetHistoricalRate 获取历史汇率（从数据库查询）
+// 如果没有配置repository，返回错误
+func (c *ExchangeRateClient) GetHistoricalRate(ctx context.Context, from, to string, timestamp time.Time) (float64, error) {
+	if c.repo == nil {
+		return 0, fmt.Errorf("未配置汇率历史存储")
+	}
+
+	rate, err := c.repo.GetRateAtTime(ctx, from, to, timestamp)
+	if err != nil {
+		return 0, fmt.Errorf("查询历史汇率失败: %w", err)
+	}
+
+	if rate == nil {
+		return 0, fmt.Errorf("未找到 %s 的历史汇率", timestamp.Format("2006-01-02 15:04:05"))
+	}
+
+	return rate.Rate, nil
+}
+
+// GetRateHistory 获取汇率历史记录
+func (c *ExchangeRateClient) GetRateHistory(ctx context.Context, from, to string, startTime, endTime time.Time) ([]model.ExchangeRate, error) {
+	if c.repo == nil {
+		return nil, fmt.Errorf("未配置汇率历史存储")
+	}
+
+	rates, err := c.repo.GetRateHistory(ctx, from, to, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("查询汇率历史失败: %w", err)
+	}
+
+	// 将指针切片转换为值切片
+	result := make([]model.ExchangeRate, len(rates))
+	for i, rate := range rates {
+		result[i] = *rate
+	}
+
+	return result, nil
+}
+
+// GetSnapshotHistory 获取汇率快照历史
+func (c *ExchangeRateClient) GetSnapshotHistory(ctx context.Context, baseCurrency string, startTime, endTime time.Time) ([]model.ExchangeRateSnapshot, error) {
+	if c.repo == nil {
+		return nil, fmt.Errorf("未配置汇率历史存储")
+	}
+
+	snapshots, err := c.repo.GetSnapshotHistory(ctx, baseCurrency, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("查询快照历史失败: %w", err)
+	}
+
+	// 将指针切片转换为值切片
+	result := make([]model.ExchangeRateSnapshot, len(snapshots))
+	for i, snapshot := range snapshots {
+		result[i] = *snapshot
+	}
+
+	return result, nil
 }

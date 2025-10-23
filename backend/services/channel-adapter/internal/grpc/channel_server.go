@@ -37,12 +37,11 @@ func (s *ChannelServer) CreatePayment(ctx context.Context, req *pb.CreatePayment
 		Channel:       req.Channel,
 		Amount:        req.Amount,
 		Currency:      req.Currency,
-		PayMethod:     req.PayMethod,
 		CustomerEmail: req.CustomerEmail,
 		CustomerName:  req.CustomerName,
 		Description:   req.Description,
-		ReturnURL:     req.ReturnUrl,
-		NotifyURL:     req.NotifyUrl,
+		SuccessURL:    req.ReturnUrl,
+		CallbackURL:   req.NotifyUrl,
 	}
 
 	resp, err := s.channelService.CreatePayment(ctx, input)
@@ -51,7 +50,7 @@ func (s *ChannelServer) CreatePayment(ctx context.Context, req *pb.CreatePayment
 	}
 
 	return &pb.CreatePaymentResponse{
-		ChannelOrderNo: resp.ChannelOrderNo,
+		ChannelOrderNo: resp.ChannelTradeNo,
 		PaymentUrl:     resp.PaymentURL,
 		ClientSecret:   resp.ClientSecret,
 		Status:         resp.Status,
@@ -71,13 +70,13 @@ func (s *ChannelServer) QueryPayment(ctx context.Context, req *pb.QueryPaymentRe
 	}
 
 	return &pb.QueryPaymentResponse{
-		ChannelOrderNo: resp.ChannelOrderNo,
+		ChannelOrderNo: resp.ChannelTradeNo,
 		Status:         resp.Status,
 		Amount:         resp.Amount,
 		Currency:       resp.Currency,
 		PaidAt:         paidAt,
-		FailureCode:    resp.FailureCode,
-		FailureMessage: resp.FailureMessage,
+		FailureCode:    "",
+		FailureMessage: "",
 	}, nil
 }
 
@@ -89,13 +88,12 @@ func (s *ChannelServer) CancelPayment(ctx context.Context, req *pb.CancelPayment
 // CreateRefund 创建退款
 func (s *ChannelServer) CreateRefund(ctx context.Context, req *pb.CreateRefundRequest) (*pb.CreateRefundResponse, error) {
 	input := &service.CreateRefundRequest{
-		PaymentNo:      req.PaymentNo,
-		RefundNo:       req.RefundNo,
-		Channel:        req.Channel,
-		ChannelOrderNo: req.ChannelOrderNo,
-		Amount:         req.Amount,
-		Currency:       req.Currency,
-		Reason:         req.Reason,
+		MerchantID: uuid.Nil, // Service layer will retrieve from payment record
+		PaymentNo:  req.PaymentNo,
+		RefundNo:   req.RefundNo,
+		Amount:     req.Amount,
+		Currency:   req.Currency,
+		Reason:     req.Reason,
 	}
 
 	resp, err := s.channelService.CreateRefund(ctx, input)
@@ -103,15 +101,10 @@ func (s *ChannelServer) CreateRefund(ctx context.Context, req *pb.CreateRefundRe
 		return nil, status.Errorf(codes.Internal, "创建退款失败: %v", err)
 	}
 
-	var refundedAt *timestamppb.Timestamp
-	if resp.RefundedAt != nil {
-		refundedAt = timestamppb.New(*resp.RefundedAt)
-	}
-
 	return &pb.CreateRefundResponse{
 		ChannelRefundNo: resp.ChannelRefundNo,
 		Status:          resp.Status,
-		RefundedAt:      refundedAt,
+		RefundedAt:      nil,
 	}, nil
 }
 
