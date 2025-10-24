@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -8,7 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
+	"go.uber.org/zap"
 	"payment-platform/payment-gateway/internal/repository"
 	"payment-platform/payment-gateway/internal/service"
 )
@@ -29,7 +32,7 @@ func NewPaymentHandler(paymentService service.PaymentService) *PaymentHandler {
 func (h *PaymentHandler) RegisterRoutes(router *gin.Engine) {
 	v1 := router.Group("/api/v1")
 	{
-		// 支付管理
+		// 支付管理（外部API，需要API Key）
 		payments := v1.Group("/payments")
 		{
 			payments.POST("", h.CreatePayment)
@@ -38,12 +41,25 @@ func (h *PaymentHandler) RegisterRoutes(router *gin.Engine) {
 			payments.POST("/:paymentNo/cancel", h.CancelPayment)
 		}
 
-		// 退款管理
+		// 退款管理（外部API，需要API Key）
 		refunds := v1.Group("/refunds")
 		{
 			refunds.POST("", h.CreateRefund)
 			refunds.GET("/:refundNo", h.GetRefund)
 			refunds.GET("", h.QueryRefunds)
+		}
+
+		// 商户后台查询路由（使用JWT认证）
+		merchantPayments := v1.Group("/merchant/payments")
+		{
+			merchantPayments.GET("", h.QueryPayments)
+			merchantPayments.GET("/:paymentNo", h.GetPayment)
+		}
+
+		merchantRefunds := v1.Group("/merchant/refunds")
+		{
+			merchantRefunds.GET("", h.QueryRefunds)
+			merchantRefunds.GET("/:refundNo", h.GetRefund)
 		}
 
 		// 回调处理
@@ -56,6 +72,18 @@ func (h *PaymentHandler) RegisterRoutes(router *gin.Engine) {
 }
 
 // CreatePayment 创建支付
+//
+//	@Summary		创建支付
+//	@Description	创建支付订单，支持Stripe、PayPal等多种支付渠道
+//	@Tags			Payments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		service.CreatePaymentInput	true	"支付创建请求"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/payments [post]
 func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	var input service.CreatePaymentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -87,6 +115,18 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 }
 
 // GetPayment 获取支付详情
+//
+//	@Summary		获取支付详情
+//	@Description	根据支付流水号获取支付详情
+//	@Tags			Payments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			paymentNo	path		string	true	"支付流水号"
+//	@Success		200			{object}	Response
+//	@Failure		404			{object}	Response
+//	@Failure		500			{object}	Response
+//	@Router			/payments/{paymentNo} [get]
 func (h *PaymentHandler) GetPayment(c *gin.Context) {
 	paymentNo := c.Param("paymentNo")
 
@@ -110,6 +150,29 @@ func (h *PaymentHandler) GetPayment(c *gin.Context) {
 }
 
 // QueryPayments 查询支付列表
+//
+//	@Summary		查询支付列表
+//	@Description	根据条件查询支付列表，支持分页和多维度筛选
+//	@Tags			Payments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			merchant_id		query		string	false	"商户ID"
+//	@Param			channel			query		string	false	"支付渠道 (stripe/paypal)"
+//	@Param			status			query		string	false	"支付状态 (pending/success/failed/cancelled)"
+//	@Param			currency		query		string	false	"货币类型 (USD/EUR/CNY)"
+//	@Param			customer_email	query		string	false	"客户邮箱"
+//	@Param			keyword			query		string	false	"关键词搜索（订单号/支付号）"
+//	@Param			start_time		query		string	false	"开始时间 (RFC3339格式)"
+//	@Param			end_time		query		string	false	"结束时间 (RFC3339格式)"
+//	@Param			min_amount		query		int		false	"最小金额（分）"
+//	@Param			max_amount		query		int		false	"最大金额（分）"
+//	@Param			page			query		int		false	"页码"	default(1)
+//	@Param			page_size		query		int		false	"每页数量"	default(20)
+//	@Success		200				{object}	Response
+//	@Failure		400				{object}	Response
+//	@Failure		500				{object}	Response
+//	@Router			/payments [get]
 func (h *PaymentHandler) QueryPayments(c *gin.Context) {
 	query := &repository.PaymentQuery{
 		Channel:       c.Query("channel"),
@@ -119,16 +182,42 @@ func (h *PaymentHandler) QueryPayments(c *gin.Context) {
 		Keyword:       c.Query("keyword"),
 	}
 
+	// 从query参数获取merchant_id（外部API调用方式）
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
+		logger.Info("Parsing merchant_id from query parameter",
+			zap.String("merchant_id_str", merchantIDStr))
 		merchantID, err := uuid.Parse(merchantIDStr)
 		if err != nil {
 			traceID := middleware.GetRequestID(c)
+			logger.Error("Failed to parse merchant_id",
+				zap.String("merchant_id_str", merchantIDStr),
+				zap.Error(err))
 			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).
 				WithTraceID(traceID)
 			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
 		query.MerchantID = &merchantID
+	}
+
+	// 从JWT token获取merchant_id（商户后台调用方式）
+	if query.MerchantID == nil {
+		if userID, exists := c.Get("user_id"); exists {
+			logger.Info("Got user_id from context",
+				zap.Any("user_id", userID),
+				zap.String("user_id_type", fmt.Sprintf("%T", userID)))
+			if merchantID, ok := userID.(uuid.UUID); ok {
+				query.MerchantID = &merchantID
+				logger.Info("Set merchant_id from JWT token",
+					zap.String("merchant_id", merchantID.String()))
+			} else {
+				logger.Warn("Failed to cast user_id to UUID",
+					zap.Any("user_id", userID),
+					zap.String("user_id_type", fmt.Sprintf("%T", userID)))
+			}
+		} else {
+			logger.Warn("user_id not found in context")
+		}
 	}
 
 	if startTimeStr := c.Query("start_time"); startTimeStr != "" {
@@ -185,6 +274,19 @@ func (h *PaymentHandler) QueryPayments(c *gin.Context) {
 }
 
 // CancelPayment 取消支付
+//
+//	@Summary		取消支付
+//	@Description	取消待支付的支付订单
+//	@Tags			Payments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			paymentNo	path		string					true	"支付流水号"
+//	@Param			request		body		CancelPaymentRequest	true	"取消原因"
+//	@Success		200			{object}	Response
+//	@Failure		400			{object}	Response
+//	@Failure		500			{object}	Response
+//	@Router			/payments/{paymentNo}/cancel [post]
 func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 	paymentNo := c.Param("paymentNo")
 
@@ -216,6 +318,18 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 }
 
 // CreateRefund 创建退款
+//
+//	@Summary		创建退款
+//	@Description	为已支付的订单创建退款申请
+//	@Tags			Refunds
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		service.CreateRefundInput	true	"退款创建请求"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/refunds [post]
 func (h *PaymentHandler) CreateRefund(c *gin.Context) {
 	var input service.CreateRefundInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -246,6 +360,18 @@ func (h *PaymentHandler) CreateRefund(c *gin.Context) {
 }
 
 // GetRefund 获取退款详情
+//
+//	@Summary		获取退款详情
+//	@Description	根据退款流水号获取退款详情
+//	@Tags			Refunds
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			refundNo	path		string	true	"退款流水号"
+//	@Success		200			{object}	Response
+//	@Failure		404			{object}	Response
+//	@Failure		500			{object}	Response
+//	@Router			/refunds/{refundNo} [get]
 func (h *PaymentHandler) GetRefund(c *gin.Context) {
 	refundNo := c.Param("refundNo")
 
@@ -269,6 +395,24 @@ func (h *PaymentHandler) GetRefund(c *gin.Context) {
 }
 
 // QueryRefunds 查询退款列表
+//
+//	@Summary		查询退款列表
+//	@Description	根据条件查询退款列表，支持分页和多维度筛选
+//	@Tags			Refunds
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			merchant_id	query		string	false	"商户ID"
+//	@Param			payment_id	query		string	false	"支付ID"
+//	@Param			status		query		string	false	"退款状态 (pending/success/failed)"
+//	@Param			start_time	query		string	false	"开始时间 (RFC3339格式)"
+//	@Param			end_time	query		string	false	"结束时间 (RFC3339格式)"
+//	@Param			page		query		int		false	"页码"	default(1)
+//	@Param			page_size	query		int		false	"每页数量"	default(20)
+//	@Success		200			{object}	Response
+//	@Failure		400			{object}	Response
+//	@Failure		500			{object}	Response
+//	@Router			/refunds [get]
 func (h *PaymentHandler) QueryRefunds(c *gin.Context) {
 	query := &repository.RefundQuery{
 		Status: c.Query("status"),
@@ -339,6 +483,17 @@ func (h *PaymentHandler) QueryRefunds(c *gin.Context) {
 }
 
 // HandleStripeWebhook 处理Stripe回调
+//
+//	@Summary		处理Stripe Webhook
+//	@Description	接收并处理Stripe支付网关的异步通知
+//	@Tags			Webhooks
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		map[string]interface{}	true	"Stripe webhook payload"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/webhooks/stripe [post]
 func (h *PaymentHandler) HandleStripeWebhook(c *gin.Context) {
 	var data map[string]interface{}
 	if err := c.ShouldBindJSON(&data); err != nil {
@@ -368,6 +523,17 @@ func (h *PaymentHandler) HandleStripeWebhook(c *gin.Context) {
 }
 
 // HandlePayPalWebhook 处理PayPal回调
+//
+//	@Summary		处理PayPal Webhook
+//	@Description	接收并处理PayPal支付网关的异步通知
+//	@Tags			Webhooks
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		map[string]interface{}	true	"PayPal webhook payload"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/webhooks/paypal [post]
 func (h *PaymentHandler) HandlePayPalWebhook(c *gin.Context) {
 	var data map[string]interface{}
 	if err := c.ShouldBindJSON(&data); err != nil {

@@ -54,6 +54,7 @@ func main() {
 		EnableGRPC:        false, // 系统使用 HTTP/REST 通信,不需要 gRPC
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 
 		// gRPC 端口 (已禁用)
 		// GRPCPort: config.GetEnvInt("GRPC_PORT", 50015),

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/saga"
 	"payment-platform/settlement-service/internal/client"
 	"payment-platform/settlement-service/internal/handler"
 	"payment-platform/settlement-service/internal/model"
@@ -55,6 +57,7 @@ func main() {
 		// GRPCPort:          config.GetEnvInt("GRPC_PORT", 50013), // 已禁用
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 
 		RateLimitRequests: 100,
 		RateLimitWindow:   time.Minute,
@@ -82,7 +85,24 @@ func main() {
 
 	logger.Info("HTTP客户端初始化完成")
 
-	// 4. 初始化Kafka EventPublisher (新增: 事件驱动架构)
+	// 4. 初始化 Saga Orchestrator（分布式事务补偿）
+	sagaOrchestrator := saga.NewSagaOrchestratorWithMetrics(
+		application.DB,
+		application.Redis,
+		"settlement_service", // Prometheus namespace
+	)
+	logger.Info("Saga Orchestrator 初始化完成（带 Prometheus 指标）")
+
+	// 启动Saga恢复工作器（自动重试失败的结算Saga）
+	recoveryWorker := saga.NewRecoveryWorker(
+		sagaOrchestrator,
+		5*time.Minute, // 每5分钟扫描一次失败的Saga
+		10,            // 每次处理10个失败Saga
+	)
+	go recoveryWorker.Start(context.Background())
+	logger.Info("Saga Recovery Worker 已启动")
+
+	// 5. 初始化Kafka EventPublisher (新增: 事件驱动架构)
 	var eventPublisher *kafka.EventPublisher
 	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
 	if kafkaBrokersStr != "" {
@@ -93,7 +113,7 @@ func main() {
 		logger.Info("Settlement: 未配置Kafka Brokers, 事件发布器未启动 (HTTP降级模式)")
 	}
 
-	// 5. 初始化Service
+	// 6. 初始化Service
 	settlementService := service.NewSettlementService(
 		application.DB,
 		settlementRepo,
@@ -104,6 +124,16 @@ func main() {
 		eventPublisher,
 	)
 	settlementAccountService := service.NewSettlementAccountService(settlementAccountRepo)
+
+	// 初始化 Settlement Saga Service（结算执行 Saga 编排）
+	settlementSagaService := service.NewSettlementSagaService(
+		sagaOrchestrator,
+		settlementRepo,
+		merchantClient,
+		withdrawalClient,
+	)
+	_ = settlementSagaService // TODO: 集成到 settlementService 的结算执行流程
+	logger.Info("Settlement Saga Service 初始化完成")
 
 	// 6. 初始化Handler
 	settlementHandler := handler.NewSettlementHandler(settlementService)

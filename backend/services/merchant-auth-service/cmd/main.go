@@ -58,6 +58,7 @@ func main() {
 		// GRPCPort:          config.GetEnvInt("GRPC_PORT", 50011), // 已禁用
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 
 		RateLimitRequests: 100,
 		RateLimitWindow:   time.Minute,

@@ -57,27 +57,27 @@ export interface ListPaymentsResponse {
 
 export const paymentService = {
   list: (params: ListPaymentsParams) => {
-    return request.get<ListPaymentsResponse>('/payments', { params })
+    return request.get<ListPaymentsResponse>('/merchant/payments', { params })
   },
 
   getById: (id: string) => {
-    return request.get(`/payments/${id}`)
+    return request.get(`/merchant/payments/${id}`)
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return request.get<{ data: PaymentStats }>('/payments/stats', { params })
+    return request.get<{ data: PaymentStats }>('/merchant/payments/stats', { params })
   },
 
   refund: (id: string, data: { amount?: number; reason: string }) => {
-    return request.post(`/payments/${id}/refund`, data)
+    return request.post(`/merchant/payments/${id}/refund`, data)
   },
 
   cancel: (id: string, reason: string) => {
-    return request.post(`/payments/${id}/cancel`, { reason })
+    return request.post(`/merchant/payments/${id}/cancel`, { reason })
   },
 
   export: (params: ListPaymentsParams) => {
-    return request.get('/payments/export', {
+    return request.get('/merchant/payments/export', {
       params,
       responseType: 'blob',
     })

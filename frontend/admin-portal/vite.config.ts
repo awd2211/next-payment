@@ -178,6 +178,10 @@ export default defineConfig({
       },
 
       // Merchant Service (商户管理)
+      '/api/v1/merchant': {
+        target: 'http://localhost:40002',
+        changeOrigin: true,
+      },
       '/api/v1/merchants': {
         target: 'http://localhost:40002',
         changeOrigin: true,
@@ -224,6 +228,16 @@ export default defineConfig({
       },
       '/api/v1/feature-flags': {
         target: 'http://localhost:40010',
+        changeOrigin: true,
+      },
+
+      // Cashier Service (收银台)
+      '/api/v1/admin/cashier': {
+        target: 'http://localhost:40016',
+        changeOrigin: true,
+      },
+      '/api/v1/cashier': {
+        target: 'http://localhost:40016',
         changeOrigin: true,
       },
     },

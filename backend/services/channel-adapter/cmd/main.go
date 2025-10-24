@@ -61,6 +61,7 @@ func main() {
 		EnableGRPC:        false, // 默认关闭 gRPC,使用 HTTP 通信
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 
 		// 速率限制配置
 		RateLimitRequests: 100,

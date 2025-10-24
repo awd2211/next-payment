@@ -88,3 +88,37 @@ lint:
 	@echo "Running linter..."
 	@golangci-lint run ./...
 	@echo "Lint completed!"
+
+# 生成 Swagger 文档
+swagger-docs:
+	@echo "Generating Swagger documentation for all services..."
+	@for service in admin-service merchant-service payment-gateway order-service channel-adapter \
+		risk-service accounting-service notification-service analytics-service config-service \
+		merchant-auth-service settlement-service withdrawal-service kyc-service cashier-service; do \
+		if [ -f "services/$$service/cmd/main.go" ]; then \
+			echo "Generating swagger docs for $$service..."; \
+			cd services/$$service && \
+			mkdir -p api-docs && \
+			$(HOME)/go/bin/swag init -g cmd/main.go -o ./api-docs --parseDependency --parseInternal 2>&1 && \
+			echo "✓ $$service swagger docs generated" || echo "✗ $$service swagger generation failed"; \
+			cd ../..; \
+		fi; \
+	done
+	@echo "Swagger documentation generation completed!"
+	@echo ""
+	@echo "Access Swagger UI at:"
+	@echo "  - Admin Service:        http://localhost:40001/swagger/index.html"
+	@echo "  - Merchant Service:     http://localhost:40002/swagger/index.html"
+	@echo "  - Payment Gateway:      http://localhost:40003/swagger/index.html"
+	@echo "  - Order Service:        http://localhost:40004/swagger/index.html"
+	@echo "  - Channel Adapter:      http://localhost:40005/swagger/index.html"
+	@echo "  - Risk Service:         http://localhost:40006/swagger/index.html"
+	@echo "  - Accounting Service:   http://localhost:40007/swagger/index.html"
+	@echo "  - Notification Service: http://localhost:40008/swagger/index.html"
+	@echo "  - Analytics Service:    http://localhost:40009/swagger/index.html"
+
+# 安装 Swagger CLI 工具
+install-swagger:
+	@echo "Installing swag CLI tool..."
+	@go install github.com/swaggo/swag/cmd/swag@latest
+	@echo "Swag CLI installed at $(HOME)/go/bin/swag"

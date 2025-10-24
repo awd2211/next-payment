@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"payment-platform/merchant-service/internal/service"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/errors"
 	"github.com/payment-platform/pkg/middleware"
-	"payment-platform/merchant-service/internal/service"
 )
 
 // MerchantHandler 商户处理器
@@ -579,8 +580,46 @@ func (h *MerchantHandler) UpdatePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// GetBalance 获取商户余额（临时占位API）
+// @Summary 获取商户余额
+// @Tags Merchant
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/merchant/balance [get]
+func (h *MerchantHandler) GetBalance(c *gin.Context) {
+	// TODO: 从 accounting-service 获取真实余额数据
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
+		"available_balance": 0,
+		"frozen_balance":    0,
+		"total_balance":     0,
+		"currency":          "USD",
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// GetStats 获取商户统计（临时占位API）
+// @Summary 获取商户统计
+// @Tags Merchant
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/merchant/stats [get]
+func (h *MerchantHandler) GetStats(c *gin.Context) {
+	// TODO: 从 analytics-service 和 payment-gateway 聚合真实统计数据
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
+		"total_transactions": 0,
+		"total_amount":       0,
+		"success_rate":       0,
+		"today_transactions": 0,
+		"today_amount":       0,
+		"this_month_amount":  0,
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
 // RegisterRoutes 注册路由
-func (h *MerchantHandler) RegisterRoutes(r *gin.RouterGroup) {
+func (h *MerchantHandler) RegisterRoutes(r *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
 	// 公开路由（无需认证）
 	public := r.Group("/merchant")
 	{
@@ -590,15 +629,19 @@ func (h *MerchantHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 	// 需要认证的商户路由
 	merchant := r.Group("/merchant")
-	// merchant.Use(middleware.AuthMiddleware()) // 需要添加认证中间件
+	merchant.Use(authMiddleware) // 启用认证中间件
 	{
 		merchant.GET("/profile", h.GetProfile)
 		merchant.PUT("/profile", h.UpdateProfile)
+
+		// 临时占位API：balance 和 stats（应该从其他服务聚合数据）
+		merchant.GET("/balance", h.GetBalance)
+		merchant.GET("/stats", h.GetStats)
 	}
 
 	// 管理员路由（需要管理员权限）
 	admin := r.Group("/merchant")
-	// admin.Use(middleware.AdminAuthMiddleware()) // 需要管理员认证
+	admin.Use(authMiddleware) // 管理员也需要认证
 	{
 		admin.POST("", h.Create)
 		admin.GET("", h.List)

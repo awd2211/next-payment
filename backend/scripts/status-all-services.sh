@@ -17,9 +17,8 @@ echo ""
 # 日志目录
 LOG_DIR="/home/eric/payment/backend/logs"
 
-# 服务列表和端口
+# 服务列表和端口（按端口排序）
 declare -A SERVICES=(
-    ["config-service"]=40010
     ["admin-service"]=40001
     ["merchant-service"]=40002
     ["payment-gateway"]=40003
@@ -29,6 +28,13 @@ declare -A SERVICES=(
     ["accounting-service"]=40007
     ["notification-service"]=40008
     ["analytics-service"]=40009
+    ["config-service"]=40010
+    ["merchant-auth-service"]=40011
+    ["merchant-config-service"]=40012
+    ["settlement-service"]=40013
+    ["withdrawal-service"]=40014
+    ["kyc-service"]=40015
+    ["cashier-service"]=40016
 )
 
 # 统计

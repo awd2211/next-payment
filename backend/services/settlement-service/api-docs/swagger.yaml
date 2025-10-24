@@ -1,0 +1,482 @@
+basePath: /api/v1
+definitions:
+  internal_handler.ApproveSettlementRequest:
+    properties:
+      approver_id:
+        type: string
+      approver_name:
+        type: string
+      comments:
+        type: string
+    required:
+    - approver_id
+    - approver_name
+    type: object
+  internal_handler.CreateAccountRequest:
+    properties:
+      account_name:
+        type: string
+      account_number:
+        type: string
+      account_type:
+        type: string
+      bank_address:
+        type: string
+      bank_code:
+        type: string
+      bank_name:
+        type: string
+      country:
+        type: string
+      currency:
+        type: string
+      iban:
+        type: string
+      swift_code:
+        type: string
+    required:
+    - account_name
+    - account_number
+    - account_type
+    - currency
+    type: object
+  internal_handler.CreateSettlementRequest:
+    properties:
+      cycle:
+        $ref: '#/definitions/payment-platform_settlement-service_internal_model.SettlementCycle'
+      end_date:
+        type: string
+      merchant_id:
+        type: string
+      start_date:
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/internal_handler.TransactionItemRequest'
+        type: array
+    required:
+    - cycle
+    - end_date
+    - merchant_id
+    - start_date
+    - transactions
+    type: object
+  internal_handler.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  internal_handler.SettlementAccountResponse:
+    properties:
+      account_name:
+        type: string
+      account_number:
+        description: 已遮蔽
+        type: string
+      account_type:
+        type: string
+      bank_name:
+        type: string
+      country:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      iban:
+        type: string
+      id:
+        type: string
+      is_default:
+        type: boolean
+      merchant_id:
+        type: string
+      status:
+        type: string
+      swift_code:
+        type: string
+      verified_at:
+        type: string
+    type: object
+  internal_handler.SuccessResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  internal_handler.TransactionItemRequest:
+    properties:
+      amount:
+        minimum: 1
+        type: integer
+      fee:
+        minimum: 0
+        type: integer
+      order_no:
+        type: string
+      payment_no:
+        type: string
+      transaction_at:
+        type: string
+      transaction_id:
+        type: string
+    required:
+    - amount
+    - order_no
+    - payment_no
+    - transaction_at
+    - transaction_id
+    type: object
+  payment-platform_settlement-service_internal_model.SettlementCycle:
+    enum:
+    - daily
+    - weekly
+    - monthly
+    - manual
+    type: string
+    x-enum-comments:
+      SettlementCycleDaily: 每日
+      SettlementCycleManual: 手动
+      SettlementCycleMonthly: 每月
+      SettlementCycleWeekly: 每周
+    x-enum-descriptions:
+    - 每日
+    - 每周
+    - 每月
+    - 手动
+    x-enum-varnames:
+    - SettlementCycleDaily
+    - SettlementCycleWeekly
+    - SettlementCycleMonthly
+    - SettlementCycleManual
+host: localhost:40013
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 支付平台结算处理服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Settlement Service API
+  version: "1.0"
+paths:
+  /settlement-accounts:
+    get:
+      description: 获取当前商户的所有结算账户
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_handler.SettlementAccountResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取结算账户列表
+      tags:
+      - Settlement Accounts
+    post:
+      consumes:
+      - application/json
+      description: 商户创建新的结算账户
+      parameters:
+      - description: 创建请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handler.SettlementAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建结算账户
+      tags:
+      - Settlement Accounts
+  /settlement-accounts/{id}:
+    delete:
+      description: 删除指定的结算账户
+      parameters:
+      - description: 账户ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除结算账户
+      tags:
+      - Settlement Accounts
+    get:
+      description: 获取指定结算账户的详细信息
+      parameters:
+      - description: 账户ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.SettlementAccountResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取结算账户详情
+      tags:
+      - Settlement Accounts
+  /settlement-accounts/{id}/set-default:
+    post:
+      description: 设置指定账户为默认结算账户
+      parameters:
+      - description: 账户ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 设置默认结算账户
+      tags:
+      - Settlement Accounts
+  /settlements:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 周期
+        in: query
+        name: cycle
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 结算单列表
+      tags:
+      - Settlements
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建结算单请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateSettlementRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建结算单
+      tags:
+      - Settlements
+  /settlements/{id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 结算单ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取结算单详情
+      tags:
+      - Settlements
+  /settlements/{id}/approve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 结算单ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 审批请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ApproveSettlementRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 审批通过结算单
+      tags:
+      - Settlements
+  /settlements/{id}/execute:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 结算单ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 执行结算
+      tags:
+      - Settlements
+  /settlements/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 结算单ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 拒绝请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ApproveSettlementRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 拒绝结算单
+      tags:
+      - Settlements
+  /settlements/reports:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 开始日期
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: 结束日期
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取结算报表
+      tags:
+      - Settlements
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

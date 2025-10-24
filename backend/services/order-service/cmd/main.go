@@ -19,7 +19,24 @@ import (
 	"payment-platform/order-service/internal/service"
 	"github.com/payment-platform/pkg/idempotency"
 	"github.com/payment-platform/pkg/middleware"
+
+	_ "payment-platform/order-service/api-docs" // Import generated swagger docs
 )
+
+//	@title						Order Service API
+//	@version					1.0
+//	@description				支付平台订单服务API文档
+//	@termsOfService				http://swagger.io/terms/
+//	@contact.name				API Support
+//	@contact.email				support@payment-platform.com
+//	@license.name				Apache 2.0
+//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+//	@host						localhost:40004
+//	@BasePath					/api/v1
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
 	application, err := app.Bootstrap(app.ServiceConfig{
@@ -38,6 +55,7 @@ func main() {
 		EnableGRPC:        false,
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 		RateLimitRequests: 100,
 		RateLimitWindow:   time.Minute,
 	})

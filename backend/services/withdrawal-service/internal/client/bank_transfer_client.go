@@ -391,3 +391,97 @@ func (c *BankTransferClient) buildQueryString(params map[string]interface{}) str
 	}
 	return result
 }
+
+// RefundTransferRequest 退款转账请求
+type RefundTransferRequest struct {
+	OriginalOrderNo string // 原提现单号
+	ChannelTradeNo  string // 银行流水号
+	Amount          int64  // 退款金额（分）
+	Reason          string // 退款原因
+}
+
+// RefundTransfer 退款转账（用于Saga补偿）
+func (c *BankTransferClient) RefundTransfer(ctx context.Context, req *RefundTransferRequest) error {
+	logger.Info("executing bank transfer refund",
+		zap.String("original_order_no", req.OriginalOrderNo),
+		zap.String("channel_trade_no", req.ChannelTradeNo),
+		zap.Int64("amount", req.Amount))
+
+	// Mock模式：直接返回成功
+	if c.config.BankChannel == "mock" {
+		logger.Info("mock mode: bank transfer refund simulated",
+			zap.String("channel_trade_no", req.ChannelTradeNo))
+		time.Sleep(50 * time.Millisecond)
+		return nil
+	}
+
+	// 生产模式：调用银行退款接口
+	// 注意：不是所有银行都支持自动退款，部分银行需要人工处理
+	switch c.config.BankChannel {
+	case "icbc":
+		return c.refundICBC(ctx, req)
+	case "abc", "boc", "ccb":
+		// 这些银行暂不支持自动退款
+		logger.Warn("bank channel does not support auto refund, manual processing required",
+			zap.String("bank_channel", c.config.BankChannel),
+			zap.String("channel_trade_no", req.ChannelTradeNo))
+		return fmt.Errorf("该银行不支持自动退款，需要人工处理")
+	default:
+		return fmt.Errorf("不支持的银行渠道: %s", c.config.BankChannel)
+	}
+}
+
+// refundICBC 工商银行退款实现
+func (c *BankTransferClient) refundICBC(ctx context.Context, req *RefundTransferRequest) error {
+	logger.Info("calling ICBC refund API",
+		zap.String("channel_trade_no", req.ChannelTradeNo))
+
+	// 构建退款请求参数
+	params := map[string]interface{}{
+		"merchant_id":       c.config.MerchantID,
+		"original_trade_no": req.ChannelTradeNo,
+		"refund_amount":     fmt.Sprintf("%.2f", float64(req.Amount)/100),
+		"refund_reason":     req.Reason,
+		"timestamp":         time.Now().Unix(),
+	}
+
+	// 生成签名
+	sign := c.generateSignature(params, c.config.APISecret)
+	params["sign"] = sign
+
+	// 发送HTTP请求
+	httpReq := &httpclient.Request{
+		Method:  "POST",
+		URL:     c.config.APIEndpoint + "/api/v1/refund",
+		Body:    params,
+		Ctx:     ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+			"X-Api-Key":    c.config.APIKey,
+		},
+	}
+
+	resp, err := c.breaker.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("工商银行退款API调用失败: %w", err)
+	}
+
+	// 解析响应
+	var apiResp struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
+		return fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if apiResp.Code != 0 {
+		return fmt.Errorf("退款失败: %s", apiResp.Message)
+	}
+
+	logger.Info("ICBC refund succeeded",
+		zap.String("channel_trade_no", req.ChannelTradeNo))
+
+	return nil
+}

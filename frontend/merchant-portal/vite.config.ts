@@ -139,93 +139,16 @@ export default defineConfig({
   server: {
     port: 5174, // Merchant Portal 端口
     proxy: {
-      // Merchant Service (商户登录和管理)
-      '/api/v1/merchant': {
-        target: 'http://localhost:40002',
+      // 所有API请求通过Kong网关转发
+      '/api': {
+        target: 'http://localhost:40080',
         changeOrigin: true,
+        rewrite: (path) => path,
       },
-      '/api/v1/merchants': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-
-      // Admin Service (管理员、角色、权限、审计、系统配置)
-      '/api/v1/admins': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/roles': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/permissions': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/audit-logs': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/system-configs': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/email-templates': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/preferences': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/security': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-
-      // API Keys and Webhooks (商户服务)
-      '/api/v1/api-keys': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-      '/api/v1/webhooks': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-      '/api/v1/channels': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-
-      // Payment Gateway (支付)
-      '/api/v1/payments': {
-        target: 'http://localhost:40003',
-        changeOrigin: true,
-      },
-
-      // Order Service (订单)
-      '/api/v1/orders': {
-        target: 'http://localhost:40004',
-        changeOrigin: true,
-      },
-
-      // Analytics Service (数据分析)
-      '/api/v1/analytics': {
-        target: 'http://localhost:40009',
-        changeOrigin: true,
-      },
-      '/api/v1/metrics': {
-        target: 'http://localhost:40009',
-        changeOrigin: true,
-      },
-
-      // Config Service (配置中心)
-      '/api/v1/configs': {
-        target: 'http://localhost:40010',
-        changeOrigin: true,
-      },
-      '/api/v1/feature-flags': {
-        target: 'http://localhost:40010',
+      // WebSocket连接
+      '/ws': {
+        target: 'ws://localhost:40080',
+        ws: true,
         changeOrigin: true,
       },
     },

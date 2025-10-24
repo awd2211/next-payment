@@ -1,5 +1,103 @@
 basePath: /api/v1
-host: localhost:8003
+definitions:
+  internal_handler.CancelPaymentRequest:
+    properties:
+      reason:
+        type: string
+    required:
+    - reason
+    type: object
+  internal_handler.Response:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+    type: object
+  payment-platform_payment-gateway_internal_service.CreatePaymentInput:
+    properties:
+      amount:
+        description: 金额（分）
+        type: integer
+      channel:
+        description: 指定渠道（可选）
+        type: string
+      currency:
+        description: 货币类型
+        type: string
+      customer_email:
+        description: 客户邮箱
+        type: string
+      customer_ip:
+        description: 客户IP
+        type: string
+      customer_name:
+        description: 客户姓名
+        type: string
+      customer_phone:
+        description: 客户手机
+        type: string
+      description:
+        description: 商品描述
+        type: string
+      expire_minutes:
+        description: 过期时间（分钟，默认30分钟）
+        type: integer
+      extra:
+        additionalProperties: true
+        description: 扩展信息
+        type: object
+      language:
+        description: 语言（en, zh-CN, zh-TW, ja等）
+        type: string
+      merchant_id:
+        type: string
+      notify_url:
+        description: 异步通知URL
+        type: string
+      order_no:
+        description: 商户订单号
+        type: string
+      pay_method:
+        description: 支付方式
+        type: string
+      return_url:
+        description: 同步跳转URL
+        type: string
+    required:
+    - amount
+    - currency
+    - merchant_id
+    - notify_url
+    - order_no
+    type: object
+  payment-platform_payment-gateway_internal_service.CreateRefundInput:
+    properties:
+      amount:
+        description: 退款金额（分）
+        type: integer
+      description:
+        description: 退款说明
+        type: string
+      operator_id:
+        description: 操作人ID
+        type: string
+      operator_type:
+        description: 操作人类型
+        type: string
+      payment_no:
+        description: 支付流水号
+        type: string
+      reason:
+        description: 退款原因
+        type: string
+    required:
+    - amount
+    - payment_no
+    - reason
+    type: object
+host: localhost:40003
 info:
   contact:
     email: support@payment-platform.com
@@ -11,7 +109,362 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Payment Gateway API
   version: "1.0"
-paths: {}
+paths:
+  /payments:
+    get:
+      consumes:
+      - application/json
+      description: 根据条件查询支付列表，支持分页和多维度筛选
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 支付渠道 (stripe/paypal)
+        in: query
+        name: channel
+        type: string
+      - description: 支付状态 (pending/success/failed/cancelled)
+        in: query
+        name: status
+        type: string
+      - description: 货币类型 (USD/EUR/CNY)
+        in: query
+        name: currency
+        type: string
+      - description: 客户邮箱
+        in: query
+        name: customer_email
+        type: string
+      - description: 关键词搜索（订单号/支付号）
+        in: query
+        name: keyword
+        type: string
+      - description: 开始时间 (RFC3339格式)
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间 (RFC3339格式)
+        in: query
+        name: end_time
+        type: string
+      - description: 最小金额（分）
+        in: query
+        name: min_amount
+        type: integer
+      - description: 最大金额（分）
+        in: query
+        name: max_amount
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 查询支付列表
+      tags:
+      - Payments
+    post:
+      consumes:
+      - application/json
+      description: 创建支付订单，支持Stripe、PayPal等多种支付渠道
+      parameters:
+      - description: 支付创建请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_payment-gateway_internal_service.CreatePaymentInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建支付
+      tags:
+      - Payments
+  /payments/{paymentNo}:
+    get:
+      consumes:
+      - application/json
+      description: 根据支付流水号获取支付详情
+      parameters:
+      - description: 支付流水号
+        in: path
+        name: paymentNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取支付详情
+      tags:
+      - Payments
+  /payments/{paymentNo}/cancel:
+    post:
+      consumes:
+      - application/json
+      description: 取消待支付的支付订单
+      parameters:
+      - description: 支付流水号
+        in: path
+        name: paymentNo
+        required: true
+        type: string
+      - description: 取消原因
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CancelPaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 取消支付
+      tags:
+      - Payments
+  /refunds:
+    get:
+      consumes:
+      - application/json
+      description: 根据条件查询退款列表，支持分页和多维度筛选
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 支付ID
+        in: query
+        name: payment_id
+        type: string
+      - description: 退款状态 (pending/success/failed)
+        in: query
+        name: status
+        type: string
+      - description: 开始时间 (RFC3339格式)
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间 (RFC3339格式)
+        in: query
+        name: end_time
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 查询退款列表
+      tags:
+      - Refunds
+    post:
+      consumes:
+      - application/json
+      description: 为已支付的订单创建退款申请
+      parameters:
+      - description: 退款创建请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_payment-gateway_internal_service.CreateRefundInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建退款
+      tags:
+      - Refunds
+  /refunds/{refundNo}:
+    get:
+      consumes:
+      - application/json
+      description: 根据退款流水号获取退款详情
+      parameters:
+      - description: 退款流水号
+        in: path
+        name: refundNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取退款详情
+      tags:
+      - Refunds
+  /webhooks/paypal:
+    post:
+      consumes:
+      - application/json
+      description: 接收并处理PayPal支付网关的异步通知
+      parameters:
+      - description: PayPal webhook payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      summary: 处理PayPal Webhook
+      tags:
+      - Webhooks
+  /webhooks/stripe:
+    post:
+      consumes:
+      - application/json
+      description: 接收并处理Stripe支付网关的异步通知
+      parameters:
+      - description: Stripe webhook payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      summary: 处理Stripe Webhook
+      tags:
+      - Webhooks
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

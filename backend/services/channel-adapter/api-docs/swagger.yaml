@@ -107,7 +107,7 @@ definitions:
       status:
         type: string
     type: object
-host: localhost:8005
+host: localhost:40005
 info:
   contact:
     email: support@payment-platform.com
@@ -281,6 +281,132 @@ paths:
       summary: 查询退款状态
       tags:
       - Channel
+  /api/v1/exchange-rates/history:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定时间范围内的历史汇率数据
+      parameters:
+      - description: 基础货币代码
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: 目标货币代码
+        in: query
+        name: to
+        required: true
+        type: string
+      - description: 开始时间 (RFC3339格式)
+        in: query
+        name: start_time
+        required: true
+        type: string
+      - description: 结束时间 (RFC3339格式)
+        in: query
+        name: end_time
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取历史汇率
+      tags:
+      - ExchangeRate
+  /api/v1/exchange-rates/latest:
+    get:
+      consumes:
+      - application/json
+      description: 获取两种货币之间的最新汇率
+      parameters:
+      - description: '基础货币代码 (如: USD)'
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: '目标货币代码 (如: CNY)'
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取最新汇率
+      tags:
+      - ExchangeRate
+  /api/v1/exchange-rates/snapshot:
+    get:
+      consumes:
+      - application/json
+      description: 获取基础货币对多个目标货币的最新汇率
+      parameters:
+      - description: '基础货币代码 (如: USD)'
+        in: query
+        name: base
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取最新汇率快照
+      tags:
+      - ExchangeRate
   /api/v1/webhooks/paypal:
     post:
       consumes:

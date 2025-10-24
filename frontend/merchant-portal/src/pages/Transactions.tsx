@@ -33,6 +33,7 @@ import {
   DownloadOutlined,
 } from '@ant-design/icons'
 import { paymentService, Payment, PaymentStats } from '../services/paymentService'
+import { useAuthStore } from '../stores/authStore'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 
@@ -67,6 +68,12 @@ const Transactions = () => {
   }, [])
 
   const loadPayments = async () => {
+    const token = useAuthStore.getState().token
+    if (!token) {
+      console.log('No token found, skipping payments load')
+      return
+    }
+
     setLoading(true)
     try {
       const response = await paymentService.list({
@@ -79,21 +86,32 @@ const Transactions = () => {
         start_time: dateRange?.[0]?.toISOString(),
         end_time: dateRange?.[1]?.toISOString(),
       })
-      setPayments(response.data)
-      setTotal(response.pagination.total)
+      // 修复：response.data 包含 list 和 total
+      setPayments(response.data?.list || [])
+      setTotal(response.data?.total || 0)
     } catch (error) {
       // Error handled by interceptor
+      console.error('Failed to load payments:', error)
+      setPayments([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
   }
 
   const loadStats = async () => {
+    const token = useAuthStore.getState().token
+    if (!token) {
+      console.log('No token found, skipping stats load')
+      return
+    }
+
     try {
       const response = await paymentService.getStats({})
       setStats(response.data)
     } catch (error) {
-      // Error handled by interceptor
+      // Stats API 可能不存在，暂时忽略错误
+      console.log('Stats API not available yet')
     }
   }
 

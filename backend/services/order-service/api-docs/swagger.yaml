@@ -1,17 +1,278 @@
 basePath: /api/v1
-host: localhost:8004
+definitions:
+  internal_handler.Response:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+    type: object
+  payment-platform_order-service_internal_model.Address:
+    properties:
+      city:
+        description: 城市
+        type: string
+      country:
+        description: 国家
+        type: string
+      district:
+        description: 区/县
+        type: string
+      name:
+        description: 收件人姓名
+        type: string
+      phone:
+        description: 联系电话
+        type: string
+      postal_code:
+        description: 邮编
+        type: string
+      province:
+        description: 省/州
+        type: string
+      street:
+        description: 街道地址
+        type: string
+    type: object
+  payment-platform_order-service_internal_service.CreateOrderInput:
+    properties:
+      billing_address:
+        $ref: '#/definitions/payment-platform_order-service_internal_model.Address'
+      currency:
+        type: string
+      customer_email:
+        type: string
+      customer_id:
+        type: string
+      customer_ip:
+        type: string
+      customer_name:
+        type: string
+      customer_phone:
+        type: string
+      discount_amount:
+        type: integer
+      expire_minutes:
+        description: 订单过期时间（分钟）
+        type: integer
+      extra:
+        additionalProperties: true
+        type: object
+      items:
+        items:
+          $ref: '#/definitions/payment-platform_order-service_internal_service.OrderItemInput'
+        minItems: 1
+        type: array
+      language:
+        type: string
+      merchant_id:
+        type: string
+      remark:
+        type: string
+      shipping_address:
+        $ref: '#/definitions/payment-platform_order-service_internal_model.Address'
+      shipping_fee:
+        type: integer
+      shipping_method:
+        type: string
+    required:
+    - currency
+    - customer_email
+    - customer_name
+    - items
+    - merchant_id
+    type: object
+  payment-platform_order-service_internal_service.OrderItemInput:
+    properties:
+      attributes:
+        additionalProperties: true
+        type: object
+      extra:
+        additionalProperties: true
+        type: object
+      product_id:
+        type: string
+      product_image:
+        type: string
+      product_name:
+        type: string
+      product_sku:
+        type: string
+      quantity:
+        type: integer
+      unit_price:
+        type: integer
+    required:
+    - product_id
+    - product_name
+    - quantity
+    - unit_price
+    type: object
+host: localhost:40004
 info:
   contact:
     email: support@payment-platform.com
     name: API Support
-  description: 支付平台订单管理服务API文档
+  description: 支付平台订单服务API文档
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
   termsOfService: http://swagger.io/terms/
   title: Order Service API
   version: "1.0"
-paths: {}
+paths:
+  /api/v1/orders/stats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取订单统计
+      tags:
+      - Order
+  /orders:
+    get:
+      consumes:
+      - application/json
+      description: 根据条件查询订单列表，支持分页和多维度筛选
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 客户ID
+        in: query
+        name: customer_id
+        type: string
+      - description: 订单状态 (pending/confirmed/cancelled/completed)
+        in: query
+        name: status
+        type: string
+      - description: 支付状态 (unpaid/paid/refunded)
+        in: query
+        name: pay_status
+        type: string
+      - description: 发货状态 (unshipped/shipped/delivered)
+        in: query
+        name: shipping_status
+        type: string
+      - description: 货币类型
+        in: query
+        name: currency
+        type: string
+      - description: 客户邮箱
+        in: query
+        name: customer_email
+        type: string
+      - description: 关键词搜索
+        in: query
+        name: keyword
+        type: string
+      - description: 开始时间 (RFC3339格式)
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间 (RFC3339格式)
+        in: query
+        name: end_time
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 查询订单列表
+      tags:
+      - Orders
+    post:
+      consumes:
+      - application/json
+      description: 创建新的订单记录
+      parameters:
+      - description: 订单创建请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_order-service_internal_service.CreateOrderInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建订单
+      tags:
+      - Orders
+  /orders/{orderNo}:
+    get:
+      consumes:
+      - application/json
+      description: 根据订单号获取订单详情
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取订单详情
+      tags:
+      - Orders
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

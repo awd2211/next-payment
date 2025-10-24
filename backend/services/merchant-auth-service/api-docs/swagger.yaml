@@ -1,0 +1,444 @@
+basePath: /api/v1
+definitions:
+  internal_handler.APIKeyInfo:
+    properties:
+      api_key:
+        type: string
+      created_at:
+        type: string
+      environment:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_used_at:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_handler.ChangePasswordRequest:
+    properties:
+      new_password:
+        minLength: 8
+        type: string
+      old_password:
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  internal_handler.CreateAPIKeyRequest:
+    properties:
+      environment:
+        enum:
+        - test
+        - production
+        type: string
+      name:
+        type: string
+    required:
+    - environment
+    - name
+    type: object
+  internal_handler.CreateAPIKeyResponse:
+    properties:
+      api_key:
+        type: string
+      api_secret:
+        description: 仅此一次返回
+        type: string
+      created_at:
+        type: string
+      environment:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_handler.Disable2FARequest:
+    properties:
+      password:
+        type: string
+    required:
+    - password
+    type: object
+  internal_handler.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  internal_handler.SuccessResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  internal_handler.ValidateSignatureRequest:
+    properties:
+      api_key:
+        type: string
+      payload:
+        type: string
+      signature:
+        type: string
+    required:
+    - api_key
+    - payload
+    - signature
+    type: object
+  internal_handler.ValidateSignatureResponse:
+    properties:
+      environment:
+        type: string
+      merchant_id:
+        type: string
+      valid:
+        type: boolean
+    type: object
+  internal_handler.Verify2FARequest:
+    properties:
+      code:
+        type: string
+    required:
+    - code
+    type: object
+  payment-platform_merchant-auth-service_internal_service.UpdateSecuritySettingsInput:
+    properties:
+      abnormal_notification:
+        type: boolean
+      allowed_countries:
+        items:
+          type: string
+        type: array
+      blocked_countries:
+        items:
+          type: string
+        type: array
+      ip_whitelist:
+        items:
+          type: string
+        type: array
+      login_notification:
+        type: boolean
+      max_concurrent_sessions:
+        type: integer
+      password_expiry_days:
+        type: integer
+      session_timeout_minutes:
+        type: integer
+    type: object
+host: localhost:40011
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 支付平台商户认证服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Merchant Auth Service API
+  version: "1.0"
+paths:
+  /api-keys:
+    get:
+      description: 获取商户的所有API Key
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_handler.APIKeyInfo'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取API Key列表
+      tags:
+      - API Keys
+    post:
+      consumes:
+      - application/json
+      description: 为商户创建新的API Key
+      parameters:
+      - description: 创建请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateAPIKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handler.CreateAPIKeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建API Key
+      tags:
+      - API Keys
+  /api-keys/{id}:
+    delete:
+      description: 删除指定的API Key
+      parameters:
+      - description: API Key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除API Key
+      tags:
+      - API Keys
+  /api/v1/security/2fa/disable:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 禁用请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.Disable2FARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 禁用2FA
+      tags:
+      - Security
+  /api/v1/security/2fa/enable:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 启用2FA
+      tags:
+      - Security
+  /api/v1/security/2fa/verify:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 验证请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.Verify2FARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 验证2FA
+      tags:
+      - Security
+  /api/v1/security/login-activities:
+    get:
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取登录活动
+      tags:
+      - Security
+  /api/v1/security/password:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 修改密码请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 修改密码
+      tags:
+      - Security
+  /api/v1/security/sessions:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 撤销所有会话
+      tags:
+      - Security
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取活跃会话
+      tags:
+      - Security
+  /api/v1/security/sessions/{session_id}:
+    delete:
+      parameters:
+      - description: 会话ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 撤销会话
+      tags:
+      - Security
+  /api/v1/security/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取安全设置
+      tags:
+      - Security
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 安全设置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_merchant-auth-service_internal_service.UpdateSecuritySettingsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新安全设置
+      tags:
+      - Security
+  /auth/validate-signature:
+    post:
+      consumes:
+      - application/json
+      description: 验证商户API Key和请求签名
+      parameters:
+      - description: 签名验证请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ValidateSignatureRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.ValidateSignatureResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.ErrorResponse'
+      summary: 验证API签名
+      tags:
+      - Auth
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

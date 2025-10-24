@@ -1,7 +1,190 @@
 basePath: /api/v1
 definitions:
+  payment-platform_notification-service_internal_model.Notification:
+    properties:
+      channel:
+        description: 通知渠道
+        type: string
+      content:
+        description: 内容
+        type: string
+      created_at:
+        type: string
+      error_message:
+        description: 错误信息
+        type: string
+      extra:
+        description: 扩展信息
+        type: string
+      id:
+        type: string
+      max_retry:
+        description: 最大重试次数
+        type: integer
+      merchant_id:
+        description: 商户ID
+        type: string
+      priority:
+        description: 优先级（0-9，9最高）
+        type: integer
+      provider:
+        description: 服务提供商
+        type: string
+      provider_msg_id:
+        description: 提供商消息ID
+        type: string
+      recipient:
+        description: 接收者
+        type: string
+      retry_count:
+        description: 重试次数
+        type: integer
+      scheduled_at:
+        description: 计划发送时间
+        type: string
+      sent_at:
+        description: 实际发送时间
+        type: string
+      status:
+        description: 状态
+        type: string
+      subject:
+        description: 主题
+        type: string
+      template_code:
+        description: 模板编码
+        type: string
+      template_data:
+        description: 模板数据
+        type: string
+      type:
+        description: 通知类型
+        type: string
+      updated_at:
+        type: string
+    type: object
+  payment-platform_notification-service_internal_model.NotificationPreference:
+    properties:
+      channel:
+        description: 通知渠道
+        type: string
+      created_at:
+        type: string
+      description:
+        description: 描述
+        type: string
+      event_type:
+        description: 事件类型
+        type: string
+      extra:
+        description: 扩展信息
+        type: string
+      id:
+        type: string
+      is_enabled:
+        description: 是否启用
+        type: boolean
+      merchant_id:
+        description: 商户ID
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        description: 用户ID（可选）
+        type: string
+    type: object
+  payment-platform_notification-service_internal_model.NotificationTemplate:
+    properties:
+      channel:
+        description: 通知渠道
+        type: string
+      code:
+        description: 模板编码
+        type: string
+      content:
+        description: 内容模板
+        type: string
+      created_at:
+        type: string
+      description:
+        description: 描述
+        type: string
+      extra:
+        description: 扩展信息
+        type: string
+      id:
+        type: string
+      is_enabled:
+        description: 是否启用
+        type: boolean
+      is_system:
+        description: 是否系统模板
+        type: boolean
+      merchant_id:
+        description: 商户ID（NULL表示系统模板）
+        type: string
+      name:
+        description: 模板名称
+        type: string
+      subject:
+        description: 主题模板
+        type: string
+      type:
+        description: 通知类型
+        type: string
+      updated_at:
+        type: string
+      variables:
+        description: 可用变量列表
+        type: string
+    type: object
+  payment-platform_notification-service_internal_model.WebhookEndpoint:
+    properties:
+      created_at:
+        type: string
+      description:
+        description: 描述
+        type: string
+      events:
+        description: 订阅的事件列表
+        type: string
+      extra:
+        description: 扩展信息
+        type: string
+      id:
+        type: string
+      is_enabled:
+        description: 是否启用
+        type: boolean
+      max_retry:
+        description: 最大重试次数
+        type: integer
+      merchant_id:
+        description: 商户ID
+        type: string
+      name:
+        description: 端点名称
+        type: string
+      secret:
+        description: 签名密钥（加密存储）
+        type: string
+      timeout:
+        description: 超时时间（秒）
+        type: integer
+      updated_at:
+        type: string
+      url:
+        description: Webhook URL
+        type: string
+      version:
+        description: API版本
+        type: string
+    type: object
   payment-platform_notification-service_internal_service.SendEmailByTemplateRequest:
     properties:
+      event_type:
+        description: 事件类型（用于检查偏好）
+        type: string
       merchant_id:
         type: string
       priority:
@@ -17,9 +200,15 @@ definitions:
         items:
           type: string
         type: array
+      user_id:
+        description: 用户ID（可选，用于检查偏好）
+        type: string
     type: object
   payment-platform_notification-service_internal_service.SendEmailRequest:
     properties:
+      event_type:
+        description: 事件类型（用于检查偏好）
+        type: string
       html_body:
         type: string
       merchant_id:
@@ -37,10 +226,16 @@ definitions:
         items:
           type: string
         type: array
+      user_id:
+        description: 用户ID（可选，用于检查偏好）
+        type: string
     type: object
   payment-platform_notification-service_internal_service.SendSMSRequest:
     properties:
       content:
+        type: string
+      event_type:
+        description: 事件类型（用于检查偏好）
         type: string
       merchant_id:
         type: string
@@ -50,6 +245,9 @@ definitions:
         description: twilio, aliyun
         type: string
       to:
+        type: string
+      user_id:
+        description: 用户ID（可选，用于检查偏好）
         type: string
     type: object
   payment-platform_notification-service_internal_service.SendWebhookRequest:
@@ -64,7 +262,7 @@ definitions:
       merchant_id:
         type: string
     type: object
-host: localhost:8008
+host: localhost:40008
 info:
   contact:
     email: support@payment-platform.com
@@ -82,6 +280,22 @@ paths:
       consumes:
       - application/json
       parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 通知类型
+        in: query
+        name: type
+        type: string
+      - description: 通知渠道
+        in: query
+        name: channel
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
       - description: 页码
         in: query
         name: page
@@ -99,6 +313,26 @@ paths:
             additionalProperties: true
             type: object
       summary: 列出通知
+      tags:
+      - Notification
+  /api/v1/notifications/{id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 通知ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.Notification'
+      summary: 获取通知详情
       tags:
       - Notification
   /api/v1/notifications/email:
@@ -189,6 +423,254 @@ paths:
       summary: 发送 Webhook
       tags:
       - Notification
+  /api/v1/preferences:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 用户ID
+        in: query
+        name: user_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationPreference'
+            type: array
+      summary: 列出通知偏好
+      tags:
+      - Preference
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 偏好设置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationPreference'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationPreference'
+      summary: 创建通知偏好
+      tags:
+      - Preference
+  /api/v1/preferences/{id}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: 偏好ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除通知偏好
+      tags:
+      - Preference
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 偏好ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationPreference'
+      summary: 获取通知偏好详情
+      tags:
+      - Preference
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 偏好ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 偏好设置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationPreference'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationPreference'
+      summary: 更新通知偏好
+      tags:
+      - Preference
+  /api/v1/templates:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate'
+            type: array
+      summary: 列出通知模板
+      tags:
+      - Template
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 模板信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate'
+      summary: 创建通知模板
+      tags:
+      - Template
+  /api/v1/templates/{code}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 模板编码
+        in: query
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate'
+      summary: 获取通知模板
+      tags:
+      - Template
+  /api/v1/templates/{id}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: 模板ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除通知模板
+      tags:
+      - Template
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 模板ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 模板信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate'
+      summary: 更新通知模板
+      tags:
+      - Template
+  /api/v1/webhooks/deliveries:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 端点ID
+        in: query
+        name: endpoint_id
+        type: string
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 事件类型
+        in: query
+        name: event_type
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 列出 Webhook 投递记录
+      tags:
+      - Webhook
   /api/v1/webhooks/endpoints:
     get:
       consumes:
@@ -200,8 +682,7 @@ paths:
           description: OK
           schema:
             items:
-              additionalProperties: true
-              type: object
+              $ref: '#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint'
             type: array
       summary: 列出 Webhook 端点
       tags:
@@ -209,6 +690,33 @@ paths:
     post:
       consumes:
       - application/json
+      parameters:
+      - description: 端点信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint'
+      summary: 创建 Webhook 端点
+      tags:
+      - Webhook
+  /api/v1/webhooks/endpoints/{id}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: 端点ID
+        in: path
+        name: id
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -217,7 +725,32 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: 创建 Webhook 端点
+      summary: 删除 Webhook 端点
+      tags:
+      - Webhook
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 端点ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 端点信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint'
+      summary: 更新 Webhook 端点
       tags:
       - Webhook
 securityDefinitions:

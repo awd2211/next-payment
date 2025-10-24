@@ -44,6 +44,7 @@ func (m *JWTManager) GenerateToken(userID uuid.UUID, username, userType string, 
 		Roles:       roles,
 		Permissions: permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "payment-platform",  // Kong JWT plugin 需要的 iss 字段
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.tokenDuration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),

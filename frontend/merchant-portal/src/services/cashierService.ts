@@ -1,24 +1,18 @@
 import axios from 'axios'
+import { useAuthStore } from '../stores/authStore'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:40016/api/v1'
-
-// 获取认证token
-const getAuthToken = () => {
-  return localStorage.getItem('token') || ''
-}
-
-// 创建axios实例
+// 创建axios实例 (使用与其他服务一致的环境变量)
 const cashierApi = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: import.meta.env.VITE_API_PREFIX || '/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// 请求拦截器 - 添加token
+// 请求拦截器 - 添加token (使用 zustand store 而不是 localStorage)
 cashierApi.interceptors.request.use(
   (config) => {
-    const token = getAuthToken()
+    const token = useAuthStore.getState().token
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/payment-platform/pkg/httpclient"
+	pkgtls "github.com/payment-platform/pkg/tls"
 )
 
 // HTTPClient HTTP客户端封装
@@ -18,16 +19,38 @@ type HTTPClient struct {
 	baseURL string
 }
 
-// NewHTTPClient 创建HTTP客户端
+// NewHTTPClient 创建HTTP客户端（支持mTLS）
 func NewHTTPClient(baseURL string, timeout time.Duration) *HTTPClient {
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
+	// 加载 TLS 配置
+	tlsConfig := pkgtls.LoadFromEnv()
+	var httpClient *http.Client
+
+	if tlsConfig.EnableMTLS {
+		// 验证客户端 TLS 配置
+		if err := pkgtls.ValidateClientConfig(tlsConfig); err != nil {
+			// 降级到普通 HTTP（记录错误）
+			fmt.Printf("WARNING: mTLS 配置验证失败，降级到普通 HTTP: %v\n", err)
+			httpClient = &http.Client{Timeout: timeout}
+		} else {
+			// 创建支持 mTLS 的客户端
+			clientTLSConfig, err := pkgtls.NewClientTLSConfig(tlsConfig)
+			if err != nil {
+				fmt.Printf("WARNING: mTLS 配置失败，降级到普通 HTTP: %v\n", err)
+				httpClient = &http.Client{Timeout: timeout}
+			} else {
+				httpClient = pkgtls.NewHTTPClient(clientTLSConfig, timeout)
+			}
+		}
+	} else {
+		httpClient = &http.Client{Timeout: timeout}
+	}
+
 	return &HTTPClient{
-		client: &http.Client{
-			Timeout: timeout,
-		},
+		client:  httpClient,
 		baseURL: baseURL,
 	}
 }

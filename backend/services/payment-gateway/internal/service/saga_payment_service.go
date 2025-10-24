@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/saga"
@@ -51,9 +52,35 @@ func (s *SagaPaymentService) ExecutePaymentSaga(
 		"currency":    payment.Currency,
 	})
 
-	// 2. 定义步骤
+	// 2. 定义步骤（使用带超时的构建方法）
+	// 步骤1: 创建订单（30秒超时）
+	sagaBuilder.AddStepWithTimeout(
+		"CreateOrder",
+		func(ctx context.Context, executeData string) (string, error) {
+			return s.executeCreateOrder(ctx, payment)
+		},
+		func(ctx context.Context, compensateData string, executeResult string) error {
+			return s.compensateCreateOrder(ctx, payment)
+		},
+		3,               // 最多重试3次
+		30*time.Second,  // 30秒超时
+	)
+
+	// 步骤2: 调用支付渠道（60秒超时，因为需要调用外部API）
+	sagaBuilder.AddStepWithTimeout(
+		"CallPaymentChannel",
+		func(ctx context.Context, executeData string) (string, error) {
+			return s.executeCallPaymentChannel(ctx, payment)
+		},
+		func(ctx context.Context, compensateData string, executeResult string) error {
+			return s.compensateCallPaymentChannel(ctx, payment, executeResult)
+		},
+		3,               // 最多重试3次
+		60*time.Second,  // 60秒超时
+	)
+
+	// 获取步骤定义（用于执行）
 	stepDefs := []saga.StepDefinition{
-		// 步骤1: 创建订单
 		{
 			Name: "CreateOrder",
 			Execute: func(ctx context.Context, executeData string) (string, error) {
@@ -63,8 +90,8 @@ func (s *SagaPaymentService) ExecutePaymentSaga(
 				return s.compensateCreateOrder(ctx, payment)
 			},
 			MaxRetryCount: 3,
+			Timeout:       30 * time.Second,
 		},
-		// 步骤2: 调用支付渠道
 		{
 			Name: "CallPaymentChannel",
 			Execute: func(ctx context.Context, executeData string) (string, error) {
@@ -74,12 +101,8 @@ func (s *SagaPaymentService) ExecutePaymentSaga(
 				return s.compensateCallPaymentChannel(ctx, payment, executeResult)
 			},
 			MaxRetryCount: 3,
+			Timeout:       60 * time.Second,
 		},
-	}
-
-	// 添加步骤到构建器
-	for _, stepDef := range stepDefs {
-		sagaBuilder.AddStep(stepDef.Name, stepDef.Execute, stepDef.Compensate, stepDef.MaxRetryCount)
 	}
 
 	// 3. 构建并执行 Saga

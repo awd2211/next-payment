@@ -59,11 +59,12 @@ const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
 
   const handleConnect = () => {
     console.log('[WebSocket] Connected to server')
-    antNotification.success({
-      message: '连接成功',
-      description: '实时通知已启用',
-      duration: 2,
-    })
+    // 静默连接，不打扰用户
+    // antNotification.success({
+    //   message: '连接成功',
+    //   description: '实时通知已启用',
+    //   duration: 2,
+    // })
   }
 
   const handleDisconnect = () => {
@@ -72,11 +73,13 @@ const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
 
   const handleError = (error: Event) => {
     console.error('[WebSocket] Connection error:', error)
-    antNotification.error({
-      message: '连接错误',
-      description: '无法连接到通知服务器',
-      duration: 3,
-    })
+    // 只在控制台记录错误，不打扰用户
+    // WebSocket 会自动重连，不需要每次都提示用户
+    // antNotification.error({
+    //   message: '连接错误',
+    //   description: '无法连接到通知服务器',
+    //   duration: 3,
+    // })
   }
 
   // Get WebSocket URL from environment or use default
@@ -100,26 +103,33 @@ const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
       Notification.requestPermission()
     }
 
+    // TODO: WebSocket 功能暂时禁用，等待 Kong 配置 WebSocket 路由
     // Connect when token is available
-    if (token) {
-      connect()
-    }
+    // if (token) {
+    //   connect()
+    // }
 
-    return () => {
-      disconnect()
-    }
+    // return () => {
+    //   disconnect()
+    // }
   }, [token, connect, disconnect])
 
   useEffect(() => {
-    // Show connection status
+    // Show connection status - 只在错误时提示，连接成功时静默关闭之前的错误提示
     if (status === ConnectionStatus.ERROR) {
-      antNotification.warning({
-        message: '连接断开',
-        description: '正在尝试重新连接...',
-        duration: 0,
-        key: 'ws-reconnecting',
-      })
+      // 延迟3秒后再显示错误提示，避免短暂断线时的干扰
+      const timer = setTimeout(() => {
+        antNotification.warning({
+          message: '连接断开',
+          description: '正在尝试重新连接...',
+          duration: 0,
+          key: 'ws-reconnecting',
+        })
+      }, 3000)
+      
+      return () => clearTimeout(timer)
     } else if (status === ConnectionStatus.CONNECTED) {
+      // 静默关闭之前的错误提示
       antNotification.close('ws-reconnecting')
     }
   }, [status])

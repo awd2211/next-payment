@@ -1,0 +1,85 @@
+Kong API Gateway 配置指南
+================================================================================
+
+问题摘要：
+---------
+merchant-portal 前端无法访问后端 API，报 401 错误。原因是 Kong API Gateway 
+没有配置服务路由。
+
+修复内容：
+---------
+1. 创建 Kong 配置脚本：
+   - scripts/setup-kong.sh     # 配置 Kong 服务和路由
+   - scripts/reset-kong.sh      # 清理并重新配置
+
+2. 配置的服务：
+   - merchant-service (http://host.docker.internal:40002)
+     路由: /api/v1/merchant, /api/v1/dashboard
+   
+   - admin-service (http://host.docker.internal:40001)  
+     路由: /api/v1/admin, /api/v1/merchants, /api/v1/users, etc.
+   
+   - payment-gateway (http://host.docker.internal:40003)
+     路由: /api/v1/payments
+   
+   - order-service (http://host.docker.internal:40004)
+     路由: /api/v1/orders
+   
+   - notification-service (http://host.docker.internal:40008)
+     路由: /api/v1/notifications
+
+3. 启用的插件：
+   - CORS 插件：允许跨域请求
+   - 移除了 JWT 插件（让后端服务自己处理认证）
+
+4. 前端修复：
+   - Dashboard.tsx: 添加图表数据检查，避免空数据导致的渲染错误
+   - WebSocketProvider.tsx: 暂时禁用 WebSocket 功能
+
+使用方法：
+---------
+1. 启动 Kong（通过 docker-compose）:
+   cd /home/eric/payment
+   docker-compose up -d kong
+
+2. 配置 Kong 路由:
+   ./scripts/setup-kong.sh
+
+3. 测试配置:
+   # 登录测试
+   curl -X POST http://localhost:40080/api/v1/merchant/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@test.com","password":"password123"}'
+
+   # Dashboard API 测试
+   curl http://localhost:40080/api/v1/dashboard \
+     -H "Authorization: Bearer YOUR_TOKEN"
+
+4. 启动前端:
+   cd frontend/merchant-portal
+   npm run dev
+   # 访问 http://localhost:5174
+
+5. 如果需要重置 Kong 配置:
+   ./scripts/reset-kong.sh
+
+Kong 访问地址：
+--------------
+- Kong Proxy (API Gateway): http://localhost:40080
+- Kong Admin API:          http://localhost:40081  
+- Konga Admin UI:          http://localhost:40082
+
+默认测试账号：
+-----------
+Email: test@test.com
+Password: password123
+
+注意事项：
+---------
+1. Kong 使用 host.docker.internal 访问宿主机上的服务
+2. 所有认证由后端服务处理，Kong 只负责路由和 CORS
+3. WebSocket 功能暂时禁用，需要单独配置 Kong WebSocket 路由
+4. 图表在没有数据时会显示"暂无数据"而不是报错
+
+================================================================================
+

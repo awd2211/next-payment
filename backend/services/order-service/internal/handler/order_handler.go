@@ -5,12 +5,13 @@ import (
 	"strconv"
 	"time"
 
+	"payment-platform/order-service/internal/repository"
+	"payment-platform/order-service/internal/service"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/errors"
 	"github.com/payment-platform/pkg/middleware"
-	"payment-platform/order-service/internal/repository"
-	"payment-platform/order-service/internal/service"
 )
 
 // OrderHandler 订单处理器
@@ -35,6 +36,7 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine) {
 			orders.POST("", h.CreateOrder)
 			orders.GET("/:orderNo", h.GetOrder)
 			orders.GET("", h.QueryOrders)
+			orders.GET("/stats", h.GetOrderStats) // 添加统计接口
 			orders.POST("/:orderNo/cancel", h.CancelOrder)
 			orders.POST("/:orderNo/pay", h.PayOrder)
 			orders.POST("/:orderNo/refund", h.RefundOrder)
@@ -53,6 +55,18 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine) {
 }
 
 // CreateOrder 创建订单
+//
+//	@Summary		创建订单
+//	@Description	创建新的订单记录
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		service.CreateOrderInput	true	"订单创建请求"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders [post]
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var input service.CreateOrderInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -83,6 +97,18 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 }
 
 // GetOrder 获取订单详情
+//
+//	@Summary		获取订单详情
+//	@Description	根据订单号获取订单详情
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orderNo	path		string	true	"订单号"
+//	@Success		200		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/{orderNo} [get]
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 
@@ -106,14 +132,37 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 }
 
 // QueryOrders 查询订单列表
+//
+//	@Summary		查询订单列表
+//	@Description	根据条件查询订单列表，支持分页和多维度筛选
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			merchant_id		query		string	false	"商户ID"
+//	@Param			customer_id		query		string	false	"客户ID"
+//	@Param			status			query		string	false	"订单状态 (pending/confirmed/cancelled/completed)"
+//	@Param			pay_status		query		string	false	"支付状态 (unpaid/paid/refunded)"
+//	@Param			shipping_status	query		string	false	"发货状态 (unshipped/shipped/delivered)"
+//	@Param			currency		query		string	false	"货币类型"
+//	@Param			customer_email	query		string	false	"客户邮箱"
+//	@Param			keyword			query		string	false	"关键词搜索"
+//	@Param			start_time		query		string	false	"开始时间 (RFC3339格式)"
+//	@Param			end_time		query		string	false	"结束时间 (RFC3339格式)"
+//	@Param			page			query		int		false	"页码"	default(1)
+//	@Param			page_size		query		int		false	"每页数量"	default(20)
+//	@Success		200				{object}	Response
+//	@Failure		400				{object}	Response
+//	@Failure		500				{object}	Response
+//	@Router			/orders [get]
 func (h *OrderHandler) QueryOrders(c *gin.Context) {
 	query := &repository.OrderQuery{
-		Status:        c.Query("status"),
-		PayStatus:     c.Query("pay_status"),
+		Status:         c.Query("status"),
+		PayStatus:      c.Query("pay_status"),
 		ShippingStatus: c.Query("shipping_status"),
-		Currency:      c.Query("currency"),
-		CustomerEmail: c.Query("customer_email"),
-		Keyword:       c.Query("keyword"),
+		Currency:       c.Query("currency"),
+		CustomerEmail:  c.Query("customer_email"),
+		Keyword:        c.Query("keyword"),
 	}
 
 	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
@@ -564,4 +613,25 @@ func ErrorResponse(message string) Response {
 		Code:    -1,
 		Message: message,
 	}
+}
+
+// GetOrderStats 获取订单统计（临时占位API）
+// @Summary 获取订单统计
+// @Tags Order
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/orders/stats [get]
+func (h *OrderHandler) GetOrderStats(c *gin.Context) {
+	// TODO: 从数据库聚合真实订单统计数据
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(gin.H{
+		"total_amount":    0,
+		"total_count":     0,
+		"paid_count":      0,
+		"pending_count":   0,
+		"cancelled_count": 0,
+		"today_amount":    0,
+		"today_count":     0,
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }

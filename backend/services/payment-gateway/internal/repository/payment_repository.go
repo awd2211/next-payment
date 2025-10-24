@@ -35,6 +35,7 @@ type PaymentRepository interface {
 	CreateCallback(ctx context.Context, callback *model.PaymentCallback) error
 	UpdateCallback(ctx context.Context, callback *model.PaymentCallback) error
 	GetCallbacksByPaymentID(ctx context.Context, paymentID uuid.UUID) ([]*model.PaymentCallback, error)
+	MarkCallbackCompensated(ctx context.Context, paymentNo string) error
 
 	// 路由规则
 	CreateRoute(ctx context.Context, route *model.PaymentRoute) error
@@ -344,6 +345,23 @@ func (r *paymentRepository) GetCallbacksByPaymentID(ctx context.Context, payment
 		Order("created_at DESC").
 		Find(&callbacks).Error
 	return callbacks, err
+}
+
+// MarkCallbackCompensated 标记回调为已补偿（用于 Saga 补偿逻辑）
+func (r *paymentRepository) MarkCallbackCompensated(ctx context.Context, paymentNo string) error {
+	// 通过 payment_no 查找 payment_id
+	var payment model.Payment
+	if err := r.db.WithContext(ctx).Where("payment_no = ?", paymentNo).First(&payment).Error; err != nil {
+		return err
+	}
+
+	// 更新最新的回调记录，设置错误信息标识为已补偿
+	return r.db.WithContext(ctx).
+		Model(&model.PaymentCallback{}).
+		Where("payment_id = ?", payment.ID).
+		Order("created_at DESC").
+		Limit(1).
+		Update("error_msg", "Saga补偿：事务已回滚").Error
 }
 
 // CreateRoute 创建路由规则

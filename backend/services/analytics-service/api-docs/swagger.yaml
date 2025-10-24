@@ -1,5 +1,5 @@
 basePath: /api/v1
-host: localhost:8009
+host: localhost:40009
 info:
   contact:
     email: support@payment-platform.com

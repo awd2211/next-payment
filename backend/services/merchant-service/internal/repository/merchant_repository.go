@@ -40,8 +40,6 @@ func (r *merchantRepository) Create(ctx context.Context, merchant *model.Merchan
 func (r *merchantRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Merchant, error) {
 	var merchant model.Merchant
 	err := r.db.WithContext(ctx).
-		Preload("APIKeys").
-		Preload("ChannelConfigs").
 		First(&merchant, "id = ?", id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

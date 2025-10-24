@@ -5,6 +5,12 @@ import (
 	"log"
 	"time"
 
+	"payment-platform/merchant-service/internal/client"
+	"payment-platform/merchant-service/internal/handler"
+	"payment-platform/merchant-service/internal/model"
+	"payment-platform/merchant-service/internal/repository"
+	"payment-platform/merchant-service/internal/service"
+
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
@@ -14,11 +20,6 @@ import (
 	"github.com/payment-platform/pkg/middleware"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"payment-platform/merchant-service/internal/client"
-	"payment-platform/merchant-service/internal/handler"
-	"payment-platform/merchant-service/internal/model"
-	"payment-platform/merchant-service/internal/repository"
-	"payment-platform/merchant-service/internal/service"
 )
 
 //	@title						Merchant Service API
@@ -62,6 +63,7 @@ func main() {
 		EnableGRPC:        false, // 使用 HTTP 通信
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 
 		RateLimitRequests: 100,
 		RateLimitWindow:   time.Minute,
@@ -126,7 +128,8 @@ func main() {
 	// 6. 初始化HTTP Handler
 	merchantHandler := handler.NewMerchantHandler(merchantService)
 	dashboardHandler := handler.NewDashboardHandler(dashboardService)
-	
+	paymentHandler := handler.NewPaymentHandler(paymentClient) // 支付代理handler
+
 	// 注意：以下Handler已删除，功能迁移至新服务：
 	// - apiKeyHandler → merchant-auth-service (port 40011)
 	// - channelHandler → merchant-config-service (port 40012)
@@ -146,7 +149,7 @@ func main() {
 	api := application.Router.Group("/api/v1")
 	{
 		// 商户核心路由
-		merchantHandler.RegisterRoutes(api)
+		merchantHandler.RegisterRoutes(api, authMiddleware)
 
 		// MerchantUser 路由
 		userAPI := api.Group("/merchant-users")
@@ -157,6 +160,9 @@ func main() {
 
 		// Dashboard聚合查询路由
 		dashboardHandler.RegisterRoutes(api, authMiddleware)
+
+		// Payment代理路由（调用payment-gateway）
+		paymentHandler.RegisterRoutes(api, authMiddleware)
 	}
 
 	logger.Info("Phase 10 清理完成：已迁移业务到新服务")

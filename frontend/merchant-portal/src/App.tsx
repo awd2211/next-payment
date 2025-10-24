@@ -14,6 +14,7 @@ import Refunds from './pages/Refunds'
 import Settlements from './pages/Settlements'
 import ApiKeys from './pages/ApiKeys'
 import CashierConfig from './pages/CashierConfig'
+import CashierCheckout from './pages/CashierCheckout'
 
 function App() {
   return (
@@ -22,6 +23,8 @@ function App() {
       <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* Public cashier checkout page - no auth required, uses ?token= query param */}
+        <Route path="/cashier/checkout" element={<CashierCheckout />} />
         <Route
           path="/"
           element={

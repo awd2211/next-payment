@@ -7,8 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"payment-platform/payment-gateway/internal/client"
+	"payment-platform/payment-gateway/internal/handler"
+	localMiddleware "payment-platform/payment-gateway/internal/middleware"
+	"payment-platform/payment-gateway/internal/model"
+	"payment-platform/payment-gateway/internal/repository"
+	"payment-platform/payment-gateway/internal/service"
+
 	"github.com/gin-gonic/gin"
 	"github.com/payment-platform/pkg/app"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/health"
 	"github.com/payment-platform/pkg/idempotency"
@@ -20,12 +28,6 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
-	"payment-platform/payment-gateway/internal/client"
-	"payment-platform/payment-gateway/internal/handler"
-	localMiddleware "payment-platform/payment-gateway/internal/middleware"
-	"payment-platform/payment-gateway/internal/model"
-	"payment-platform/payment-gateway/internal/repository"
-	"payment-platform/payment-gateway/internal/service"
 	// grpcServer "payment-platform/payment-gateway/internal/grpc"
 	// pb "github.com/payment-platform/proto/payment"
 )
@@ -70,6 +72,7 @@ func main() {
 		EnableGRPC:        false, // 默认关闭 gRPC,使用 HTTP 通信
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 
 		// 速率限制配置
 		RateLimitRequests: 100,
@@ -126,8 +129,21 @@ func main() {
 	logger.Info("EventPublisher 初始化完成 (事件驱动架构)")
 
 	// 6. 初始化 Saga Orchestrator（分布式事务补偿）
-	sagaOrchestrator := saga.NewSagaOrchestrator(application.DB, application.Redis)
-	logger.Info("Saga Orchestrator 初始化完成")
+	sagaOrchestrator := saga.NewSagaOrchestratorWithMetrics(
+		application.DB,
+		application.Redis,
+		"payment_gateway", // Prometheus namespace
+	)
+	logger.Info("Saga Orchestrator 初始化完成（带 Prometheus 指标）")
+
+	// 启动Saga恢复工作器（自动重试失败的Saga）
+	recoveryWorker := saga.NewRecoveryWorker(
+		sagaOrchestrator,
+		5*time.Minute, // 每5分钟扫描一次失败的Saga
+		10,            // 每次处理10个失败Saga
+	)
+	go recoveryWorker.Start(context.Background())
+	logger.Info("Saga Recovery Worker 已启动")
 
 	// 初始化 Saga Payment Service（支付流程 Saga 编排）
 	// 注意：Saga 功能暂时可选，未来会集成到 paymentService 中使用
@@ -138,6 +154,28 @@ func main() {
 		channelClient,
 	)
 	logger.Info("Saga Payment Service 初始化完成（功能已准备就绪）")
+
+	// 初始化 Refund Saga Service（退款流程 Saga 编排）
+	refundSagaService := service.NewRefundSagaService(
+		sagaOrchestrator,
+		paymentRepo,
+		channelClient,
+		orderClient,
+		nil, // accountingClient 暂未实现
+	)
+	_ = refundSagaService // TODO: 集成到 paymentService 的退款流程
+	logger.Info("Refund Saga Service 初始化完成")
+
+	// 初始化 Callback Saga Service（支付回调 Saga 编排）
+	callbackSagaService := service.NewCallbackSagaService(
+		sagaOrchestrator,
+		paymentRepo,
+		orderClient,
+		nil, // TODO: 需要实现 KafkaProducer 适配器
+	)
+	_ = callbackSagaService // TODO: 集成到 paymentService 的回调处理流程
+	_ = eventPublisher      // 保留引用
+	logger.Info("Callback Saga Service 初始化完成")
 
 	// 7. Webhook基础URL配置（用于渠道回调）
 	webhookBaseURL := config.GetEnv("WEBHOOK_BASE_URL", "http://payment-gateway:40003")
@@ -153,10 +191,10 @@ func main() {
 		notificationClient, // 通知服务客户端(降级方案)
 		analyticsClient,    // 分析服务客户端(降级方案)
 		application.Redis,
-		paymentMetrics,  // 添加 Prometheus 指标
-		messageService,  // 添加消息服务(商户回调通知)
-		eventPublisher,  // 事件发布器(事件驱动架构)
-		webhookBaseURL,  // Webhook基础URL
+		paymentMetrics, // 添加 Prometheus 指标
+		messageService, // 添加消息服务(商户回调通知)
+		eventPublisher, // 事件发布器(事件驱动架构)
+		webhookBaseURL, // Webhook基础URL
 	)
 
 	// 8. 初始化Handler
@@ -195,7 +233,7 @@ func main() {
 					IsActive:     key.IsActive,
 					ExpiresAt:    key.ExpiresAt,
 					Environment:  key.Environment,
-					IPWhitelist:  key.IPWhitelist,  // IP白名单
+					IPWhitelist:  key.IPWhitelist,    // IP白名单
 					ShouldRotate: key.ShouldRotate(), // 轮换提醒
 				}, nil
 			},
@@ -225,11 +263,11 @@ func main() {
 		healthChecker.Register(health.NewServiceHealthChecker("risk-service", riskServiceURL))
 	}
 
-	// 创建增强型健康检查处理器（覆盖 Bootstrap 默认的）
-	healthHandler := health.NewGinHandler(healthChecker)
-	application.Router.GET("/health", healthHandler.Handle)
-	application.Router.GET("/health/live", healthHandler.HandleLiveness)
-	application.Router.GET("/health/ready", healthHandler.HandleReadiness)
+	// Bootstrap 已经自动注册了健康检查路由，这里不需要重复注册
+	// healthHandler := health.NewGinHandler(healthChecker)
+	// application.Router.GET("/health", healthHandler.Handle)
+	// application.Router.GET("/health/live", healthHandler.HandleLiveness)
+	// application.Router.GET("/health/ready", healthHandler.HandleReadiness)
 
 	// 11. 幂等性中间件（针对创建操作）
 	idempotencyManager := idempotency.NewIdempotencyManager(application.Redis, "payment-gateway", 24*time.Hour)
@@ -246,7 +284,7 @@ func main() {
 		webhooks.POST("/paypal", paymentHandler.HandlePayPalWebhook)
 	}
 
-	// 需要签名验证的路由（自定义安全中间件）
+	// 需要签名验证的路由（API Key认证 - 用于商户API调用）
 	api := application.Router.Group("/api/v1")
 	api.Use(signatureMiddlewareFunc)
 	{
@@ -265,6 +303,47 @@ func main() {
 			refunds.POST("", paymentHandler.CreateRefund)
 			refunds.GET("/:refundNo", paymentHandler.GetRefund)
 			refunds.GET("", paymentHandler.QueryRefunds)
+		}
+	}
+
+	// 商户后台查询路由（JWT认证 - 用于商户后台界面）
+	// 创建JWT Manager用于验证token
+	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	authMiddleware := middleware.AuthMiddleware(jwtManager)
+
+	merchantAPI := application.Router.Group("/api/v1/merchant")
+	merchantAPI.Use(authMiddleware) // 所有merchant路由都需要JWT认证
+	{
+		// 商户后台支付查询
+		merchantPayments := merchantAPI.Group("/payments")
+		{
+			merchantPayments.GET("", paymentHandler.QueryPayments)
+			merchantPayments.GET("/:paymentNo", paymentHandler.GetPayment)
+			// 支付统计（暂时返回空数据，等待实现）
+			merchantPayments.GET("/stats", func(c *gin.Context) {
+				c.JSON(200, gin.H{
+					"code":    "SUCCESS",
+					"message": "成功",
+					"data": gin.H{
+						"total_amount":  0,
+						"total_count":   0,
+						"success_count": 0,
+						"failed_count":  0,
+						"pending_count": 0,
+						"success_rate":  0,
+						"today_amount":  0,
+						"today_count":   0,
+					},
+				})
+			})
+		}
+
+		// 商户后台退款查询
+		merchantRefunds := merchantAPI.Group("/refunds")
+		{
+			merchantRefunds.GET("", paymentHandler.QueryRefunds)
+			merchantRefunds.GET("/:refundNo", paymentHandler.GetRefund)
 		}
 	}
 

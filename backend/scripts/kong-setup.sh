@@ -78,6 +78,18 @@ create_or_update_service() {
     fi
 }
 
+# 根据环境变量决定使用 HTTP 或 HTTPS
+get_service_url() {
+    local host=$1
+    local port=$2
+
+    if [ "${ENABLE_MTLS:-false}" == "true" ]; then
+        echo "https://$host:$port"
+    else
+        echo "http://$host:$port"
+    fi
+}
+
 # 创建或更新路由
 create_or_update_route() {
     local service_name=$1
@@ -147,20 +159,30 @@ echo ""
 wait_for_kong || exit 1
 
 echo ""
-log_info "开始配置服务..."
+if [ "${ENABLE_MTLS:-false}" == "true" ]; then
+    log_info "开始配置服务 (mTLS 模式: HTTPS)..."
+else
+    log_info "开始配置服务 (标准模式: HTTP)..."
+fi
 echo ""
 
-# 2. 创建服务
-create_or_update_service "admin-service" "http://host.docker.internal:40001"
-create_or_update_service "merchant-service" "http://host.docker.internal:40002"
-create_or_update_service "payment-gateway" "http://host.docker.internal:40003"
-create_or_update_service "order-service" "http://host.docker.internal:40004"
-create_or_update_service "channel-adapter" "http://host.docker.internal:40005"
-create_or_update_service "risk-service" "http://host.docker.internal:40006"
-create_or_update_service "accounting-service" "http://host.docker.internal:40007"
-create_or_update_service "notification-service" "http://host.docker.internal:40008"
-create_or_update_service "analytics-service" "http://host.docker.internal:40009"
-create_or_update_service "config-service" "http://host.docker.internal:40010"
+# 2. 创建服务（自动根据 ENABLE_MTLS 使用 HTTP 或 HTTPS）
+create_or_update_service "admin-service" "$(get_service_url host.docker.internal 40001)"
+create_or_update_service "merchant-service" "$(get_service_url host.docker.internal 40002)"
+create_or_update_service "payment-gateway" "$(get_service_url host.docker.internal 40003)"
+create_or_update_service "order-service" "$(get_service_url host.docker.internal 40004)"
+create_or_update_service "channel-adapter" "$(get_service_url host.docker.internal 40005)"
+create_or_update_service "risk-service" "$(get_service_url host.docker.internal 40006)"
+create_or_update_service "accounting-service" "$(get_service_url host.docker.internal 40007)"
+create_or_update_service "notification-service" "$(get_service_url host.docker.internal 40008)"
+create_or_update_service "analytics-service" "$(get_service_url host.docker.internal 40009)"
+create_or_update_service "config-service" "$(get_service_url host.docker.internal 40010)"
+create_or_update_service "merchant-auth-service" "$(get_service_url host.docker.internal 40011)"
+create_or_update_service "merchant-config-service" "$(get_service_url host.docker.internal 40012)"
+create_or_update_service "settlement-service" "$(get_service_url host.docker.internal 40013)"
+create_or_update_service "withdrawal-service" "$(get_service_url host.docker.internal 40014)"
+create_or_update_service "kyc-service" "$(get_service_url host.docker.internal 40015)"
+create_or_update_service "cashier-service" "$(get_service_url host.docker.internal 40016)"
 
 echo ""
 log_info "开始配置路由..."
@@ -191,6 +213,31 @@ create_or_update_route "merchant-service" "merchant-dashboard" \
 create_or_update_route "merchant-service" "merchant-admin" \
     "/api/v1/merchant"
 
+# 4.1. 创建路由 - Merchant Auth Service (商户认证和API Key管理)
+create_or_update_route "merchant-auth-service" "merchant-api-keys" \
+    "/api/v1/api-keys"
+
+create_or_update_route "merchant-auth-service" "merchant-security" \
+    "/api/v1/security"
+
+create_or_update_route "merchant-auth-service" "merchant-auth-validate" \
+    "/api/v1/auth/validate-signature"
+
+# 4.2. 创建路由 - Merchant Config Service (商户配置管理)
+create_or_update_route "merchant-config-service" "merchant-config-fee" \
+    "/api/v1/fee-configs"
+
+create_or_update_route "merchant-config-service" "merchant-config-limits" \
+    "/api/v1/transaction-limits"
+
+create_or_update_route "merchant-config-service" "merchant-config-channels" \
+    "/api/v1/channel-configs"
+
+# 4.3. 创建路由 - Merchant Payments Query (商户交易查询 - 使用JWT认证)
+create_or_update_route "payment-gateway" "merchant-payments" \
+    "/api/v1/merchant/payments" \
+    "/api/v1/merchant/refunds"
+
 # 5. 创建路由 - Payment Gateway (API Key 认证)
 create_or_update_route "payment-gateway" "payment-api" \
     "/api/v1/payments" \
@@ -202,6 +249,10 @@ create_or_update_route "payment-gateway" "payment-webhooks" \
 # 6. 创建路由 - Config Service
 create_or_update_route "config-service" "config-api" \
     "/api/v1/config"
+
+# Cashier Service 路由
+create_or_update_route "cashier-service" "cashier-api" \
+    "/api/v1/cashier"
 
 echo ""
 log_info "开始配置全局插件..."
@@ -260,12 +311,37 @@ enable_plugin "rate-limiting" "route" "payment-api" \
     --data "config.redis.timeout=2000" \
     --data "config.hide_client_headers=false"
 
-# 9. 为 Admin Management 启用 JWT
+# 9. 创建 JWT Consumer 和 Credentials
+log_info "配置 JWT Consumer..."
+
+# 创建 payment-platform consumer
+if ! curl -s -f $KONG_ADMIN/consumers/payment-platform > /dev/null 2>&1; then
+    curl -s -X POST $KONG_ADMIN/consumers \
+        --data "username=payment-platform" \
+        > /dev/null
+    log_success "Consumer payment-platform 已创建"
+else
+    log_info "Consumer payment-platform 已存在"
+fi
+
+# 为 consumer 创建 JWT credentials
+# 删除旧的 credentials (如果存在)
+curl -s -X DELETE "$KONG_ADMIN/consumers/payment-platform/jwt" > /dev/null 2>&1 || true
+
+# 创建新的 JWT credential (使用与服务一致的 secret)
+curl -s -X POST $KONG_ADMIN/consumers/payment-platform/jwt \
+    --data "key=payment-platform" \
+    --data "algorithm=HS256" \
+    --data "secret=your-256-bit-secret-key-change-this-in-production" \
+    > /dev/null
+log_success "JWT credentials 已配置"
+
+# 10. 为 Admin Management 启用 JWT
 enable_plugin "jwt" "route" "admin-management" \
     --data "config.key_claim_name=iss" \
     --data "config.claims_to_verify=exp"
 
-# 10. 为 Merchant Dashboard 启用 JWT
+# 11. 为 Merchant Dashboard 启用 JWT
 enable_plugin "jwt" "route" "merchant-dashboard" \
     --data "config.key_claim_name=iss" \
     --data "config.claims_to_verify=exp"
@@ -274,7 +350,11 @@ enable_plugin "jwt" "route" "merchant-admin" \
     --data "config.key_claim_name=iss" \
     --data "config.claims_to_verify=exp"
 
-# 11. 为公开路由启用 Rate Limiting (防止暴力攻击)
+enable_plugin "jwt" "route" "merchant-payments" \
+    --data "config.key_claim_name=iss" \
+    --data "config.claims_to_verify=exp"
+
+# 12. 为公开路由启用 Rate Limiting (防止暴力攻击)
 enable_plugin "rate-limiting" "route" "admin-auth" \
     --data "config.minute=10" \
     --data "config.policy=local"

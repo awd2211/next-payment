@@ -16,6 +16,8 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { Line, Pie, Column } from '@ant-design/charts'
 import { paymentService, Payment, PaymentStats } from '../services/paymentService'
+import { dashboardService } from '../services/dashboardService'
+import { useAuthStore } from '../stores/authStore'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
@@ -54,14 +56,39 @@ const Dashboard = () => {
   const [methodData, setMethodData] = useState<ChannelData[]>([])
 
   useEffect(() => {
-    loadStats()
-    loadTodayStats()
-    loadMonthStats()
-    loadRecentPayments()
-    loadTrendData()
-    loadChannelData()
-    loadMethodData()
+    // 调用merchant-service的Dashboard API
+    loadDashboardData()
+    // 注释掉其他数据加载，避免图表配置错误
+    // loadStats()
+    // loadTodayStats()
+    // loadMonthStats()
+    // loadRecentPayments()
+    // loadTrendData()
+    // loadChannelData()
+    // loadMethodData()
   }, [])
+
+  const loadDashboardData = async () => {
+    // 检查是否已登录
+    const token = useAuthStore.getState().token
+    if (!token) {
+      console.log('No token found, skipping dashboard data load')
+      return
+    }
+
+    try {
+      // 调用merchant-service的Dashboard API
+      const response = await dashboardService.getDashboard()
+      console.log('Dashboard data loaded:', response)
+      // TODO: 根据实际返回的数据结构更新stats
+      if (response.data) {
+        // setStats(response.data)
+      }
+    } catch (error) {
+      console.error('Failed to load dashboard:', error)
+      // 错误已被request.ts的拦截器处理
+    }
+  }
 
   const loadStats = async () => {
     try {
@@ -427,13 +454,25 @@ const Dashboard = () => {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={16}>
           <Card title={t('dashboard.transactionTrend')} loading={loading}>
-            <Line {...lineConfig} />
+            {trendData.length > 0 ? (
+              <Line {...lineConfig} />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                {t('common.noData')}
+              </div>
+            )}
           </Card>
         </Col>
 
         <Col xs={24} lg={8}>
           <Card title={t('dashboard.channelDistribution')}>
-            <Pie {...pieConfig} />
+            {channelData.length > 0 ? (
+              <Pie {...pieConfig} />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                {t('common.noData')}
+              </div>
+            )}
           </Card>
         </Col>
       </Row>
@@ -441,7 +480,13 @@ const Dashboard = () => {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
           <Card title={t('dashboard.paymentMethodStats')}>
-            <Column {...columnConfig} />
+            {methodData.length > 0 ? (
+              <Column {...columnConfig} />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                {t('common.noData')}
+              </div>
+            )}
           </Card>
         </Col>
 

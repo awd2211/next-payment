@@ -23,397 +23,67 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/v1/api-keys": {
+        "/api/v1/dashboard": {
             "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "APIKey"
+                    "Dashboard"
                 ],
-                "summary": "获取API密钥列表",
+                "summary": "获取Dashboard概览",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/dashboard/balance": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "获取余额信息",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/dashboard/transaction-summary": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "获取交易汇总",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "环境筛选（test/production）",
-                        "name": "environment",
+                        "description": "开始日期 YYYY-MM-DD",
+                        "name": "start_date",
                         "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "APIKey"
-                ],
-                "summary": "创建API密钥",
-                "parameters": [
-                    {
-                        "description": "API密钥信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/payment-platform_merchant-service_internal_service.CreateAPIKeyInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/api-keys/{id}": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "APIKey"
-                ],
-                "summary": "获取API密钥详情",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "API密钥ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "put": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "APIKey"
-                ],
-                "summary": "更新API密钥",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "API密钥ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
                     },
                     {
-                        "description": "更新信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/payment-platform_merchant-service_internal_service.UpdateAPIKeyInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "APIKey"
-                ],
-                "summary": "删除API密钥",
-                "parameters": [
-                    {
                         "type": "string",
-                        "description": "API密钥ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/api-keys/{id}/revoke": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "APIKey"
-                ],
-                "summary": "撤销API密钥",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "API密钥ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/api-keys/{id}/rotate": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "APIKey"
-                ],
-                "summary": "轮换API密钥（生成新Secret）",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "API密钥ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/channels": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Channel"
-                ],
-                "summary": "获取所有渠道配置",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Channel"
-                ],
-                "summary": "创建渠道配置",
-                "parameters": [
-                    {
-                        "description": "渠道配置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/payment-platform_merchant-service_internal_service.CreateChannelInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/channels/{id}": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Channel"
-                ],
-                "summary": "获取渠道配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "put": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Channel"
-                ],
-                "summary": "更新渠道配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "渠道配置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/payment-platform_merchant-service_internal_service.UpdateChannelInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Channel"
-                ],
-                "summary": "删除渠道配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/channels/{id}/toggle": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Channel"
-                ],
-                "summary": "启用/禁用渠道",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "enabled",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "boolean"
-                            }
-                        }
+                        "description": "结束日期 YYYY-MM-DD",
+                        "name": "end_date",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -513,6 +183,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/merchant/balance": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Merchant"
+                ],
+                "summary": "获取商户余额",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/merchant/login": {
             "post": {
                 "consumes": [
@@ -534,6 +224,66 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/internal_handler.LoginRequest"
                         }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/merchant/payments": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payment"
+                ],
+                "summary": "获取当前商户的支付列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "支付状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "支付渠道",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始时间",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间",
+                        "name": "end_time",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -599,6 +349,42 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/merchant/refunds": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payment"
+                ],
+                "summary": "获取当前商户的退款列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/merchant/register": {
             "post": {
                 "consumes": [
@@ -622,6 +408,26 @@ const docTemplate = `{
                         }
                     }
                 ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/merchant/stats": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Merchant"
+                ],
+                "summary": "获取商户统计",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -810,131 +616,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/security/2fa/disable": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "禁用2FA",
-                "parameters": [
-                    {
-                        "description": "禁用请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.Disable2FARequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/security/2fa/enable": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "启用2FA",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/security/2fa/verify": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "验证2FA",
-                "parameters": [
-                    {
-                        "description": "验证请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.Verify2FARequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/security/login-activities": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "获取登录活动",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/security/password": {
+        "/api/v1/merchants/{id}/password": {
             "put": {
                 "consumes": [
                     "application/json"
@@ -943,17 +625,24 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Security"
+                    "Merchant"
                 ],
-                "summary": "修改密码",
+                "summary": "更新商户密码",
                 "parameters": [
                     {
-                        "description": "修改密码请求",
+                        "type": "string",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "密码哈希",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.ChangePasswordRequest"
+                            "$ref": "#/definitions/internal_handler.UpdatePasswordRequest"
                         }
                     }
                 ],
@@ -968,58 +657,20 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/security/sessions": {
+        "/api/v1/merchants/{id}/with-password": {
             "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Security"
+                    "Merchant"
                 ],
-                "summary": "获取活跃会话",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "撤销所有会话",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/security/sessions/{session_id}": {
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "撤销会话",
+                "summary": "获取带密码的商户信息",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "会话ID",
-                        "name": "session_id",
+                        "description": "商户ID",
+                        "name": "id",
                         "in": "path",
                         "required": true
                     }
@@ -1034,210 +685,9 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/api/v1/security/settings": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "获取安全设置",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "put": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Security"
-                ],
-                "summary": "更新安全设置",
-                "parameters": [
-                    {
-                        "description": "安全设置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/payment-platform_merchant-service_internal_service.UpdateSecuritySettingsInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/webhooks": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "获取Webhook配置",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "put": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "更新Webhook配置",
-                "parameters": [
-                    {
-                        "description": "Webhook配置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/payment-platform_merchant-service_internal_service.UpdateWebhookInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "创建Webhook配置",
-                "parameters": [
-                    {
-                        "description": "Webhook配置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/payment-platform_merchant-service_internal_service.CreateWebhookInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "删除Webhook配置",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/webhooks/regenerate-secret": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "重新生成Webhook签名密钥",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
-        "internal_handler.ChangePasswordRequest": {
-            "type": "object",
-            "required": [
-                "new_password",
-                "old_password"
-            ],
-            "properties": {
-                "new_password": {
-                    "type": "string",
-                    "minLength": 8
-                },
-                "old_password": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.Disable2FARequest": {
-            "type": "object",
-            "required": [
-                "password"
-            ],
-            "properties": {
-                "password": {
-                    "type": "string"
-                }
-            }
-        },
         "internal_handler.LoginRequest": {
             "type": "object",
             "required": [
@@ -1264,6 +714,17 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.UpdatePasswordRequest": {
+            "type": "object",
+            "required": [
+                "password_hash"
+            ],
+            "properties": {
+                "password_hash": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.UpdateStatusRequest": {
             "type": "object",
             "required": [
@@ -1275,80 +736,13 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.Verify2FARequest": {
-            "type": "object",
-            "required": [
-                "code"
-            ],
-            "properties": {
-                "code": {
-                    "type": "string"
-                }
-            }
-        },
-        "payment-platform_merchant-service_internal_service.CreateAPIKeyInput": {
-            "type": "object",
-            "required": [
-                "environment",
-                "name"
-            ],
-            "properties": {
-                "environment": {
-                    "description": "test, production",
-                    "type": "string"
-                },
-                "expires_at": {
-                    "description": "可选的过期时间",
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "payment-platform_merchant-service_internal_service.CreateChannelInput": {
-            "type": "object",
-            "required": [
-                "channel",
-                "config",
-                "merchant_id"
-            ],
-            "properties": {
-                "channel": {
-                    "type": "string",
-                    "enum": [
-                        "stripe",
-                        "paypal",
-                        "crypto",
-                        "adyen",
-                        "square"
-                    ]
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "is_test_mode": {
-                    "type": "boolean"
-                },
-                "merchant_id": {
-                    "type": "string"
-                }
-            }
-        },
         "payment-platform_merchant-service_internal_service.CreateMerchantInput": {
             "type": "object",
-            "required": [
-                "email",
-                "name",
-                "password"
-            ],
             "properties": {
-                "business_type": {
-                    "description": "individual, company",
+                "businessType": {
                     "type": "string"
                 },
-                "company_name": {
+                "companyName": {
                     "type": "string"
                 },
                 "country": {
@@ -1361,8 +755,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
-                    "type": "string",
-                    "minLength": 8
+                    "type": "string"
                 },
                 "phone": {
                     "type": "string"
@@ -1372,50 +765,13 @@ const docTemplate = `{
                 }
             }
         },
-        "payment-platform_merchant-service_internal_service.CreateWebhookInput": {
-            "type": "object",
-            "required": [
-                "events",
-                "merchant_id",
-                "url"
-            ],
-            "properties": {
-                "events": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "max_retries": {
-                    "type": "integer"
-                },
-                "merchant_id": {
-                    "type": "string"
-                },
-                "timeout_seconds": {
-                    "type": "integer"
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
         "payment-platform_merchant-service_internal_service.RegisterMerchantInput": {
             "type": "object",
-            "required": [
-                "business_type",
-                "company_name",
-                "country",
-                "email",
-                "name",
-                "password"
-            ],
             "properties": {
-                "business_type": {
+                "businessType": {
                     "type": "string"
                 },
-                "company_name": {
+                "companyName": {
                     "type": "string"
                 },
                 "country": {
@@ -1428,54 +784,27 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
-                    "type": "string",
-                    "minLength": 8
+                    "type": "string"
                 },
                 "website": {
                     "type": "string"
                 }
             }
         },
-        "payment-platform_merchant-service_internal_service.UpdateAPIKeyInput": {
-            "type": "object",
-            "properties": {
-                "expires_at": {
-                    "type": "string"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "payment-platform_merchant-service_internal_service.UpdateChannelInput": {
-            "type": "object",
-            "properties": {
-                "config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "is_enabled": {
-                    "type": "boolean"
-                },
-                "is_test_mode": {
-                    "type": "boolean"
-                }
-            }
-        },
         "payment-platform_merchant-service_internal_service.UpdateMerchantInput": {
             "type": "object",
             "properties": {
-                "business_type": {
+                "businessType": {
                     "type": "string"
                 },
-                "company_name": {
+                "companyName": {
                     "type": "string"
                 },
                 "country": {
                     "type": "string"
+                },
+                "isTestMode": {
+                    "type": "boolean"
                 },
                 "metadata": {
                     "type": "string"
@@ -1487,68 +816,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "website": {
-                    "type": "string"
-                }
-            }
-        },
-        "payment-platform_merchant-service_internal_service.UpdateSecuritySettingsInput": {
-            "type": "object",
-            "properties": {
-                "abnormal_notification": {
-                    "type": "boolean"
-                },
-                "allowed_countries": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "blocked_countries": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "ip_whitelist": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "login_notification": {
-                    "type": "boolean"
-                },
-                "max_concurrent_sessions": {
-                    "type": "integer"
-                },
-                "password_expiry_days": {
-                    "type": "integer"
-                },
-                "session_timeout_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "payment-platform_merchant-service_internal_service.UpdateWebhookInput": {
-            "type": "object",
-            "properties": {
-                "events": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "is_enabled": {
-                    "type": "boolean"
-                },
-                "max_retries": {
-                    "type": "integer"
-                },
-                "timeout_seconds": {
-                    "type": "integer"
-                },
-                "url": {
                     "type": "string"
                 }
             }
@@ -1567,11 +834,11 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8002",
+	Host:             "localhost:40002",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Merchant Service API",
-	Description:      "支付平台商户管理服务API文档",
+	Description:      "支付平台商户管理服务API文档（Phase 10 清理后）",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

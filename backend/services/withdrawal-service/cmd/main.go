@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/payment-platform/pkg/idempotency"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/saga"
 	"payment-platform/withdrawal-service/internal/client"
 	"payment-platform/withdrawal-service/internal/handler"
 	"payment-platform/withdrawal-service/internal/model"
@@ -54,6 +56,7 @@ func main() {
 		// GRPCPort:          config.GetEnvInt("GRPC_PORT", 50014), // 已禁用
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
+		EnableMTLS:        config.GetEnvBool("ENABLE_MTLS", false), // mTLS 服务间认证
 
 		RateLimitRequests: 100,
 		RateLimitWindow:   time.Minute,
@@ -87,7 +90,25 @@ func main() {
 
 	logger.Info("HTTP客户端初始化完成")
 
-	// 4. 初始化Service
+	// 4. 初始化 Saga Orchestrator（带 Prometheus 指标）
+	sagaOrchestrator := saga.NewSagaOrchestratorWithMetrics(
+		application.DB,
+		application.Redis,
+		"withdrawal_service", // Prometheus namespace
+	)
+
+	// 启动Saga恢复工作器（自动重试失败的提现Saga）
+	recoveryWorker := saga.NewRecoveryWorker(
+		sagaOrchestrator,
+		5*time.Minute, // 每5分钟扫描一次失败的Saga
+		10,            // 每次处理10个失败Saga
+	)
+	// 使用 context.Background() 作为 context
+	go recoveryWorker.Start(context.Background())
+
+	logger.Info("Saga orchestrator 和恢复工作器初始化完成")
+
+	// 5. 初始化Service（注入Saga）
 	withdrawalService := service.NewWithdrawalService(
 		application.DB,
 		withdrawalRepo,
@@ -96,10 +117,22 @@ func main() {
 		bankTransferClient,
 	)
 
-	// 5. 初始化Handler
+	// 初始化Withdrawal Saga Service（用于提现执行）
+	withdrawalSagaService := service.NewWithdrawalSagaService(
+		sagaOrchestrator,
+		withdrawalRepo,
+		accountingClient,
+		bankTransferClient,
+		notificationClient,
+	)
+
+	// 将 Saga Service 注入到 Withdrawal Service（待实现）
+	_ = withdrawalSagaService // TODO: 集成到 withdrawalService 的提现执行流程
+
+	// 6. 初始化Handler
 	withdrawalHandler := handler.NewWithdrawalHandler(withdrawalService)
 
-	// 6. 幂等性中间件（针对创建操作）
+	// 7. 幂等性中间件（针对创建操作）
 	idempotencyManager := idempotency.NewIdempotencyManager(
 		application.Redis,
 		"withdrawal-service",
@@ -107,13 +140,13 @@ func main() {
 	)
 	application.Router.Use(middleware.IdempotencyMiddleware(idempotencyManager))
 
-	// 7. 注册Swagger UI
+	// 8. 注册Swagger UI
 	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// 8. 注册路由
+	// 9. 注册路由
 	withdrawalHandler.RegisterRoutes(application.Router)
 
-	// 9. 启动HTTP服务（gRPC已禁用）
+	// 10. 启动HTTP服务（gRPC已禁用）
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal("服务启动失败: " + err.Error())
 	}

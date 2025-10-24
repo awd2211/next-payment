@@ -36,6 +36,10 @@ export const useAuthStore = create<AuthState>()(
 
       clearAuth: () => {
         set({ token: null, refreshToken: null, merchant: null })
+        // 双保险:也清除 localStorage 中的所有认证相关数据
+        localStorage.removeItem('token')
+        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('merchant')
       },
     }),
     {

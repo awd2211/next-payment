@@ -131,3 +131,132 @@ func (c *AccountingClient) DeductBalance(ctx context.Context, deductReq *DeductB
 
 	return nil
 }
+
+// FreezeBalanceRequest 冻结余额请求
+type FreezeBalanceRequest struct {
+	MerchantID      uuid.UUID `json:"merchant_id"`
+	Amount          int64     `json:"amount"`
+	TransactionType string    `json:"transaction_type"`
+	RelatedNo       string    `json:"related_no"`
+	Description     string    `json:"description"`
+}
+
+// FreezeBalance 冻结余额（使用熔断器）
+func (c *AccountingClient) FreezeBalance(ctx context.Context, freezeReq *FreezeBalanceRequest) error {
+	url := fmt.Sprintf("%s/api/v1/balances/freeze", c.baseURL)
+
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "POST",
+		URL:    url,
+		Body:   freezeReq,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+	}
+
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %w", err)
+	}
+
+	// 解析响应
+	var result DeductBalanceResponse
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if result.Code != 0 {
+		return fmt.Errorf("业务错误: %s", result.Message)
+	}
+
+	return nil
+}
+
+// UnfreezeBalanceRequest 解冻余额请求
+type UnfreezeBalanceRequest struct {
+	MerchantID      uuid.UUID `json:"merchant_id"`
+	Amount          int64     `json:"amount"`
+	TransactionType string    `json:"transaction_type"`
+	RelatedNo       string    `json:"related_no"`
+	Description     string    `json:"description"`
+}
+
+// UnfreezeBalance 解冻余额（使用熔断器）
+func (c *AccountingClient) UnfreezeBalance(ctx context.Context, unfreezeReq *UnfreezeBalanceRequest) error {
+	url := fmt.Sprintf("%s/api/v1/balances/unfreeze", c.baseURL)
+
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "POST",
+		URL:    url,
+		Body:   unfreezeReq,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+	}
+
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %w", err)
+	}
+
+	// 解析响应
+	var result DeductBalanceResponse
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if result.Code != 0 {
+		return fmt.Errorf("业务错误: %s", result.Message)
+	}
+
+	return nil
+}
+
+// RefundBalanceRequest 退还余额请求
+type RefundBalanceRequest struct {
+	MerchantID      uuid.UUID `json:"merchant_id"`
+	Amount          int64     `json:"amount"`
+	TransactionType string    `json:"transaction_type"`
+	RelatedNo       string    `json:"related_no"`
+	Description     string    `json:"description"`
+}
+
+// RefundBalance 退还余额（使用熔断器）
+func (c *AccountingClient) RefundBalance(ctx context.Context, refundReq *RefundBalanceRequest) error {
+	url := fmt.Sprintf("%s/api/v1/transactions/refund", c.baseURL)
+
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "POST",
+		URL:    url,
+		Body:   refundReq,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+	}
+
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %w", err)
+	}
+
+	// 解析响应
+	var result DeductBalanceResponse
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if result.Code != 0 {
+		return fmt.Errorf("业务错误: %s", result.Message)
+	}
+
+	return nil
+}

@@ -89,6 +89,41 @@ go test -cover ./...
 go clean -cache
 ```
 
+### API Documentation (Swagger/OpenAPI)
+
+All services have comprehensive Swagger/OpenAPI documentation:
+
+```bash
+# Generate Swagger docs for all services
+cd backend
+make swagger-docs
+
+# Install swag CLI (first time only)
+make install-swagger
+```
+
+**Access Interactive API Documentation:**
+- Admin Service: http://localhost:40001/swagger/index.html
+- Merchant Service: http://localhost:40002/swagger/index.html
+- Payment Gateway: http://localhost:40003/swagger/index.html
+- Order Service: http://localhost:40004/swagger/index.html
+- [See [API_DOCUMENTATION_GUIDE.md](backend/API_DOCUMENTATION_GUIDE.md) for all services]
+
+**Documentation Coverage:**
+- ✅ **Payment Gateway** - 100% (10 endpoints: payments, refunds, webhooks)
+- ✅ **Admin Service** - 95% (50+ endpoints: users, roles, audit logs)
+- ✅ **Merchant Service** - 95% (40+ endpoints: merchants, KYC, settlements)
+- ✅ **Order Service** - 80% (15 endpoints: orders, status updates, statistics)
+- ✅ **Channel Adapter** - 75% (12 endpoints: payment channels, exchange rates)
+- ✅ **Notification Service** - 70% (20 endpoints: email, SMS, webhooks)
+- ✅ **KYC Service** - 85% (12 endpoints: document verification, compliance)
+- ✅ **Merchant Auth Service** - 90% (15 endpoints: API keys, authentication)
+- ✅ **Withdrawal Service** - 80% (10 endpoints: withdrawals, bank accounts)
+
+**See also:**
+- [API Documentation Guide](backend/API_DOCUMENTATION_GUIDE.md) - Complete guide with examples
+- [Swagger Quick Reference](backend/SWAGGER_QUICK_REFERENCE.md) - Quick syntax reference
+
 ### Database Operations
 
 ```bash

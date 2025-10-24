@@ -32,6 +32,7 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons'
 import { orderService, Order, OrderStats, CreateOrderRequest, OrderItem } from '../services/orderService'
+import { useAuthStore } from '../stores/authStore'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 
@@ -65,6 +66,12 @@ const Orders = () => {
   }, [])
 
   const loadOrders = async () => {
+    const token = useAuthStore.getState().token
+    if (!token) {
+      console.log('No token found, skipping orders load')
+      return
+    }
+
     setLoading(true)
     try {
       const response = await orderService.list({
@@ -76,16 +83,34 @@ const Orders = () => {
         start_time: dateRange?.[0]?.toISOString(),
         end_time: dateRange?.[1]?.toISOString(),
       })
-      setOrders(response.data)
-      setTotal(response.pagination.total)
+      console.log('Orders response:', response)
+      // 安全处理响应数据，兼容不同的数据结构
+      const ordersData = response.data
+      if (ordersData) {
+        // 如果data直接是数组，使用它；否则使用data.list
+        const ordersList = Array.isArray(ordersData) ? ordersData : (ordersData.list || [])
+        setOrders(ordersList)
+        setTotal(ordersData.total || response.pagination?.total || 0)
+      } else {
+        setOrders([])
+        setTotal(0)
+      }
     } catch (error) {
-      // Error handled by interceptor
+      console.error('Load orders error:', error)
+      setOrders([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
   }
 
   const loadStats = async () => {
+    const token = useAuthStore.getState().token
+    if (!token) {
+      console.log('No token found, skipping stats load')
+      return
+    }
+
     try {
       const response = await orderService.getStats({})
       setStats(response.data)

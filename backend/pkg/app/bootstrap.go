@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	pkgtls "github.com/payment-platform/pkg/tls"
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -42,6 +44,7 @@ type ServiceConfig struct {
 	EnableGRPC        bool     // 是否启用 gRPC（默认：false）
 	EnableHealthCheck bool     // 是否启用增强健康检查（默认：true）
 	EnableRateLimit   bool     // 是否启用速率限制（默认：false）
+	EnableMTLS        bool     // 是否启用mTLS服务间认证（默认：false）
 
 	// 速率限制配置（当 EnableRateLimit=true 时有效）
 	RateLimitRequests int          // 请求数限制（默认：100）
@@ -261,7 +264,19 @@ func Bootstrap(cfg ServiceConfig) (*App, error) {
 		}
 	}
 
-	// 13. Prometheus 指标端点
+	// 13. 初始化 mTLS（可选）
+	if cfg.EnableMTLS {
+		tlsConfig := pkgtls.LoadFromEnv()
+		if err := pkgtls.ValidateServerConfig(tlsConfig); err != nil {
+			return nil, fmt.Errorf("mTLS 配置验证失败: %w", err)
+		}
+		logger.Info("mTLS 服务间认证已启用")
+
+		// 添加 mTLS 中间件（记录客户端证书信息）
+		router.Use(pkgtls.MTLSMiddleware())
+	}
+
+	// 14. Prometheus 指标端点
 	if cfg.EnableMetrics {
 		router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	}
@@ -295,10 +310,33 @@ func (a *App) RunWithGracefulShutdown() error {
 		Handler: a.Router,
 	}
 
+	// 如果启用了 mTLS，配置 TLS
+	var tlsConfig *tls.Config
+	var certFile, keyFile string
+	if a.Config.EnableMTLS {
+		cfg := pkgtls.LoadFromEnv()
+		var err error
+		tlsConfig, err = pkgtls.NewServerTLSConfig(cfg)
+		if err != nil {
+			return fmt.Errorf("创建 TLS 配置失败: %w", err)
+		}
+		srv.TLSConfig = tlsConfig
+		certFile = cfg.CertFile
+		keyFile = cfg.KeyFile
+		logger.Info("HTTP 服务器已启用 mTLS")
+	}
+
 	// 在 goroutine 中启动服务器
 	go func() {
-		logger.Info(fmt.Sprintf("%s HTTP服务器正在监听 %s", a.Config.ServiceName, addr))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if a.Config.EnableMTLS {
+			logger.Info(fmt.Sprintf("%s HTTPS服务器(mTLS)正在监听 %s", a.Config.ServiceName, addr))
+			err = srv.ListenAndServeTLS(certFile, keyFile)
+		} else {
+			logger.Info(fmt.Sprintf("%s HTTP服务器正在监听 %s", a.Config.ServiceName, addr))
+			err = srv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			logger.Fatal("HTTP服务启动失败", zap.Error(err))
 		}
 	}()

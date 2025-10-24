@@ -37,6 +37,30 @@ const docTemplate = `{
                 "summary": "列出通知",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "通知类型",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "通知渠道",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "页码",
                         "name": "page",
@@ -196,6 +220,418 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/notifications/{id}": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notification"
+                ],
+                "summary": "获取通知详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "通知ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.Notification"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/preferences": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Preference"
+                ],
+                "summary": "列出通知偏好",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationPreference"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Preference"
+                ],
+                "summary": "创建通知偏好",
+                "parameters": [
+                    {
+                        "description": "偏好设置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationPreference"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationPreference"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/preferences/{id}": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Preference"
+                ],
+                "summary": "获取通知偏好详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "偏好ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationPreference"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Preference"
+                ],
+                "summary": "更新通知偏好",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "偏好ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "偏好设置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationPreference"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationPreference"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Preference"
+                ],
+                "summary": "删除通知偏好",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "偏好ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/templates": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Template"
+                ],
+                "summary": "列出通知模板",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Template"
+                ],
+                "summary": "创建通知模板",
+                "parameters": [
+                    {
+                        "description": "模板信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/templates/{code}": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Template"
+                ],
+                "summary": "获取通知模板",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "模板编码",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/templates/{id}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Template"
+                ],
+                "summary": "更新通知模板",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "模板ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "模板信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.NotificationTemplate"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Template"
+                ],
+                "summary": "删除通知模板",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "模板ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/webhooks/deliveries": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "列出 Webhook 投递记录",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "端点ID",
+                        "name": "endpoint_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "事件类型",
+                        "name": "event_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/webhooks/endpoints": {
             "get": {
                 "consumes": [
@@ -214,8 +650,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "type": "object",
-                                "additionalProperties": true
+                                "$ref": "#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint"
                             }
                         }
                     }
@@ -232,6 +667,86 @@ const docTemplate = `{
                     "Webhook"
                 ],
                 "summary": "创建 Webhook 端点",
+                "parameters": [
+                    {
+                        "description": "端点信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/webhooks/endpoints/{id}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "更新 Webhook 端点",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "端点ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "端点信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_notification-service_internal_model.WebhookEndpoint"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "删除 Webhook 端点",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "端点ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -245,9 +760,261 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "payment-platform_notification-service_internal_model.Notification": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "description": "通知渠道",
+                    "type": "string"
+                },
+                "content": {
+                    "description": "内容",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "description": "错误信息",
+                    "type": "string"
+                },
+                "extra": {
+                    "description": "扩展信息",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "max_retry": {
+                    "description": "最大重试次数",
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "description": "商户ID",
+                    "type": "string"
+                },
+                "priority": {
+                    "description": "优先级（0-9，9最高）",
+                    "type": "integer"
+                },
+                "provider": {
+                    "description": "服务提供商",
+                    "type": "string"
+                },
+                "provider_msg_id": {
+                    "description": "提供商消息ID",
+                    "type": "string"
+                },
+                "recipient": {
+                    "description": "接收者",
+                    "type": "string"
+                },
+                "retry_count": {
+                    "description": "重试次数",
+                    "type": "integer"
+                },
+                "scheduled_at": {
+                    "description": "计划发送时间",
+                    "type": "string"
+                },
+                "sent_at": {
+                    "description": "实际发送时间",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "状态",
+                    "type": "string"
+                },
+                "subject": {
+                    "description": "主题",
+                    "type": "string"
+                },
+                "template_code": {
+                    "description": "模板编码",
+                    "type": "string"
+                },
+                "template_data": {
+                    "description": "模板数据",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "通知类型",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_notification-service_internal_model.NotificationPreference": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "description": "通知渠道",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "event_type": {
+                    "description": "事件类型",
+                    "type": "string"
+                },
+                "extra": {
+                    "description": "扩展信息",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_enabled": {
+                    "description": "是否启用",
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "description": "商户ID",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "用户ID（可选）",
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_notification-service_internal_model.NotificationTemplate": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "description": "通知渠道",
+                    "type": "string"
+                },
+                "code": {
+                    "description": "模板编码",
+                    "type": "string"
+                },
+                "content": {
+                    "description": "内容模板",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "extra": {
+                    "description": "扩展信息",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_enabled": {
+                    "description": "是否启用",
+                    "type": "boolean"
+                },
+                "is_system": {
+                    "description": "是否系统模板",
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "description": "商户ID（NULL表示系统模板）",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "模板名称",
+                    "type": "string"
+                },
+                "subject": {
+                    "description": "主题模板",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "通知类型",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "variables": {
+                    "description": "可用变量列表",
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_notification-service_internal_model.WebhookEndpoint": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "events": {
+                    "description": "订阅的事件列表",
+                    "type": "string"
+                },
+                "extra": {
+                    "description": "扩展信息",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_enabled": {
+                    "description": "是否启用",
+                    "type": "boolean"
+                },
+                "max_retry": {
+                    "description": "最大重试次数",
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "description": "商户ID",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "端点名称",
+                    "type": "string"
+                },
+                "secret": {
+                    "description": "签名密钥（加密存储）",
+                    "type": "string"
+                },
+                "timeout": {
+                    "description": "超时时间（秒）",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "description": "Webhook URL",
+                    "type": "string"
+                },
+                "version": {
+                    "description": "API版本",
+                    "type": "string"
+                }
+            }
+        },
         "payment-platform_notification-service_internal_service.SendEmailByTemplateRequest": {
             "type": "object",
             "properties": {
+                "event_type": {
+                    "description": "事件类型（用于检查偏好）",
+                    "type": "string"
+                },
                 "merchant_id": {
                     "type": "string"
                 },
@@ -269,12 +1036,20 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "user_id": {
+                    "description": "用户ID（可选，用于检查偏好）",
+                    "type": "string"
                 }
             }
         },
         "payment-platform_notification-service_internal_service.SendEmailRequest": {
             "type": "object",
             "properties": {
+                "event_type": {
+                    "description": "事件类型（用于检查偏好）",
+                    "type": "string"
+                },
                 "html_body": {
                     "type": "string"
                 },
@@ -299,6 +1074,10 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "user_id": {
+                    "description": "用户ID（可选，用于检查偏好）",
+                    "type": "string"
                 }
             }
         },
@@ -306,6 +1085,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "content": {
+                    "type": "string"
+                },
+                "event_type": {
+                    "description": "事件类型（用于检查偏好）",
                     "type": "string"
                 },
                 "merchant_id": {
@@ -319,6 +1102,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "to": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "用户ID（可选，用于检查偏好）",
                     "type": "string"
                 }
             }
@@ -355,7 +1142,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8008",
+	Host:             "localhost:40008",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Notification Service API",

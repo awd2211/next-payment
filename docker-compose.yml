@@ -210,9 +210,18 @@ services:
       KONG_NGINX_HTTP_CLIENT_BODY_BUFFER_SIZE: 8k
       # Other
       KONG_TRUSTED_IPS: 0.0.0.0/0,::/0
+      # mTLS Configuration (for connecting to backend services)
+      KONG_CLIENT_SSL: "on"
+      KONG_CLIENT_SSL_CERT: /kong/certs/kong-gateway/cert.pem
+      KONG_CLIENT_SSL_CERT_KEY: /kong/certs/kong-gateway/key.pem
+      KONG_LUA_SSL_TRUSTED_CERTIFICATE: /kong/certs/ca/ca-cert.pem
+      KONG_LUA_SSL_VERIFY_DEPTH: 2
     ports:
       - "40080:8000"   # Kong Proxy (API Gateway)
       - "40081:8001"   # Kong Admin API
+    volumes:
+      # Mount mTLS certificates
+      - ./backend/certs:/kong/certs:ro
     networks:
       - payment-network
     extra_hosts:

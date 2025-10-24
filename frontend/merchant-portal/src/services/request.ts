@@ -95,11 +95,38 @@ instance.interceptors.response.use(
 
     // 处理401 - 尝试刷新token
     if (status === 401) {
+      // 如果是登录接口返回 401，不要跳转，让页面显示错误
+      if (config.url?.includes('/login')) {
+        const errorMessage = data?.message || '账号或密码错误'
+        message.error(errorMessage)
+        return Promise.reject(error)
+      }
+
       // 如果是刷新token接口本身失败，直接跳转登录
       if (config.url?.includes('/auth/refresh')) {
         message.error('登录已过期，请重新登录')
         useAuthStore.getState().clearAuth()
         window.location.href = '/login'
+        return Promise.reject(error)
+      }
+
+      // 检查是否有 refresh token，如果没有则直接跳转登录
+      const { refreshToken } = useAuthStore.getState()
+      if (!refreshToken) {
+        console.log('[Auth] No refresh token available, API:', config.url)
+        console.log('[Auth] Error response:', data)
+        // 只在特定情况下跳转登录，避免API配置问题导致误跳转
+        // 比如 Kong 路由配置了 JWT 但是微服务接口不存在时返回的 401
+        if (data?.message?.includes('No credentials found') || 
+            data?.message?.includes('Invalid authentication credentials')) {
+          message.error('登录已过期，请重新登录')
+          useAuthStore.getState().clearAuth()
+          window.location.href = '/login'
+        } else {
+          // 其他 401 错误（比如权限不足），显示错误但不退出登录
+          const errorMessage = data?.message || '未授权访问'
+          message.error(errorMessage)
+        }
         return Promise.reject(error)
       }
 

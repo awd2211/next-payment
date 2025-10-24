@@ -1,0 +1,450 @@
+basePath: /api/v1
+definitions:
+  internal_handler.ApproveWithdrawalRequest:
+    properties:
+      approver_id:
+        type: string
+      approver_name:
+        type: string
+      comments:
+        type: string
+    required:
+    - approver_id
+    - approver_name
+    type: object
+  internal_handler.CancelWithdrawalRequest:
+    properties:
+      reason:
+        type: string
+    required:
+    - reason
+    type: object
+  internal_handler.CreateBankAccountRequest:
+    properties:
+      account_name:
+        type: string
+      account_no:
+        type: string
+      account_type:
+        type: string
+      bank_branch:
+        type: string
+      bank_code:
+        type: string
+      bank_name:
+        type: string
+      is_default:
+        type: boolean
+      merchant_id:
+        type: string
+      verification_doc:
+        type: string
+    required:
+    - account_name
+    - account_no
+    - account_type
+    - bank_code
+    - bank_name
+    - merchant_id
+    type: object
+  internal_handler.CreateWithdrawalRequest:
+    properties:
+      amount:
+        minimum: 1
+        type: integer
+      bank_account_id:
+        type: string
+      created_by:
+        type: string
+      merchant_id:
+        type: string
+      remarks:
+        type: string
+      type:
+        $ref: '#/definitions/payment-platform_withdrawal-service_internal_model.WithdrawalType'
+    required:
+    - amount
+    - bank_account_id
+    - created_by
+    - merchant_id
+    - type
+    type: object
+  internal_handler.UpdateBankAccountRequest:
+    properties:
+      bank_branch:
+        type: string
+      is_default:
+        type: boolean
+      is_verified:
+        type: boolean
+      status:
+        type: string
+      verification_doc:
+        type: string
+    type: object
+  payment-platform_withdrawal-service_internal_model.WithdrawalType:
+    enum:
+    - normal
+    - urgent
+    - scheduled
+    type: string
+    x-enum-comments:
+      WithdrawalTypeNormal: 普通提现
+      WithdrawalTypeScheduled: 定时提现
+      WithdrawalTypeUrgent: 加急提现
+    x-enum-descriptions:
+    - 普通提现
+    - 加急提现
+    - 定时提现
+    x-enum-varnames:
+    - WithdrawalTypeNormal
+    - WithdrawalTypeUrgent
+    - WithdrawalTypeScheduled
+host: localhost:40014
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 支付平台提现服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Withdrawal Service API
+  version: "1.0"
+paths:
+  /bank-accounts:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 银行账户列表
+      tags:
+      - BankAccounts
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建银行账户请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateBankAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建银行账户
+      tags:
+      - BankAccounts
+  /bank-accounts/{id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 账户ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取银行账户
+      tags:
+      - BankAccounts
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 账户ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.UpdateBankAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新银行账户
+      tags:
+      - BankAccounts
+  /bank-accounts/{id}/set-default:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 账户ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 设置默认银行账户
+      tags:
+      - BankAccounts
+  /withdrawals:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 类型
+        in: query
+        name: type
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 提现列表
+      tags:
+      - Withdrawals
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建提现请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateWithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建提现
+      tags:
+      - Withdrawals
+  /withdrawals/{id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 提现ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取提现详情
+      tags:
+      - Withdrawals
+  /withdrawals/{id}/approve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 提现ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 审批请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ApproveWithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 审批通过提现
+      tags:
+      - Withdrawals
+  /withdrawals/{id}/cancel:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 提现ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 取消请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CancelWithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 取消提现
+      tags:
+      - Withdrawals
+  /withdrawals/{id}/execute:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 提现ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 执行提现
+      tags:
+      - Withdrawals
+  /withdrawals/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 提现ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 拒绝请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ApproveWithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 拒绝提现
+      tags:
+      - Withdrawals
+  /withdrawals/reports:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 开始日期
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: 结束日期
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取提现报表
+      tags:
+      - Withdrawals
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

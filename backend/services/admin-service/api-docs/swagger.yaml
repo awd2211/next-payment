@@ -225,7 +225,7 @@ definitions:
       session_timeout_minutes:
         type: integer
     type: object
-host: localhost:8001
+host: localhost:40001
 info:
   contact:
     email: support@swagger.io

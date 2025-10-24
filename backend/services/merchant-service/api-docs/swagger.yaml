@@ -1,23 +1,5 @@
 basePath: /api/v1
 definitions:
-  internal_handler.ChangePasswordRequest:
-    properties:
-      new_password:
-        minLength: 8
-        type: string
-      old_password:
-        type: string
-    required:
-    - new_password
-    - old_password
-    type: object
-  internal_handler.Disable2FARequest:
-    properties:
-      password:
-        type: string
-    required:
-    - password
-    type: object
   internal_handler.LoginRequest:
     properties:
       email:
@@ -35,6 +17,13 @@ definitions:
     required:
     - kyc_status
     type: object
+  internal_handler.UpdatePasswordRequest:
+    properties:
+      password_hash:
+        type: string
+    required:
+    - password_hash
+    type: object
   internal_handler.UpdateStatusRequest:
     properties:
       status:
@@ -42,55 +31,11 @@ definitions:
     required:
     - status
     type: object
-  internal_handler.Verify2FARequest:
-    properties:
-      code:
-        type: string
-    required:
-    - code
-    type: object
-  payment-platform_merchant-service_internal_service.CreateAPIKeyInput:
-    properties:
-      environment:
-        description: test, production
-        type: string
-      expires_at:
-        description: 可选的过期时间
-        type: string
-      name:
-        type: string
-    required:
-    - environment
-    - name
-    type: object
-  payment-platform_merchant-service_internal_service.CreateChannelInput:
-    properties:
-      channel:
-        enum:
-        - stripe
-        - paypal
-        - crypto
-        - adyen
-        - square
-        type: string
-      config:
-        additionalProperties: true
-        type: object
-      is_test_mode:
-        type: boolean
-      merchant_id:
-        type: string
-    required:
-    - channel
-    - config
-    - merchant_id
-    type: object
   payment-platform_merchant-service_internal_service.CreateMerchantInput:
     properties:
-      business_type:
-        description: individual, company
+      businessType:
         type: string
-      company_name:
+      companyName:
         type: string
       country:
         type: string
@@ -99,42 +44,17 @@ definitions:
       name:
         type: string
       password:
-        minLength: 8
         type: string
       phone:
         type: string
       website:
         type: string
-    required:
-    - email
-    - name
-    - password
-    type: object
-  payment-platform_merchant-service_internal_service.CreateWebhookInput:
-    properties:
-      events:
-        items:
-          type: string
-        minItems: 1
-        type: array
-      max_retries:
-        type: integer
-      merchant_id:
-        type: string
-      timeout_seconds:
-        type: integer
-      url:
-        type: string
-    required:
-    - events
-    - merchant_id
-    - url
     type: object
   payment-platform_merchant-service_internal_service.RegisterMerchantInput:
     properties:
-      business_type:
+      businessType:
         type: string
-      company_name:
+      companyName:
         type: string
       country:
         type: string
@@ -143,45 +63,20 @@ definitions:
       name:
         type: string
       password:
-        minLength: 8
         type: string
       website:
         type: string
-    required:
-    - business_type
-    - company_name
-    - country
-    - email
-    - name
-    - password
-    type: object
-  payment-platform_merchant-service_internal_service.UpdateAPIKeyInput:
-    properties:
-      expires_at:
-        type: string
-      is_active:
-        type: boolean
-      name:
-        type: string
-    type: object
-  payment-platform_merchant-service_internal_service.UpdateChannelInput:
-    properties:
-      config:
-        additionalProperties: true
-        type: object
-      is_enabled:
-        type: boolean
-      is_test_mode:
-        type: boolean
     type: object
   payment-platform_merchant-service_internal_service.UpdateMerchantInput:
     properties:
-      business_type:
+      businessType:
         type: string
-      company_name:
+      companyName:
         type: string
       country:
         type: string
+      isTestMode:
+        type: boolean
       metadata:
         type: string
       name:
@@ -191,53 +86,12 @@ definitions:
       website:
         type: string
     type: object
-  payment-platform_merchant-service_internal_service.UpdateSecuritySettingsInput:
-    properties:
-      abnormal_notification:
-        type: boolean
-      allowed_countries:
-        items:
-          type: string
-        type: array
-      blocked_countries:
-        items:
-          type: string
-        type: array
-      ip_whitelist:
-        items:
-          type: string
-        type: array
-      login_notification:
-        type: boolean
-      max_concurrent_sessions:
-        type: integer
-      password_expiry_days:
-        type: integer
-      session_timeout_minutes:
-        type: integer
-    type: object
-  payment-platform_merchant-service_internal_service.UpdateWebhookInput:
-    properties:
-      events:
-        items:
-          type: string
-        minItems: 1
-        type: array
-      is_enabled:
-        type: boolean
-      max_retries:
-        type: integer
-      timeout_seconds:
-        type: integer
-      url:
-        type: string
-    type: object
-host: localhost:8002
+host: localhost:40002
 info:
   contact:
     email: support@payment-platform.com
     name: API Support
-  description: 支付平台商户管理服务API文档
+  description: 支付平台商户管理服务API文档（Phase 10 清理后）
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
@@ -245,12 +99,42 @@ info:
   title: Merchant Service API
   version: "1.0"
 paths:
-  /api/v1/api-keys:
+  /api/v1/dashboard:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取Dashboard概览
+      tags:
+      - Dashboard
+  /api/v1/dashboard/balance:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取余额信息
+      tags:
+      - Dashboard
+  /api/v1/dashboard/transaction-summary:
     get:
       parameters:
-      - description: 环境筛选（test/production）
+      - description: 开始日期 YYYY-MM-DD
         in: query
-        name: environment
+        name: start_date
+        type: string
+      - description: 结束日期 YYYY-MM-DD
+        in: query
+        name: end_date
         type: string
       produces:
       - application/json
@@ -260,257 +144,9 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: 获取API密钥列表
+      summary: 获取交易汇总
       tags:
-      - APIKey
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: API密钥信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/payment-platform_merchant-service_internal_service.CreateAPIKeyInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 创建API密钥
-      tags:
-      - APIKey
-  /api/v1/api-keys/{id}:
-    delete:
-      parameters:
-      - description: API密钥ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 删除API密钥
-      tags:
-      - APIKey
-    get:
-      parameters:
-      - description: API密钥ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 获取API密钥详情
-      tags:
-      - APIKey
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: API密钥ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 更新信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/payment-platform_merchant-service_internal_service.UpdateAPIKeyInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 更新API密钥
-      tags:
-      - APIKey
-  /api/v1/api-keys/{id}/revoke:
-    post:
-      parameters:
-      - description: API密钥ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 撤销API密钥
-      tags:
-      - APIKey
-  /api/v1/api-keys/{id}/rotate:
-    post:
-      parameters:
-      - description: API密钥ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 轮换API密钥（生成新Secret）
-      tags:
-      - APIKey
-  /api/v1/channels:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 获取所有渠道配置
-      tags:
-      - Channel
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 渠道配置
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/payment-platform_merchant-service_internal_service.CreateChannelInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 创建渠道配置
-      tags:
-      - Channel
-  /api/v1/channels/{id}:
-    delete:
-      parameters:
-      - description: 渠道ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 删除渠道配置
-      tags:
-      - Channel
-    get:
-      parameters:
-      - description: 渠道ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 获取渠道配置
-      tags:
-      - Channel
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: 渠道ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 渠道配置
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/payment-platform_merchant-service_internal_service.UpdateChannelInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 更新渠道配置
-      tags:
-      - Channel
-  /api/v1/channels/{id}/toggle:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 渠道ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: enabled
-        in: body
-        name: request
-        required: true
-        schema:
-          additionalProperties:
-            type: boolean
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 启用/禁用渠道
-      tags:
-      - Channel
+      - Dashboard
   /api/v1/merchant:
     get:
       parameters:
@@ -685,6 +321,19 @@ paths:
       summary: 更新商户状态
       tags:
       - Merchant
+  /api/v1/merchant/balance:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取商户余额
+      tags:
+      - Merchant
   /api/v1/merchant/login:
     post:
       consumes:
@@ -707,6 +356,46 @@ paths:
       summary: 商户登录
       tags:
       - Merchant
+  /api/v1/merchant/payments:
+    get:
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 支付状态
+        in: query
+        name: status
+        type: string
+      - description: 支付渠道
+        in: query
+        name: channel
+        type: string
+      - description: 开始时间
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间
+        in: query
+        name: end_time
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取当前商户的支付列表
+      tags:
+      - Payment
   /api/v1/merchant/profile:
     get:
       produces:
@@ -741,6 +430,30 @@ paths:
       summary: 更新当前商户信息
       tags:
       - Merchant
+  /api/v1/merchant/refunds:
+    get:
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取当前商户的退款列表
+      tags:
+      - Payment
   /api/v1/merchant/register:
     post:
       consumes:
@@ -763,76 +476,8 @@ paths:
       summary: 商户注册
       tags:
       - Merchant
-  /api/v1/security/2fa/disable:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 禁用请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.Disable2FARequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 禁用2FA
-      tags:
-      - Security
-  /api/v1/security/2fa/enable:
-    post:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 启用2FA
-      tags:
-      - Security
-  /api/v1/security/2fa/verify:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 验证请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.Verify2FARequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 验证2FA
-      tags:
-      - Security
-  /api/v1/security/login-activities:
+  /api/v1/merchant/stats:
     get:
-      parameters:
-      - default: 1
-        description: 页码
-        in: query
-        name: page
-        type: integer
-      - default: 20
-        description: 每页数量
-        in: query
-        name: page_size
-        type: integer
       produces:
       - application/json
       responses:
@@ -841,20 +486,25 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: 获取登录活动
+      summary: 获取商户统计
       tags:
-      - Security
-  /api/v1/security/password:
+      - Merchant
+  /api/v1/merchants/{id}/password:
     put:
       consumes:
       - application/json
       parameters:
-      - description: 修改密码请求
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 密码哈希
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.ChangePasswordRequest'
+          $ref: '#/definitions/internal_handler.UpdatePasswordRequest'
       produces:
       - application/json
       responses:
@@ -863,40 +513,15 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: 修改密码
+      summary: 更新商户密码
       tags:
-      - Security
-  /api/v1/security/sessions:
-    delete:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 撤销所有会话
-      tags:
-      - Security
+      - Merchant
+  /api/v1/merchants/{id}/with-password:
     get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 获取活跃会话
-      tags:
-      - Security
-  /api/v1/security/sessions/{session_id}:
-    delete:
       parameters:
-      - description: 会话ID
+      - description: 商户ID
         in: path
-        name: session_id
+        name: id
         required: true
         type: string
       produces:
@@ -907,123 +532,9 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: 撤销会话
+      summary: 获取带密码的商户信息
       tags:
-      - Security
-  /api/v1/security/settings:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 获取安全设置
-      tags:
-      - Security
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: 安全设置
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/payment-platform_merchant-service_internal_service.UpdateSecuritySettingsInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 更新安全设置
-      tags:
-      - Security
-  /api/v1/webhooks:
-    delete:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 删除Webhook配置
-      tags:
-      - Webhook
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 获取Webhook配置
-      tags:
-      - Webhook
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Webhook配置
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/payment-platform_merchant-service_internal_service.CreateWebhookInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 创建Webhook配置
-      tags:
-      - Webhook
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Webhook配置
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/payment-platform_merchant-service_internal_service.UpdateWebhookInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 更新Webhook配置
-      tags:
-      - Webhook
-  /api/v1/webhooks/regenerate-secret:
-    post:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 重新生成Webhook签名密钥
-      tags:
-      - Webhook
+      - Merchant
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

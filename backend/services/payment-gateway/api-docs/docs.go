@@ -22,7 +22,693 @@ const docTemplate = `{
     },
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
-    "paths": {},
+    "paths": {
+        "/payments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据条件查询支付列表，支持分页和多维度筛选",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payments"
+                ],
+                "summary": "查询支付列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "支付渠道 (stripe/paypal)",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "支付状态 (pending/success/failed/cancelled)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "货币类型 (USD/EUR/CNY)",
+                        "name": "currency",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "客户邮箱",
+                        "name": "customer_email",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键词搜索（订单号/支付号）",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始时间 (RFC3339格式)",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间 (RFC3339格式)",
+                        "name": "end_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "最小金额（分）",
+                        "name": "min_amount",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "最大金额（分）",
+                        "name": "max_amount",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建支付订单，支持Stripe、PayPal等多种支付渠道",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payments"
+                ],
+                "summary": "创建支付",
+                "parameters": [
+                    {
+                        "description": "支付创建请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_payment-gateway_internal_service.CreatePaymentInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/payments/{paymentNo}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据支付流水号获取支付详情",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payments"
+                ],
+                "summary": "获取支付详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "支付流水号",
+                        "name": "paymentNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/payments/{paymentNo}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "取消待支付的支付订单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payments"
+                ],
+                "summary": "取消支付",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "支付流水号",
+                        "name": "paymentNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "取消原因",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.CancelPaymentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/refunds": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据条件查询退款列表，支持分页和多维度筛选",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Refunds"
+                ],
+                "summary": "查询退款列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "支付ID",
+                        "name": "payment_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "退款状态 (pending/success/failed)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始时间 (RFC3339格式)",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间 (RFC3339格式)",
+                        "name": "end_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "为已支付的订单创建退款申请",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Refunds"
+                ],
+                "summary": "创建退款",
+                "parameters": [
+                    {
+                        "description": "退款创建请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/payment-platform_payment-gateway_internal_service.CreateRefundInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/refunds/{refundNo}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据退款流水号获取退款详情",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Refunds"
+                ],
+                "summary": "获取退款详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "退款流水号",
+                        "name": "refundNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/paypal": {
+            "post": {
+                "description": "接收并处理PayPal支付网关的异步通知",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "处理PayPal Webhook",
+                "parameters": [
+                    {
+                        "description": "PayPal webhook payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/stripe": {
+            "post": {
+                "description": "接收并处理Stripe支付网关的异步通知",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "处理Stripe Webhook",
+                "parameters": [
+                    {
+                        "description": "Stripe webhook payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "internal_handler.CancelPaymentRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.Response": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {},
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_payment-gateway_internal_service.CreatePaymentInput": {
+            "type": "object",
+            "required": [
+                "amount",
+                "currency",
+                "merchant_id",
+                "notify_url",
+                "order_no"
+            ],
+            "properties": {
+                "amount": {
+                    "description": "金额（分）",
+                    "type": "integer"
+                },
+                "channel": {
+                    "description": "指定渠道（可选）",
+                    "type": "string"
+                },
+                "currency": {
+                    "description": "货币类型",
+                    "type": "string"
+                },
+                "customer_email": {
+                    "description": "客户邮箱",
+                    "type": "string"
+                },
+                "customer_ip": {
+                    "description": "客户IP",
+                    "type": "string"
+                },
+                "customer_name": {
+                    "description": "客户姓名",
+                    "type": "string"
+                },
+                "customer_phone": {
+                    "description": "客户手机",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "商品描述",
+                    "type": "string"
+                },
+                "expire_minutes": {
+                    "description": "过期时间（分钟，默认30分钟）",
+                    "type": "integer"
+                },
+                "extra": {
+                    "description": "扩展信息",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "language": {
+                    "description": "语言（en, zh-CN, zh-TW, ja等）",
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "string"
+                },
+                "notify_url": {
+                    "description": "异步通知URL",
+                    "type": "string"
+                },
+                "order_no": {
+                    "description": "商户订单号",
+                    "type": "string"
+                },
+                "pay_method": {
+                    "description": "支付方式",
+                    "type": "string"
+                },
+                "return_url": {
+                    "description": "同步跳转URL",
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_payment-gateway_internal_service.CreateRefundInput": {
+            "type": "object",
+            "required": [
+                "amount",
+                "payment_no",
+                "reason"
+            ],
+            "properties": {
+                "amount": {
+                    "description": "退款金额（分）",
+                    "type": "integer"
+                },
+                "description": {
+                    "description": "退款说明",
+                    "type": "string"
+                },
+                "operator_id": {
+                    "description": "操作人ID",
+                    "type": "string"
+                },
+                "operator_type": {
+                    "description": "操作人类型",
+                    "type": "string"
+                },
+                "payment_no": {
+                    "description": "支付流水号",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "退款原因",
+                    "type": "string"
+                }
+            }
+        }
+    },
     "securityDefinitions": {
         "BearerAuth": {
             "description": "Type \"Bearer\" followed by a space and JWT token.",
@@ -36,7 +722,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8003",
+	Host:             "localhost:40003",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Payment Gateway API",

@@ -1,0 +1,539 @@
+basePath: /api/v1
+definitions:
+  internal_handler.ResolveAlertRequest:
+    properties:
+      resolver_id:
+        type: string
+    required:
+    - resolver_id
+    type: object
+  internal_handler.ReviewRequest:
+    properties:
+      comments:
+        type: string
+      reason:
+        type: string
+      reviewer_id:
+        type: string
+      reviewer_name:
+        type: string
+    required:
+    - reviewer_id
+    - reviewer_name
+    type: object
+  internal_handler.SubmitDocumentRequest:
+    properties:
+      back_image_url:
+        type: string
+      document_number:
+        type: string
+      document_type:
+        $ref: '#/definitions/payment-platform_kyc-service_internal_model.DocumentType'
+      document_url:
+        type: string
+      expiry_date:
+        type: string
+      front_image_url:
+        type: string
+      issue_date:
+        type: string
+      issuing_country:
+        type: string
+      merchant_id:
+        type: string
+    required:
+    - document_type
+    - document_url
+    - merchant_id
+    type: object
+  internal_handler.SubmitQualificationRequest:
+    properties:
+      business_license_no:
+        type: string
+      business_license_url:
+        type: string
+      business_scope:
+        type: string
+      company_name:
+        type: string
+      established_date:
+        type: string
+      industry:
+        type: string
+      legal_person_id_card:
+        type: string
+      legal_person_id_card_back_url:
+        type: string
+      legal_person_id_card_front_url:
+        type: string
+      legal_person_name:
+        type: string
+      merchant_id:
+        type: string
+      organization_code:
+        type: string
+      registered_address:
+        type: string
+      registered_capital:
+        type: integer
+      tax_registration_no:
+        type: string
+      tax_registration_url:
+        type: string
+    required:
+    - business_license_no
+    - business_license_url
+    - company_name
+    - legal_person_id_card
+    - legal_person_name
+    - merchant_id
+    type: object
+  payment-platform_kyc-service_internal_model.DocumentType:
+    enum:
+    - id_card
+    - passport
+    - driver_license
+    - business_license
+    - bank_statement
+    - tax_cert
+    - other
+    type: string
+    x-enum-comments:
+      DocumentTypeBankStatement: 银行对账单
+      DocumentTypeBusinessLicense: 营业执照
+      DocumentTypeDriverLicense: 驾照
+      DocumentTypeIDCard: 身份证
+      DocumentTypeOther: 其他
+      DocumentTypePassport: 护照
+      DocumentTypeTaxCert: 税务证明
+    x-enum-descriptions:
+    - 身份证
+    - 护照
+    - 驾照
+    - 营业执照
+    - 银行对账单
+    - 税务证明
+    - 其他
+    x-enum-varnames:
+    - DocumentTypeIDCard
+    - DocumentTypePassport
+    - DocumentTypeDriverLicense
+    - DocumentTypeBusinessLicense
+    - DocumentTypeBankStatement
+    - DocumentTypeTaxCert
+    - DocumentTypeOther
+host: localhost:40015
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 支付平台KYC认证服务API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: KYC Service API
+  version: "1.0"
+paths:
+  /alerts:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 预警类型
+        in: query
+        name: alert_type
+        type: string
+      - description: 严重程度
+        in: query
+        name: severity
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 预警列表
+      tags:
+      - Alerts
+  /alerts/{id}/resolve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 预警ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 处理请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ResolveAlertRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 处理预警
+      tags:
+      - Alerts
+  /documents:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 文档类型
+        in: query
+        name: document_type
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 文档列表
+      tags:
+      - Documents
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 提交文档请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.SubmitDocumentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 提交KYC文档
+      tags:
+      - Documents
+  /documents/{id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 文档ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取文档详情
+      tags:
+      - Documents
+  /documents/{id}/approve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 文档ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 审批请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 审批通过文档
+      tags:
+      - Documents
+  /documents/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 文档ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 拒绝请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 拒绝文档
+      tags:
+      - Documents
+  /levels/{merchant_id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取商户KYC级别
+      tags:
+      - Levels
+  /levels/{merchant_id}/eligibility:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 检查商户资格
+      tags:
+      - Levels
+  /qualifications:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 行业
+        in: query
+        name: industry
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 企业资质列表
+      tags:
+      - Qualifications
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 提交企业资质请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.SubmitQualificationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 提交企业资质
+      tags:
+      - Qualifications
+  /qualifications/{id}/approve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 资质ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 审批请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 审批通过企业资质
+      tags:
+      - Qualifications
+  /qualifications/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 资质ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 拒绝请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 拒绝企业资质
+      tags:
+      - Qualifications
+  /qualifications/merchant/{merchant_id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取企业资质
+      tags:
+      - Qualifications
+  /statistics:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取KYC统计
+      tags:
+      - Statistics
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

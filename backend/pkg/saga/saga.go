@@ -36,15 +36,26 @@ const (
 
 // SagaOrchestrator Saga 编排器
 type SagaOrchestrator struct {
-	db    *gorm.DB
-	redis *redis.Client
+	db      *gorm.DB
+	redis   *redis.Client
+	metrics *SagaMetrics
 }
 
 // NewSagaOrchestrator 创建 Saga 编排器
 func NewSagaOrchestrator(db *gorm.DB, redis *redis.Client) *SagaOrchestrator {
 	return &SagaOrchestrator{
-		db:    db,
-		redis: redis,
+		db:      db,
+		redis:   redis,
+		metrics: NewSagaMetrics("payment_platform"),
+	}
+}
+
+// NewSagaOrchestratorWithMetrics 创建带自定义指标的 Saga 编排器
+func NewSagaOrchestratorWithMetrics(db *gorm.DB, redis *redis.Client, metricsNamespace string) *SagaOrchestrator {
+	return &SagaOrchestrator{
+		db:      db,
+		redis:   redis,
+		metrics: NewSagaMetrics(metricsNamespace),
 	}
 }
 
@@ -106,6 +117,7 @@ type StepDefinition struct {
 	Execute        StepFunc
 	Compensate     CompensateFunc
 	MaxRetryCount  int
+	Timeout        time.Duration // 步骤执行超时时间
 }
 
 // SagaBuilder Saga 构建器
@@ -138,6 +150,25 @@ func (b *SagaBuilder) AddStep(name string, execute StepFunc, compensate Compensa
 		Execute:       execute,
 		Compensate:    compensate,
 		MaxRetryCount: maxRetry,
+		Timeout:       30 * time.Second, // 默认30秒超时
+	})
+	return b
+}
+
+// AddStepWithTimeout 添加带超时的步骤
+func (b *SagaBuilder) AddStepWithTimeout(name string, execute StepFunc, compensate CompensateFunc, maxRetry int, timeout time.Duration) *SagaBuilder {
+	if maxRetry <= 0 {
+		maxRetry = 3 // 默认重试3次
+	}
+	if timeout <= 0 {
+		timeout = 30 * time.Second // 默认30秒超时
+	}
+	b.steps = append(b.steps, StepDefinition{
+		Name:          name,
+		Execute:       execute,
+		Compensate:    compensate,
+		MaxRetryCount: maxRetry,
+		Timeout:       timeout,
 	})
 	return b
 }
@@ -205,17 +236,49 @@ func (b *SagaBuilder) Build(ctx context.Context) (*Saga, error) {
 
 // Execute 执行 Saga
 func (o *SagaOrchestrator) Execute(ctx context.Context, saga *Saga, stepDefs []StepDefinition) error {
+	// 使用分布式锁防止并发执行
+	lockKey := fmt.Sprintf("saga:lock:%s", saga.ID.String())
+	lockAcquired := false
+
+	if o.redis != nil {
+		// 尝试获取锁，超时时间5分钟
+		acquired, err := o.acquireLock(ctx, lockKey, 5*time.Minute)
+		if err != nil {
+			return fmt.Errorf("failed to acquire lock: %w", err)
+		}
+		if !acquired {
+			return fmt.Errorf("saga is already being executed by another process")
+		}
+		lockAcquired = true
+
+		// 确保释放锁
+		defer func() {
+			if err := o.releaseLock(ctx, lockKey); err != nil {
+				logger.Error("failed to release saga lock",
+					zap.String("saga_id", saga.ID.String()),
+					zap.Error(err))
+			}
+		}()
+	}
+
+	logger.Info("saga execution started",
+		zap.String("saga_id", saga.ID.String()),
+		zap.String("business_id", saga.BusinessID),
+		zap.String("business_type", saga.BusinessType),
+		zap.Bool("lock_acquired", lockAcquired))
+
+	// 记录 Saga 开始
+	startTime := time.Now()
+	if o.metrics != nil {
+		o.metrics.RecordSagaStart(saga.BusinessType)
+	}
+
 	// 更新状态为执行中
 	saga.Status = SagaStatusInProgress
 	saga.UpdatedAt = time.Now()
 	if err := o.db.Save(saga).Error; err != nil {
 		return fmt.Errorf("update saga status failed: %w", err)
 	}
-
-	logger.Info("saga execution started",
-		zap.String("saga_id", saga.ID.String()),
-		zap.String("business_id", saga.BusinessID),
-		zap.String("business_type", saga.BusinessType))
 
 	// 执行每个步骤
 	for i := saga.CurrentStep; i < len(saga.Steps); i++ {
@@ -227,11 +290,56 @@ func (o *SagaOrchestrator) Execute(ctx context.Context, saga *Saga, stepDefs []S
 			zap.Int("step", i),
 			zap.String("step_name", step.StepName))
 
-		// 执行步骤
-		result, err := stepDef.Execute(ctx, step.ExecuteData)
+		// 记录步骤开始时间
+		stepStartTime := time.Now()
+
+		// 执行步骤（带超时控制）
+		var result string
+		var err error
+
+		if stepDef.Timeout > 0 {
+			// 使用超时上下文
+			executeCtx, cancel := context.WithTimeout(ctx, stepDef.Timeout)
+			defer cancel()
+
+			// 在 goroutine 中执行，以便支持超时
+			resultChan := make(chan struct {
+				result string
+				err    error
+			}, 1)
+
+			go func() {
+				r, e := stepDef.Execute(executeCtx, step.ExecuteData)
+				resultChan <- struct {
+					result string
+					err    error
+				}{r, e}
+			}()
+
+			select {
+			case res := <-resultChan:
+				result = res.result
+				err = res.err
+			case <-executeCtx.Done():
+				err = fmt.Errorf("step execution timeout after %v", stepDef.Timeout)
+				logger.Error("saga step execution timeout",
+					zap.String("saga_id", saga.ID.String()),
+					zap.String("step_name", step.StepName),
+					zap.Duration("timeout", stepDef.Timeout))
+			}
+		} else {
+			// 无超时限制
+			result, err = stepDef.Execute(ctx, step.ExecuteData)
+		}
+
 		now := time.Now()
 
 		if err != nil {
+			// 记录步骤执行失败指标
+			if o.metrics != nil {
+				o.metrics.RecordStepExecution(step.StepName, "failed", time.Since(stepStartTime))
+			}
+
 			// 步骤执行失败
 			step.Status = StepStatusFailed
 			step.ErrorMessage = err.Error()
@@ -270,6 +378,11 @@ func (o *SagaOrchestrator) Execute(ctx context.Context, saga *Saga, stepDefs []S
 			return fmt.Errorf("step %s failed: %w", step.StepName, err)
 		}
 
+		// 记录步骤执行成功指标
+		if o.metrics != nil {
+			o.metrics.RecordStepExecution(step.StepName, "completed", time.Since(stepStartTime))
+		}
+
 		// 步骤执行成功
 		step.Status = StepStatusCompleted
 		step.Result = result
@@ -302,6 +415,11 @@ func (o *SagaOrchestrator) Execute(ctx context.Context, saga *Saga, stepDefs []S
 		return fmt.Errorf("update saga status failed: %w", err)
 	}
 
+	// 记录 Saga 完成指标
+	if o.metrics != nil {
+		o.metrics.RecordSagaComplete(saga.BusinessType, "completed", time.Since(startTime))
+	}
+
 	logger.Info("saga execution completed",
 		zap.String("saga_id", saga.ID.String()),
 		zap.String("business_id", saga.BusinessID))
@@ -315,6 +433,8 @@ func (o *SagaOrchestrator) Compensate(ctx context.Context, saga *Saga, stepDefs 
 		zap.String("saga_id", saga.ID.String()),
 		zap.String("business_id", saga.BusinessID),
 		zap.Int("steps_to_compensate", saga.CurrentStep))
+
+	hasFailedCompensation := false
 
 	// 按相反顺序补偿已完成的步骤
 	for i := saga.CurrentStep - 1; i >= 0; i-- {
@@ -335,19 +455,26 @@ func (o *SagaOrchestrator) Compensate(ctx context.Context, saga *Saga, stepDefs 
 			zap.String("saga_id", saga.ID.String()),
 			zap.String("step_name", step.StepName))
 
-		// 执行补偿
-		err := stepDef.Compensate(ctx, step.CompensateData, step.Result)
+		// 带重试的补偿执行
+		err := o.executeCompensationWithRetry(ctx, step, stepDef)
 		now := time.Now()
 
 		if err != nil {
-			logger.Error("saga step compensation failed",
+			logger.Error("saga step compensation failed after all retries",
 				zap.String("saga_id", saga.ID.String()),
 				zap.String("step_name", step.StepName),
 				zap.Error(err))
 
-			step.ErrorMessage = fmt.Sprintf("补偿失败: %v", err)
+			step.ErrorMessage = fmt.Sprintf("补偿失败(已重试%d次): %v", step.RetryCount, err)
 			step.UpdatedAt = now
 			o.db.Save(step)
+
+			// 记录补偿失败指标
+			if o.metrics != nil {
+				o.metrics.RecordCompensation(step.StepName, "failed", step.RetryCount)
+			}
+
+			hasFailedCompensation = true
 			// 补偿失败，但继续补偿其他步骤
 			continue
 		}
@@ -361,14 +488,24 @@ func (o *SagaOrchestrator) Compensate(ctx context.Context, saga *Saga, stepDefs 
 			logger.Error("failed to save compensated step", zap.Error(err))
 		}
 
+		// 记录补偿成功指标
+		if o.metrics != nil {
+			o.metrics.RecordCompensation(step.StepName, "success", step.RetryCount)
+		}
+
 		logger.Info("saga step compensated",
 			zap.String("saga_id", saga.ID.String()),
 			zap.String("step_name", step.StepName))
 	}
 
-	// 更新 Saga 状态为已补偿
+	// 更新 Saga 状态
 	now := time.Now()
-	saga.Status = SagaStatusCompensated
+	if hasFailedCompensation {
+		saga.Status = SagaStatusFailed // 补偿失败，标记为最终失败
+		saga.ErrorMessage = "部分步骤补偿失败，需要人工介入"
+	} else {
+		saga.Status = SagaStatusCompensated // 全部补偿成功
+	}
 	saga.CompensatedAt = &now
 	saga.UpdatedAt = now
 
@@ -378,9 +515,80 @@ func (o *SagaOrchestrator) Compensate(ctx context.Context, saga *Saga, stepDefs 
 
 	logger.Info("saga compensation completed",
 		zap.String("saga_id", saga.ID.String()),
-		zap.String("business_id", saga.BusinessID))
+		zap.String("business_id", saga.BusinessID),
+		zap.Bool("has_failed_compensation", hasFailedCompensation))
 
 	return nil
+}
+
+// executeCompensationWithRetry 执行带重试的补偿
+func (o *SagaOrchestrator) executeCompensationWithRetry(ctx context.Context, step *SagaStep, stepDef StepDefinition) error {
+	// 幂等性检查：如果补偿已经成功过，直接返回
+	if o.redis != nil {
+		idempotencyKey := fmt.Sprintf("saga:compensation:%s:completed", step.ID.String())
+		exists, err := o.redis.Exists(ctx, idempotencyKey).Result()
+		if err == nil && exists > 0 {
+			logger.Info("compensation already completed (idempotent check)",
+				zap.String("step_id", step.ID.String()),
+				zap.String("step_name", step.StepName))
+			return nil
+		}
+	}
+
+	maxRetries := 3 // 补偿最多重试3次
+	var lastErr error
+
+	for retry := 0; retry <= maxRetries; retry++ {
+		if retry > 0 {
+			// 指数退避: 2^retry 秒
+			backoff := time.Duration(1<<uint(retry)) * time.Second
+			logger.Info("retrying compensation after backoff",
+				zap.String("step_name", step.StepName),
+				zap.Int("retry", retry),
+				zap.Duration("backoff", backoff))
+
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return fmt.Errorf("compensation cancelled: %w", ctx.Err())
+			}
+		}
+
+		// 执行补偿（带超时）
+		compensateCtx := ctx
+		if stepDef.Timeout > 0 {
+			var cancel context.CancelFunc
+			compensateCtx, cancel = context.WithTimeout(ctx, stepDef.Timeout)
+			defer cancel()
+		}
+
+		err := stepDef.Compensate(compensateCtx, step.CompensateData, step.Result)
+
+		if err == nil {
+			// 补偿成功，记录幂等性标记
+			if o.redis != nil {
+				idempotencyKey := fmt.Sprintf("saga:compensation:%s:completed", step.ID.String())
+				// 保留7天，防止重复补偿
+				o.redis.Set(ctx, idempotencyKey, "1", 7*24*time.Hour)
+			}
+
+			logger.Info("compensation succeeded",
+				zap.String("step_name", step.StepName),
+				zap.Int("attempts", retry+1))
+			return nil
+		}
+
+		lastErr = err
+		step.RetryCount = retry + 1
+
+		logger.Warn("compensation attempt failed",
+			zap.String("step_name", step.StepName),
+			zap.Int("attempt", retry+1),
+			zap.Int("max_retries", maxRetries),
+			zap.Error(err))
+	}
+
+	return fmt.Errorf("compensation failed after %d retries: %w", maxRetries+1, lastErr)
 }
 
 // GetSaga 获取 Saga
@@ -412,4 +620,51 @@ func (o *SagaOrchestrator) ListPendingRetries(ctx context.Context, limit int) ([
 		Find(&steps).Error
 
 	return steps, err
+}
+
+// ListFailedSagas 列出失败的 Saga（补偿失败）
+func (o *SagaOrchestrator) ListFailedSagas(ctx context.Context, limit int) ([]*Saga, error) {
+	var sagas []*Saga
+
+	err := o.db.Preload("Steps").
+		Where("status = ?", SagaStatusFailed).
+		Order("updated_at DESC").
+		Limit(limit).
+		Find(&sagas).Error
+
+	return sagas, err
+}
+
+// RetryFailedCompensation 重试失败的补偿（用于恢复worker）
+func (o *SagaOrchestrator) RetryFailedCompensation(ctx context.Context, sagaID uuid.UUID, stepDefs []StepDefinition) error {
+	saga, err := o.GetSaga(ctx, sagaID)
+	if err != nil {
+		return fmt.Errorf("failed to get saga: %w", err)
+	}
+
+	if saga.Status != SagaStatusFailed {
+		return fmt.Errorf("saga is not in failed state: %s", saga.Status)
+	}
+
+	logger.Info("retrying failed compensation",
+		zap.String("saga_id", saga.ID.String()),
+		zap.String("business_id", saga.BusinessID))
+
+	// 重新执行补偿
+	return o.Compensate(ctx, saga, stepDefs)
+}
+
+// acquireLock 获取分布式锁
+func (o *SagaOrchestrator) acquireLock(ctx context.Context, key string, expiration time.Duration) (bool, error) {
+	// 使用 SET NX EX 命令获取锁
+	result, err := o.redis.SetNX(ctx, key, "locked", expiration).Result()
+	if err != nil {
+		return false, fmt.Errorf("redis lock error: %w", err)
+	}
+	return result, nil
+}
+
+// releaseLock 释放分布式锁
+func (o *SagaOrchestrator) releaseLock(ctx context.Context, key string) error {
+	return o.redis.Del(ctx, key).Err()
 }
