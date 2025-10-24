@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/httpclient"
 )
 
 // MerchantClient 商户服务客户端接口
@@ -36,46 +35,53 @@ type MerchantWithPassword struct {
 }
 
 type merchantClient struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL string
+	breaker *httpclient.BreakerClient
 }
 
-// NewMerchantClient 创建商户服务客户端
+// NewMerchantClient 创建商户服务客户端（带熔断器）
 func NewMerchantClient(baseURL string) MerchantClient {
+	// 创建 httpclient 配置
+	config := &httpclient.Config{
+		Timeout:    30 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: time.Second,
+	}
+
+	// 创建熔断器配置
+	breakerConfig := httpclient.DefaultBreakerConfig("merchant-service")
+
 	return &merchantClient{
 		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		breaker: httpclient.NewBreakerClient(config, breakerConfig),
 	}
 }
 
-// GetMerchant 获取商户信息
+// GetMerchant 获取商户信息（使用熔断器）
 func (c *merchantClient) GetMerchant(ctx context.Context, merchantID uuid.UUID) (*MerchantInfo, error) {
 	url := fmt.Sprintf("%s/api/v1/merchants/%s", c.baseURL, merchantID.String())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
 	}
 
-	resp, err := c.httpClient.Do(req)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call merchant service: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("merchant service returned status %d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var result struct {
 		Code    int          `json:"code"`
 		Message string       `json:"message"`
 		Data    MerchantInfo `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -86,32 +92,31 @@ func (c *merchantClient) GetMerchant(ctx context.Context, merchantID uuid.UUID) 
 	return &result.Data, nil
 }
 
-// GetMerchantWithPassword 获取带密码哈希的商户信息（用于密码验证）
+// GetMerchantWithPassword 获取带密码哈希的商户信息（用于密码验证，使用熔断器）
 func (c *merchantClient) GetMerchantWithPassword(ctx context.Context, merchantID uuid.UUID) (*MerchantWithPassword, error) {
 	url := fmt.Sprintf("%s/api/v1/merchants/%s/with-password", c.baseURL, merchantID.String())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
 	}
 
-	resp, err := c.httpClient.Do(req)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call merchant service: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("merchant service returned status %d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var result struct {
 		Code    int                  `json:"code"`
 		Message string               `json:"message"`
 		Data    MerchantWithPassword `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -122,37 +127,38 @@ func (c *merchantClient) GetMerchantWithPassword(ctx context.Context, merchantID
 	return &result.Data, nil
 }
 
-// UpdatePassword 更新商户密码
+// UpdatePassword 更新商户密码（使用熔断器）
 func (c *merchantClient) UpdatePassword(ctx context.Context, merchantID uuid.UUID, newPasswordHash string) error {
 	url := fmt.Sprintf("%s/api/v1/merchants/%s/password", c.baseURL, merchantID.String())
 
 	payload := map[string]string{
 		"password_hash": newPasswordHash,
 	}
-	jsonData, _ := json.Marshal(payload)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, strings.NewReader(string(jsonData)))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "PUT",
+		URL:    url,
+		Body:   payload,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to call merchant service: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("merchant service returned status %d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var result struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
