@@ -1,21 +1,14 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
+	"log"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
-	"github.com/payment-platform/pkg/db"
 	"github.com/payment-platform/pkg/logger"
-	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
+	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/cashier-service/internal/handler"
 	"payment-platform/cashier-service/internal/model"
 	"payment-platform/cashier-service/internal/repository"
@@ -23,146 +16,81 @@ import (
 )
 
 func main() {
-	// 初始化日志
-	env := config.GetEnv("ENV", "development")
-	if err := logger.InitLogger(env); err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	}
-	defer logger.Sync()
+	// 1. 使用 Bootstrap 框架初始化应用
+	application, err := app.Bootstrap(app.ServiceConfig{
+		ServiceName: "cashier-service",
+		DBName:      config.GetEnv("DB_NAME", "payment_cashier"),
+		Port:        config.GetEnvInt("PORT", 40016),
 
-	logger.Info("Starting cashier-service...")
+		// 自动迁移数据库模型
+		AutoMigrate: []any{
+			&model.CashierConfig{},
+			&model.CashierSession{},
+			&model.CashierLog{},
+			&model.CashierTemplate{},
+		},
 
-	// 数据库配置
-	dbConfig := db.Config{
-		Host:     config.GetEnv("DB_HOST", "localhost"),
-		Port:     config.GetEnvInt("DB_PORT", 40432),
-		User:     config.GetEnv("DB_USER", "postgres"),
-		Password: config.GetEnv("DB_PASSWORD", "postgres"),
-		DBName:   config.GetEnv("DB_NAME", "payment_cashier"),
-		SSLMode:  config.GetEnv("DB_SSL_MODE", "disable"),
-		TimeZone: config.GetEnv("DB_TIMEZONE", "UTC"),
-	}
+		// 启用企业级功能
+		EnableTracing:     true,
+		EnableMetrics:     true,
+		EnableRedis:       true,
+		EnableGRPC:        false, // 不使用 gRPC
+		EnableHealthCheck: true,
+		EnableRateLimit:   true,
 
-	// 连接数据库
-	database, err := db.NewPostgresDB(dbConfig)
-	if err != nil {
-		logger.Fatal("Failed to connect to database", zap.Error(err))
-	}
-	logger.Info("Connected to database")
-
-	// 自动迁移
-	err = database.AutoMigrate(
-		&model.CashierConfig{},
-		&model.CashierSession{},
-		&model.CashierLog{},
-		&model.CashierTemplate{},
-	)
-	if err != nil {
-		logger.Fatal("Failed to migrate database", zap.Error(err))
-	}
-	logger.Info("Database migrated successfully")
-
-	// Redis配置
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", config.GetEnv("REDIS_HOST", "localhost"), config.GetEnvInt("REDIS_PORT", 40379)),
-		Password: config.GetEnv("REDIS_PASSWORD", ""),
-		DB:       config.GetEnvInt("REDIS_DB", 0),
+		// 速率限制配置
+		RateLimitRequests: 100,
+		RateLimitWindow:   time.Minute,
 	})
-
-	// 测试Redis连接
-	ctx := context.Background()
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		logger.Fatal("Failed to connect to Redis", zap.Error(err))
+	if err != nil {
+		log.Fatalf("Bootstrap 失败: %v", err)
 	}
-	logger.Info("Connected to Redis")
 
-	// 初始化仓储
-	cashierRepo := repository.NewCashierRepository(database)
+	logger.Info("正在启动 Cashier Service...")
 
-	// 初始化服务
+	// 2. 初始化 Repository
+	cashierRepo := repository.NewCashierRepository(application.DB)
+
+	// 3. 初始化 Service
 	cashierService := service.NewCashierService(cashierRepo)
 
-	// 初始化处理器
+	// 4. 初始化 Handler
 	cashierHandler := handler.NewCashierHandler(cashierService)
 
-	// 设置Gin模式
-	if env == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	// 创建路由
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
-
-	// 健康检查端点 (无需认证)
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-
-	// JWT认证中间件
+	// 5. 设置 JWT 认证中间件
 	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	authMiddleware := middleware.AuthMiddleware(jwtManager)
 
-	// 简单的认证中间件
-	authMiddleware := func(c *gin.Context) {
-		tokenString := c.GetHeader("Authorization")
-		if tokenString == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
-			return
-		}
-
-		// 移除 "Bearer " 前缀
-		if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
-			tokenString = tokenString[7:]
-		}
-
-		claims, err := jwtManager.ValidateToken(tokenString)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return
-		}
-
-		c.Set("claims", claims)
-		c.Next()
-	}
-
-	// API路由 (需要认证)
-	api := router.Group("/api/v1")
+	// 6. 注册路由 (需要认证)
+	api := application.Router.Group("/api/v1")
 	api.Use(authMiddleware)
 	{
 		cashierHandler.RegisterRoutes(api)
 	}
 
-	// 启动HTTP服务器
-	port := config.GetEnvInt("PORT", 40016)
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: router,
+	// 7. 启动服务（优雅关闭）
+	if err := application.RunWithGracefulShutdown(); err != nil {
+		logger.Fatal("服务启动失败: " + err.Error())
 	}
-
-	// 启动服务器
-	go func() {
-		logger.Info("Server starting", zap.Int("port", port))
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("Failed to start server", zap.Error(err))
-		}
-	}()
-
-	// 等待中断信号
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	logger.Info("Shutting down server...")
-
-	// 优雅关闭,最多等待5秒
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Fatal("Server forced to shutdown", zap.Error(err))
-	}
-
-	logger.Info("Server exited")
 }
+
+// 代码行数对比：
+// - 原始版本: 168行 (手动初始化所有组件)
+// - Bootstrap版本: 76行 (框架自动处理)
+// - 减少代码: 55%（保留了所有业务逻辑）
+//
+// 自动获得的功能：
+// ✅ 数据库连接和迁移
+// ✅ Redis 连接
+// ✅ Zap 日志系统
+// ✅ Gin 路由和中间件（CORS, RequestID, Panic Recovery）
+// ✅ Jaeger 分布式追踪
+// ✅ Prometheus 指标收集（/metrics 端点）
+// ✅ 增强型健康检查（/health, /health/live, /health/ready）
+// ✅ 速率限制
+// ✅ 优雅关闭（信号处理）
+//
+// 保留的自定义能力：
+// ✅ JWT 认证中间件
+// ✅ 业务路由配置
