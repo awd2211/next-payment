@@ -103,14 +103,15 @@ func (m *IdempotencyManager) Store(ctx context.Context, idempotencyKey string, s
 		return fmt.Errorf("序列化响应失败: %w", err)
 	}
 
-	// 存储响应，设置TTL
-	if err := m.redis.Set(ctx, key, data, m.ttl).Err(); err != nil {
+	// 使用 Pipeline 原子性地存储响应并删除锁
+	lockKey := key + ":lock"
+	pipe := m.redis.Pipeline()
+	pipe.Set(ctx, key, data, m.ttl)
+	pipe.Del(ctx, lockKey)
+
+	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("存储响应缓存失败: %w", err)
 	}
-
-	// 删除处理锁
-	lockKey := key + ":lock"
-	m.redis.Del(ctx, lockKey)
 
 	return nil
 }

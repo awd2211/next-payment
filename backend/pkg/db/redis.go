@@ -9,23 +9,45 @@ import (
 )
 
 type RedisConfig struct {
-	Host     string
-	Port     int
-	Password string
-	DB       int
+	Host         string
+	Port         int
+	Password     string
+	DB           int
+	PoolSize     int           // 连接池大小（0使用默认值10）
+	MinIdleConns int           // 最小空闲连接数（0使用默认值5）
+	DialTimeout  time.Duration // 连接超时（0使用默认值5秒）
+	ReadTimeout  time.Duration // 读超时（0使用默认值3秒）
+	WriteTimeout time.Duration // 写超时（0使用默认值3秒）
 }
 
 // NewRedisClient creates a new Redis client
 func NewRedisClient(cfg RedisConfig) (*redis.Client, error) {
+	// 设置默认值
+	if cfg.PoolSize == 0 {
+		cfg.PoolSize = 10
+	}
+	if cfg.MinIdleConns == 0 {
+		cfg.MinIdleConns = 5
+	}
+	if cfg.DialTimeout == 0 {
+		cfg.DialTimeout = 5 * time.Second
+	}
+	if cfg.ReadTimeout == 0 {
+		cfg.ReadTimeout = 3 * time.Second
+	}
+	if cfg.WriteTimeout == 0 {
+		cfg.WriteTimeout = 3 * time.Second
+	}
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password:     cfg.Password,
 		DB:           cfg.DB,
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
-		PoolSize:     10,
-		MinIdleConns: 5,
+		DialTimeout:  cfg.DialTimeout,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		PoolSize:     cfg.PoolSize,
+		MinIdleConns: cfg.MinIdleConns,
 	})
 
 	// Test connection

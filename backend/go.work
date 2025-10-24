@@ -19,6 +19,6 @@ use (
 	./services/risk-service
 	./services/settlement-service
 	./services/withdrawal-service
-	// ./services/merchant-config-service
+	./services/merchant-config-service
 	./tests/integration
 )

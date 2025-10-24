@@ -3,15 +3,18 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
 	"github.com/payment-platform/pkg/health"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
@@ -20,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"gorm.io/gorm"
 )
 
@@ -50,6 +54,7 @@ type App struct {
 	DB            *gorm.DB
 	Redis         *redis.Client
 	Router        *gin.Engine
+	GRPCServer    *grpc.Server // gRPC 服务器（可选，当 EnableGRPC=true 时创建）
 	Logger        *zap.Logger
 	HealthChecker *health.HealthChecker
 
@@ -184,7 +189,9 @@ func Bootstrap(cfg ServiceConfig) (*App, error) {
 
 	// 9. 初始化指标（可选）
 	if cfg.EnableMetrics {
-		httpMetrics := metrics.NewHTTPMetrics(cfg.ServiceName)
+		// Prometheus metric names must use underscores, not hyphens
+		metricsNamespace := strings.ReplaceAll(cfg.ServiceName, "-", "_")
+		httpMetrics := metrics.NewHTTPMetrics(metricsNamespace)
 		router.Use(metrics.PrometheusMiddleware(httpMetrics))
 		logger.Info("指标收集已启用")
 	}
@@ -243,7 +250,18 @@ func Bootstrap(cfg ServiceConfig) (*App, error) {
 		})
 	}
 
-	// 12. Prometheus 指标端点
+	// 12. 初始化 gRPC 服务器（可选）
+	if cfg.EnableGRPC {
+		if cfg.GRPCPort <= 0 {
+			logger.Warn("EnableGRPC=true 但未指定 GRPCPort，gRPC 服务器将不会启动")
+		} else {
+			// 创建 gRPC 服务器
+			app.GRPCServer = pkggrpc.NewSimpleServer()
+			logger.Info(fmt.Sprintf("gRPC 服务器已创建，将监听端口 %d", cfg.GRPCPort))
+		}
+	}
+
+	// 13. Prometheus 指标端点
 	if cfg.EnableMetrics {
 		router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	}
@@ -303,6 +321,78 @@ func (a *App) RunWithGracefulShutdown() error {
 	}
 
 	// 执行应用级关闭
+	if err := a.Shutdown(ctx); err != nil {
+		logger.Error("应用关闭失败", zap.Error(err))
+		return fmt.Errorf("应用关闭失败: %w", err)
+	}
+
+	logger.Info(fmt.Sprintf("%s 已完全关闭", a.Config.ServiceName))
+	return nil
+}
+
+// RunDualProtocol 同时启动 HTTP 和 gRPC 服务器并支持优雅关闭
+// 仅在 EnableGRPC=true 且 GRPCPort>0 时启动 gRPC 服务器
+func (a *App) RunDualProtocol() error {
+	// 1. 创建 HTTP 服务器
+	httpAddr := fmt.Sprintf(":%d", a.Config.Port)
+	httpSrv := &http.Server{
+		Addr:    httpAddr,
+		Handler: a.Router,
+	}
+
+	// 2. 启动 HTTP 服务器
+	go func() {
+		logger.Info(fmt.Sprintf("%s HTTP服务器正在监听 %s", a.Config.ServiceName, httpAddr))
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("HTTP服务启动失败", zap.Error(err))
+		}
+	}()
+
+	// 3. 启动 gRPC 服务器（如果启用）
+	var grpcListener net.Listener
+	if a.GRPCServer != nil && a.Config.GRPCPort > 0 {
+		grpcAddr := fmt.Sprintf(":%d", a.Config.GRPCPort)
+		lis, err := net.Listen("tcp", grpcAddr)
+		if err != nil {
+			logger.Fatal("gRPC 监听端口失败", zap.Error(err))
+			return fmt.Errorf("gRPC 监听端口失败: %w", err)
+		}
+		grpcListener = lis
+
+		go func() {
+			logger.Info(fmt.Sprintf("%s gRPC服务器正在监听 %s", a.Config.ServiceName, grpcAddr))
+			if err := a.GRPCServer.Serve(lis); err != nil {
+				logger.Fatal("gRPC服务启动失败", zap.Error(err))
+			}
+		}()
+	}
+
+	// 4. 等待中断信号
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logger.Info(fmt.Sprintf("收到关闭信号，正在优雅关闭 %s...", a.Config.ServiceName))
+
+	// 5. 创建关闭上下文（30秒超时）
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// 6. 关闭 HTTP 服务器
+	if err := httpSrv.Shutdown(ctx); err != nil {
+		logger.Error("HTTP 服务器关闭失败", zap.Error(err))
+	}
+
+	// 7. 关闭 gRPC 服务器
+	if a.GRPCServer != nil {
+		a.GRPCServer.GracefulStop()
+		logger.Info("gRPC 服务器已关闭")
+	}
+	if grpcListener != nil {
+		grpcListener.Close()
+	}
+
+	// 8. 执行应用级关闭
 	if err := a.Shutdown(ctx); err != nil {
 		logger.Error("应用关闭失败", zap.Error(err))
 		return fmt.Errorf("应用关闭失败: %w", err)

@@ -38,17 +38,65 @@ message Order {
   google.protobuf.Timestamp cancelled_at = 15;
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
+
+  // 新增完整订单字段
+  string customer_email = 18;
+  string customer_name = 19;
+  string customer_phone = 20;
+  repeated OrderItem items = 21;       // 订单商品列表
+  int64 total_amount = 22;             // 商品总金额（分）
+  int64 shipping_fee = 23;             // 运费（分）
+  int64 discount_amount = 24;          // 折扣金额（分）
+  Address shipping_address = 25;       // 配送地址
+  Address billing_address = 26;        // 账单地址
+  string remark = 27;                  // 备注
+}
+
+// 订单商品项
+message OrderItem {
+  string product_id = 1;
+  string product_name = 2;
+  string product_sku = 3;
+  string product_image = 4;
+  int64 unit_price = 5;      // 单价（分）
+  int32 quantity = 6;         // 数量
+  map<string, string> attributes = 7;  // 商品属性（如：颜色、尺寸）
+}
+
+// 地址信息
+message Address {
+  string country = 1;
+  string province = 2;
+  string city = 3;
+  string district = 4;
+  string street = 5;
+  string postal_code = 6;
+  string recipient_name = 7;
+  string recipient_phone = 8;
 }
 
 message CreateOrderRequest {
   string order_no = 1;
   string merchant_id = 2;
   string customer_id = 3;
-  int64 amount = 4;
+  int64 amount = 4;           // 总金额（由items计算或手动指定）
   string currency = 5;
   string description = 6;
   string client_ip = 7;
   map<string, string> metadata = 8;
+
+  // 新增完整字段
+  string customer_email = 9;
+  string customer_name = 10;
+  string customer_phone = 11;
+  string language = 12;                // 语言代码（如：en, zh-CN）
+  repeated OrderItem items = 13;       // 订单商品列表
+  string shipping_method = 14;         // 配送方式
+  int64 shipping_fee = 15;             // 运费（分）
+  Address shipping_address = 16;       // 配送地址
+  Address billing_address = 17;        // 账单地址
+  int64 discount_amount = 18;          // 折扣金额（分）
+  string remark = 19;                  // 备注
 }
 
 message GetOrderRequest {
