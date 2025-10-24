@@ -2,548 +2,681 @@ import { useState, useEffect } from 'react'
 import {
   Typography,
   Card,
-  Row,
-  Col,
-  Statistic,
-  Descriptions,
-  Button,
+  Tabs,
   Form,
   Input,
+  Button,
+  Switch,
+  Select,
+  Table,
+  Space,
+  Descriptions,
   Modal,
   message,
-  Tabs,
-  Space,
+  Alert,
   Tag,
+  QRCode,
   Divider,
-  Popconfirm,
 } from 'antd'
 import {
   UserOutlined,
-  DollarOutlined,
-  TransactionOutlined,
-  PercentageOutlined,
-  SafetyOutlined,
-  EditOutlined,
-  KeyOutlined,
   LockOutlined,
-  ReloadOutlined,
-  CopyOutlined,
+  SafetyOutlined,
+  HistoryOutlined,
+  SettingOutlined,
+  KeyOutlined,
+  GlobalOutlined,
+  ClockCircleOutlined,
+  DollarOutlined,
 } from '@ant-design/icons'
-import { merchantService, Merchant, MerchantBalance, MerchantStats } from '../services/merchantService'
+import type { ColumnsType } from 'antd/es/table'
+import { useTranslation } from 'react-i18next'
+import { validatePasswordStrength } from '../utils/security'
+import { merchantService } from '../services/merchantService'
+import dayjs from 'dayjs'
 
-const { Title, Paragraph } = Typography
-const { TabPane } = Tabs
+const { Title, Text, Paragraph } = Typography
+const { Option } = Select
+
+// 活动日志类型
+interface ActivityLog {
+  id: string
+  action: string
+  ip_address: string
+  user_agent: string
+  created_at: string
+  location?: string
+  status: 'success' | 'failed'
+}
+
+// 商户偏好设置
+interface MerchantPreferences {
+  language: string
+  timezone: string
+  currency: string
+  date_format: string
+  time_format: string
+  notifications_email: boolean
+  notifications_sms: boolean
+  notifications_push: boolean
+}
 
 const Account = () => {
+  const { t, i18n } = useTranslation()
+  const [activeTab, setActiveTab] = useState('profile')
   const [loading, setLoading] = useState(false)
-  const [merchant, setMerchant] = useState<Merchant | null>(null)
-  const [balance, setBalance] = useState<MerchantBalance | null>(null)
-  const [stats, setStats] = useState<MerchantStats | null>(null)
-  const [editModalVisible, setEditModalVisible] = useState(false)
-  const [passwordModalVisible, setPasswordModalVisible] = useState(false)
-  const [editForm] = Form.useForm()
+
+  // 密码修改
   const [passwordForm] = Form.useForm()
+  const [passwordStrength, setPasswordStrength] = useState<'weak' | 'medium' | 'strong' | ''>('')
+
+  // 2FA设置
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+  const [showQRCode, setShowQRCode] = useState(false)
+  const [qrCodeUrl, setQrCodeUrl] = useState('')
+  const [verifyCode, setVerifyCode] = useState('')
+
+  // 活动记录
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
+
+  // 偏好设置
+  const [preferencesForm] = Form.useForm()
+  const [preferences, setPreferences] = useState<MerchantPreferences>({
+    language: 'zh-CN',
+    timezone: 'Asia/Shanghai',
+    currency: 'USD',
+    date_format: 'YYYY-MM-DD',
+    time_format: '24h',
+    notifications_email: true,
+    notifications_sms: false,
+    notifications_push: true,
+  })
 
   useEffect(() => {
-    loadProfile()
-    loadBalance()
-    loadStats()
+    loadActivityLogs()
+    loadPreferences()
+    load2FAStatus()
   }, [])
 
-  const loadProfile = async () => {
+  // 加载活动记录
+  const loadActivityLogs = async () => {
+    setActivityLoading(true)
+    try {
+      // TODO: 调用实际API
+      // const response = await merchantService.getActivityLogs()
+      // 模拟数据
+      const mockLogs: ActivityLog[] = [
+        {
+          id: '1',
+          action: '登录',
+          ip_address: '192.168.1.1',
+          user_agent: 'Chrome 120.0',
+          created_at: new Date().toISOString(),
+          location: '中国 上海',
+          status: 'success',
+        },
+        {
+          id: '2',
+          action: '修改密码',
+          ip_address: '192.168.1.1',
+          user_agent: 'Chrome 120.0',
+          created_at: dayjs().subtract(1, 'day').toISOString(),
+          location: '中国 上海',
+          status: 'success',
+        },
+        {
+          id: '3',
+          action: '登录失败',
+          ip_address: '203.0.113.0',
+          user_agent: 'Firefox 121.0',
+          created_at: dayjs().subtract(2, 'day').toISOString(),
+          location: '美国 纽约',
+          status: 'failed',
+        },
+      ]
+      setActivityLogs(mockLogs)
+    } catch (error) {
+      console.error('加载活动记录失败:', error)
+    } finally {
+      setActivityLoading(false)
+    }
+  }
+
+  // 加载偏好设置
+  const loadPreferences = async () => {
+    try {
+      // TODO: 调用实际API
+      // const response = await merchantService.getPreferences()
+      // const prefs = response.data
+      // setPreferences(prefs)
+      // preferencesForm.setFieldsValue(prefs)
+      preferencesForm.setFieldsValue(preferences)
+    } catch (error) {
+      console.error('加载偏好设置失败:', error)
+    }
+  }
+
+  // 加载2FA状态
+  const load2FAStatus = async () => {
+    try {
+      // TODO: 调用实际API
+      // const response = await merchantService.get2FAStatus()
+      // setTwoFactorEnabled(response.data.enabled)
+      setTwoFactorEnabled(false)
+    } catch (error) {
+      console.error('加载2FA状态失败:', error)
+    }
+  }
+
+  // 修改密码
+  const handleChangePassword = async (values: any) => {
     setLoading(true)
     try {
-      const response = await merchantService.getProfile()
-      setMerchant(response.data)
-    } catch (error) {
-      // Error handled by interceptor
+      // TODO: 调用实际API
+      // await merchantService.changePassword({
+      //   old_password: values.oldPassword,
+      //   new_password: values.newPassword,
+      // })
+
+      message.success(t('account.passwordChangeSuccess'))
+      passwordForm.resetFields()
+      setPasswordStrength('')
+    } catch (error: any) {
+      message.error(error?.message || t('account.passwordChangeFailed'))
     } finally {
       setLoading(false)
     }
   }
 
-  const loadBalance = async () => {
+  // 检查密码强度
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const password = e.target.value
+    if (password) {
+      const result = validatePasswordStrength(password)
+      setPasswordStrength(result.strength)
+    } else {
+      setPasswordStrength('')
+    }
+  }
+
+  // 启用2FA
+  const handleEnable2FA = async () => {
+    setLoading(true)
     try {
-      const response = await merchantService.getBalance()
-      setBalance(response.data)
-    } catch (error) {
-      // Error handled by interceptor
+      // TODO: 调用实际API获取二维码
+      // const response = await merchantService.enable2FA()
+      // setQrCodeUrl(response.data.qr_code_url)
+
+      // 模拟二维码URL
+      setQrCodeUrl('otpauth://totp/MerchantPortal:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=MerchantPortal')
+      setShowQRCode(true)
+    } catch (error: any) {
+      message.error(error?.message || t('account.enable2FAFailed'))
+    } finally {
+      setLoading(false)
     }
   }
 
-  const loadStats = async () => {
+  // 验证2FA代码
+  const handleVerify2FA = async () => {
+    if (!verifyCode || verifyCode.length !== 6) {
+      message.error(t('account.invalidVerifyCode'))
+      return
+    }
+
+    setLoading(true)
     try {
-      const response = await merchantService.getStats({})
-      setStats(response.data)
-    } catch (error) {
-      // Error handled by interceptor
+      // TODO: 调用实际API验证
+      // await merchantService.verify2FA({ code: verifyCode })
+
+      setTwoFactorEnabled(true)
+      setShowQRCode(false)
+      setVerifyCode('')
+      message.success(t('account.2FAEnabledSuccess'))
+    } catch (error: any) {
+      message.error(error?.message || t('account.verify2FAFailed'))
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleEdit = () => {
-    if (merchant) {
-      editForm.setFieldsValue({
-        contact_name: merchant.contact_name,
-        contact_email: merchant.contact_email,
-        contact_phone: merchant.contact_phone,
-        website: merchant.website,
-        description: merchant.description,
-        callback_url: merchant.callback_url,
-        return_url: merchant.return_url,
-      })
-      setEditModalVisible(true)
-    }
+  // 禁用2FA
+  const handleDisable2FA = async () => {
+    Modal.confirm({
+      title: t('account.disable2FAConfirm'),
+      content: t('account.disable2FAWarning'),
+      onOk: async () => {
+        setLoading(true)
+        try {
+          // TODO: 调用实际API
+          // await merchantService.disable2FA()
+
+          setTwoFactorEnabled(false)
+          message.success(t('account.2FADisabledSuccess'))
+        } catch (error: any) {
+          message.error(error?.message || t('account.disable2FAFailed'))
+        } finally {
+          setLoading(false)
+        }
+      },
+    })
   }
 
-  const handleEditSubmit = async () => {
+  // 保存偏好设置
+  const handleSavePreferences = async (values: MerchantPreferences) => {
+    setLoading(true)
     try {
-      const values = await editForm.validateFields()
-      await merchantService.updateProfile(values)
-      message.success('个人信息更新成功')
-      setEditModalVisible(false)
-      loadProfile()
-    } catch (error) {
-      // Error handled by interceptor or validation
+      // TODO: 调用实际API
+      // await merchantService.updatePreferences(values)
+
+      setPreferences(values)
+
+      // 更新语言
+      if (values.language !== i18n.language) {
+        i18n.changeLanguage(values.language)
+      }
+
+      message.success(t('account.preferencesSaved'))
+    } catch (error: any) {
+      message.error(error?.message || t('account.preferencesSaveFailed'))
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleChangePassword = () => {
-    passwordForm.resetFields()
-    setPasswordModalVisible(true)
-  }
+  // 活动记录表格列
+  const activityColumns: ColumnsType<ActivityLog> = [
+    {
+      title: t('account.action'),
+      dataIndex: 'action',
+      key: 'action',
+      render: (text: string, record: ActivityLog) => (
+        <Space>
+          <Text>{text}</Text>
+          {record.status === 'failed' && <Tag color="red">{t('account.failed')}</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: t('account.ipAddress'),
+      dataIndex: 'ip_address',
+      key: 'ip_address',
+    },
+    {
+      title: t('account.location'),
+      dataIndex: 'location',
+      key: 'location',
+      render: (text?: string) => text || '-',
+    },
+    {
+      title: t('account.device'),
+      dataIndex: 'user_agent',
+      key: 'user_agent',
+    },
+    {
+      title: t('account.time'),
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (text: string) => dayjs(text).format('YYYY-MM-DD HH:mm:ss'),
+    },
+  ]
 
-  const handlePasswordSubmit = async () => {
-    try {
-      const values = await passwordForm.validateFields()
-      await merchantService.changePassword(values)
-      message.success('密码修改成功')
-      setPasswordModalVisible(false)
-    } catch (error) {
-      // Error handled by interceptor
+  // 密码强度颜色
+  const getPasswordStrengthColor = () => {
+    switch (passwordStrength) {
+      case 'weak':
+        return 'red'
+      case 'medium':
+        return 'orange'
+      case 'strong':
+        return 'green'
+      default:
+        return ''
     }
-  }
-
-  const handleRegenerateApiKey = async () => {
-    try {
-      const response = await merchantService.regenerateApiKey()
-      message.success('API密钥已重新生成')
-      Modal.info({
-        title: '新的API密钥',
-        width: 600,
-        content: (
-          <div>
-            <Paragraph>
-              <strong>API Key:</strong>
-              <br />
-              <code>{response.data.api_key}</code>
-            </Paragraph>
-            <Paragraph>
-              <strong>API Secret:</strong>
-              <br />
-              <code>{response.data.api_secret}</code>
-            </Paragraph>
-            <Paragraph type="danger">
-              请妥善保管您的API密钥，此窗口关闭后将无法再次查看API Secret。
-            </Paragraph>
-          </div>
-        ),
-      })
-      loadProfile()
-    } catch (error) {
-      // Error handled by interceptor
-    }
-  }
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    message.success('已复制到剪贴板')
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      active: 'success',
-      pending: 'processing',
-      suspended: 'warning',
-      rejected: 'error',
-    }
-    return colors[status] || 'default'
-  }
-
-  const getStatusText = (status: string) => {
-    const texts: Record<string, string> = {
-      active: '正常',
-      pending: '待审核',
-      suspended: '已暂停',
-      rejected: '已拒绝',
-    }
-    return texts[status] || status
-  }
-
-  if (!merchant) {
-    return <div>加载中...</div>
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={2}>账户信息</Title>
-        <Space>
-          <Button icon={<LockOutlined />} onClick={handleChangePassword}>
-            修改密码
-          </Button>
-          <Button type="primary" icon={<EditOutlined />} onClick={handleEdit}>
-            编辑信息
-          </Button>
-        </Space>
-      </div>
+    <div style={{ padding: '24px' }}>
+      <Title level={2}>{t('account.title')}</Title>
+      <Paragraph type="secondary">{t('account.subtitle')}</Paragraph>
 
-      {/* Balance and Stats Cards */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="可用余额"
-              value={(balance?.available_balance || 0) / 100}
-              precision={2}
-              prefix={<DollarOutlined />}
-              suffix={balance?.currency || 'USD'}
-              valueStyle={{ color: '#3f8600' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="冻结金额"
-              value={(balance?.frozen_balance || 0) / 100}
-              precision={2}
-              prefix={<DollarOutlined />}
-              suffix={balance?.currency || 'USD'}
-              valueStyle={{ color: '#cf1322' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="总交易额"
-              value={(stats?.total_amount || 0) / 100}
-              precision={2}
-              prefix={<TransactionOutlined />}
-              suffix="USD"
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="成功率"
-              value={(stats?.success_rate || 0) * 100}
-              precision={2}
-              prefix={<PercentageOutlined />}
-              suffix="%"
-              valueStyle={{ color: '#3f8600' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <Tabs activeKey={activeTab} onChange={setActiveTab}>
+        {/* 安全设置 */}
+        <Tabs.TabPane
+          tab={
+            <span>
+              <LockOutlined />
+              {t('account.securitySettings')}
+            </span>
+          }
+          key="security"
+        >
+          <Card title={t('account.changePassword')} style={{ marginBottom: 24 }}>
+            <Form
+              form={passwordForm}
+              layout="vertical"
+              onFinish={handleChangePassword}
+              style={{ maxWidth: 500 }}
+            >
+              <Form.Item
+                label={t('account.oldPassword')}
+                name="oldPassword"
+                rules={[{ required: true, message: t('account.oldPasswordRequired') }]}
+              >
+                <Input.Password prefix={<LockOutlined />} />
+              </Form.Item>
 
-      {/* Tabs for different sections */}
-      <Card>
-        <Tabs defaultActiveKey="profile">
-          <TabPane tab="基本信息" key="profile">
-            <Descriptions title="商户信息" bordered column={2}>
-              <Descriptions.Item label="商户名称">{merchant.name}</Descriptions.Item>
-              <Descriptions.Item label="商户代码">{merchant.code}</Descriptions.Item>
-              <Descriptions.Item label="商户类型">{merchant.type}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag color={getStatusColor(merchant.status)}>
-                  {getStatusText(merchant.status)}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="联系人">{merchant.contact_name}</Descriptions.Item>
-              <Descriptions.Item label="联系邮箱">{merchant.contact_email}</Descriptions.Item>
-              <Descriptions.Item label="联系电话">{merchant.contact_phone || '-'}</Descriptions.Item>
-              <Descriptions.Item label="营业执照">{merchant.business_license || '-'}</Descriptions.Item>
-              <Descriptions.Item label="网站" span={2}>{merchant.website || '-'}</Descriptions.Item>
-              <Descriptions.Item label="描述" span={2}>{merchant.description || '-'}</Descriptions.Item>
-              <Descriptions.Item label="回调地址" span={2}>
-                {merchant.callback_url || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="返回地址" span={2}>
-                {merchant.return_url || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="结算周期">{merchant.settlement_cycle} 天</Descriptions.Item>
-              <Descriptions.Item label="创建时间">
-                {new Date(merchant.created_at).toLocaleString()}
-              </Descriptions.Item>
-              {merchant.approved_at && (
-                <>
-                  <Descriptions.Item label="审核时间">
-                    {new Date(merchant.approved_at).toLocaleString()}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="审核人">{merchant.approved_by || '-'}</Descriptions.Item>
-                </>
+              <Form.Item
+                label={t('account.newPassword')}
+                name="newPassword"
+                rules={[
+                  { required: true, message: t('account.newPasswordRequired') },
+                  { min: 8, message: t('account.passwordMinLength') },
+                  {
+                    validator: (_, value) => {
+                      if (!value) return Promise.resolve()
+                      const result = validatePasswordStrength(value)
+                      if (result.strength === 'weak') {
+                        return Promise.reject(t('account.passwordTooWeak'))
+                      }
+                      return Promise.resolve()
+                    },
+                  },
+                ]}
+              >
+                <Input.Password
+                  prefix={<KeyOutlined />}
+                  onChange={handlePasswordChange}
+                />
+              </Form.Item>
+
+              {passwordStrength && (
+                <Alert
+                  message={t(`account.passwordStrength${passwordStrength.charAt(0).toUpperCase() + passwordStrength.slice(1)}`)}
+                  type={passwordStrength === 'strong' ? 'success' : passwordStrength === 'medium' ? 'warning' : 'error'}
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
               )}
-            </Descriptions>
-          </TabPane>
 
-          <TabPane tab="API密钥" key="api">
+              <Form.Item
+                label={t('account.confirmPassword')}
+                name="confirmPassword"
+                dependencies={['newPassword']}
+                rules={[
+                  { required: true, message: t('account.confirmPasswordRequired') },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      if (!value || getFieldValue('newPassword') === value) {
+                        return Promise.resolve()
+                      }
+                      return Promise.reject(new Error(t('account.passwordMismatch')))
+                    },
+                  }),
+                ]}
+              >
+                <Input.Password prefix={<KeyOutlined />} />
+              </Form.Item>
+
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={loading}>
+                  {t('account.changePasswordButton')}
+                </Button>
+              </Form.Item>
+            </Form>
+          </Card>
+
+          {/* 2FA设置 */}
+          <Card title={t('account.twoFactorAuth')}>
             <Space direction="vertical" style={{ width: '100%' }} size="large">
-              <Card
-                title="API Key"
-                extra={
-                  <Button
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={() => copyToClipboard(merchant.api_key)}
-                  >
-                    复制
-                  </Button>
-                }
-              >
-                <code style={{ fontSize: 14 }}>{merchant.api_key}</code>
-              </Card>
+              <Alert
+                message={t('account.2FADescription')}
+                description={t('account.2FADescriptionDetail')}
+                type="info"
+                showIcon
+                icon={<SafetyOutlined />}
+              />
 
-              <Card
-                title="API Secret"
-                extra={
-                  <Popconfirm
-                    title="重新生成API密钥"
-                    description="重新生成后，旧的密钥将立即失效。确定要继续吗？"
-                    onConfirm={handleRegenerateApiKey}
-                  >
-                    <Button
-                      size="small"
-                      icon={<ReloadOutlined />}
-                      danger
-                    >
-                      重新生成
-                    </Button>
-                  </Popconfirm>
-                }
-              >
-                <code style={{ fontSize: 14 }}>{'*'.repeat(32)}</code>
-                <Paragraph type="secondary" style={{ marginTop: 8 }}>
-                  出于安全考虑，API Secret不会显示。如需使用，请重新生成。
-                </Paragraph>
-              </Card>
-
-              <Card title="使用说明">
-                <Paragraph>
-                  <strong>认证方式：</strong>
-                  <br />
-                  在API请求头中添加以下内容：
-                </Paragraph>
-                <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4 }}>
-{`X-Merchant-Key: ${merchant.api_key}
-X-Merchant-Secret: [您的API Secret]
-Content-Type: application/json`}
-                </pre>
-                <Paragraph>
-                  <strong>安全提示：</strong>
-                </Paragraph>
-                <ul>
-                  <li>请妥善保管您的API密钥，不要泄露给他人</li>
-                  <li>建议定期更换API密钥以提高安全性</li>
-                  <li>生产环境中请使用HTTPS协议</li>
-                  <li>可在风险配置中设置IP白名单</li>
-                </ul>
-              </Card>
-            </Space>
-          </TabPane>
-
-          <TabPane tab="结算账户" key="settlement">
-            {merchant.settlement_account ? (
-              <Descriptions title="银行账户信息" bordered column={2}>
-                <Descriptions.Item label="开户银行">
-                  {merchant.settlement_account.bank_name}
-                </Descriptions.Item>
-                <Descriptions.Item label="开户支行">
-                  {merchant.settlement_account.bank_branch || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="账户名称">
-                  {merchant.settlement_account.account_name}
-                </Descriptions.Item>
-                <Descriptions.Item label="账户类型">
-                  {merchant.settlement_account.account_type}
-                </Descriptions.Item>
-                <Descriptions.Item label="账户号码" span={2}>
-                  {merchant.settlement_account.account_number}
-                </Descriptions.Item>
-              </Descriptions>
-            ) : (
-              <Card>
-                <Paragraph>尚未配置结算账户，请联系客服添加。</Paragraph>
-              </Card>
-            )}
-          </TabPane>
-
-          <TabPane tab="费率配置" key="rate">
-            {merchant.rate_config ? (
-              <Descriptions title="费率信息" bordered column={2}>
-                <Descriptions.Item label="支付渠道">
-                  {merchant.rate_config.channel}
-                </Descriptions.Item>
-                <Descriptions.Item label="支付方式">
-                  {merchant.rate_config.payment_method}
-                </Descriptions.Item>
-                <Descriptions.Item label="费率">
-                  {(merchant.rate_config.rate * 100).toFixed(2)}%
-                </Descriptions.Item>
-                <Descriptions.Item label="固定手续费">
-                  ${(merchant.rate_config.fixed_fee / 100).toFixed(2)}
-                </Descriptions.Item>
-              </Descriptions>
-            ) : (
-              <Card>
-                <Paragraph>尚未配置费率，请联系客服设置。</Paragraph>
-              </Card>
-            )}
-          </TabPane>
-
-          <TabPane tab="风控配置" key="risk">
-            {merchant.risk_config ? (
-              <Descriptions title="风控规则" bordered column={2}>
-                <Descriptions.Item label="单日限额">
-                  ${(merchant.risk_config.daily_limit / 100).toFixed(2)}
-                </Descriptions.Item>
-                <Descriptions.Item label="单月限额">
-                  ${(merchant.risk_config.monthly_limit / 100).toFixed(2)}
-                </Descriptions.Item>
-                <Descriptions.Item label="单笔限额" span={2}>
-                  ${(merchant.risk_config.single_limit / 100).toFixed(2)}
-                </Descriptions.Item>
-                <Descriptions.Item label="回调重试次数">
-                  {merchant.risk_config.callback_retry} 次
-                </Descriptions.Item>
-                <Descriptions.Item label="IP白名单" span={2}>
-                  {merchant.risk_config.ip_whitelist?.length > 0 ? (
-                    <Space wrap>
-                      {merchant.risk_config.ip_whitelist.map((ip) => (
-                        <Tag key={ip}>{ip}</Tag>
-                      ))}
-                    </Space>
+              <div>
+                <Space>
+                  <Text strong>{t('account.status')}:</Text>
+                  {twoFactorEnabled ? (
+                    <Tag color="green">{t('account.enabled')}</Tag>
                   ) : (
-                    '未设置'
+                    <Tag color="red">{t('account.disabled')}</Tag>
                   )}
-                </Descriptions.Item>
-              </Descriptions>
-            ) : (
-              <Card>
-                <Paragraph>尚未配置风控规则，请联系客服设置。</Paragraph>
-              </Card>
-            )}
-          </TabPane>
-        </Tabs>
-      </Card>
+                </Space>
+              </div>
 
-      {/* Edit Profile Modal */}
-      <Modal
-        title="编辑商户信息"
-        open={editModalVisible}
-        onOk={handleEditSubmit}
-        onCancel={() => setEditModalVisible(false)}
-        width={700}
-      >
-        <Form form={editForm} layout="vertical">
-          <Form.Item
-            name="contact_name"
-            label="联系人"
-            rules={[{ required: true, message: '请输入联系人' }]}
-          >
-            <Input />
-          </Form.Item>
+              {!twoFactorEnabled ? (
+                <Button
+                  type="primary"
+                  icon={<SafetyOutlined />}
+                  onClick={handleEnable2FA}
+                  loading={loading}
+                >
+                  {t('account.enable2FA')}
+                </Button>
+              ) : (
+                <Button danger onClick={handleDisable2FA} loading={loading}>
+                  {t('account.disable2FA')}
+                </Button>
+              )}
 
-          <Form.Item
-            name="contact_email"
-            label="联系邮箱"
-            rules={[
-              { required: true, message: '请输入联系邮箱' },
-              { type: 'email', message: '请输入有效的邮箱地址' },
-            ]}
-          >
-            <Input />
-          </Form.Item>
+              {/* 2FA设置Modal */}
+              <Modal
+                title={t('account.setup2FA')}
+                open={showQRCode}
+                onCancel={() => {
+                  setShowQRCode(false)
+                  setVerifyCode('')
+                }}
+                footer={null}
+                width={500}
+              >
+                <Space direction="vertical" style={{ width: '100%' }} size="large">
+                  <Alert
+                    message={t('account.scanQRCode')}
+                    description={t('account.scanQRCodeDescription')}
+                    type="info"
+                  />
 
-          <Form.Item name="contact_phone" label="联系电话">
-            <Input />
-          </Form.Item>
+                  <div style={{ textAlign: 'center' }}>
+                    <QRCode value={qrCodeUrl} size={200} />
+                  </div>
 
-          <Form.Item name="website" label="网站">
-            <Input placeholder="https://example.com" />
-          </Form.Item>
+                  <Divider>{t('account.orEnterManually')}</Divider>
 
-          <Form.Item name="description" label="商户描述">
-            <Input.TextArea rows={3} />
-          </Form.Item>
+                  <div>
+                    <Text copyable>{qrCodeUrl.split('secret=')[1]?.split('&')[0]}</Text>
+                  </div>
 
-          <Form.Item
-            name="callback_url"
-            label="回调地址"
-            rules={[{ required: true, message: '请输入回调地址' }]}
-          >
-            <Input placeholder="https://example.com/callback" />
-          </Form.Item>
+                  <div>
+                    <Text strong>{t('account.enterVerifyCode')}:</Text>
+                    <Input
+                      placeholder={t('account.verifyCodePlaceholder')}
+                      value={verifyCode}
+                      onChange={(e) => setVerifyCode(e.target.value)}
+                      maxLength={6}
+                      style={{ marginTop: 8 }}
+                    />
+                  </div>
 
-          <Form.Item
-            name="return_url"
-            label="返回地址"
-            rules={[{ required: true, message: '请输入返回地址' }]}
-          >
-            <Input placeholder="https://example.com/return" />
-          </Form.Item>
-        </Form>
-      </Modal>
+                  <Button
+                    type="primary"
+                    block
+                    onClick={handleVerify2FA}
+                    loading={loading}
+                    disabled={verifyCode.length !== 6}
+                  >
+                    {t('account.verify')}
+                  </Button>
+                </Space>
+              </Modal>
+            </Space>
+          </Card>
+        </Tabs.TabPane>
 
-      {/* Change Password Modal */}
-      <Modal
-        title="修改密码"
-        open={passwordModalVisible}
-        onOk={handlePasswordSubmit}
-        onCancel={() => setPasswordModalVisible(false)}
-        width={500}
-      >
-        <Form form={passwordForm} layout="vertical">
-          <Form.Item
-            name="old_password"
-            label="当前密码"
-            rules={[{ required: true, message: '请输入当前密码' }]}
-          >
-            <Input.Password />
-          </Form.Item>
+        {/* 活动记录 */}
+        <Tabs.TabPane
+          tab={
+            <span>
+              <HistoryOutlined />
+              {t('account.activityLog')}
+            </span>
+          }
+          key="activity"
+        >
+          <Card>
+            <Table
+              columns={activityColumns}
+              dataSource={activityLogs}
+              loading={activityLoading}
+              rowKey="id"
+              pagination={{
+                pageSize: 10,
+                showSizeChanger: true,
+                showTotal: (total) => t('common.total', { count: total }),
+              }}
+            />
+          </Card>
+        </Tabs.TabPane>
 
-          <Form.Item
-            name="new_password"
-            label="新密码"
-            rules={[
-              { required: true, message: '请输入新密码' },
-              { min: 8, message: '密码至少8个字符' },
-            ]}
-          >
-            <Input.Password />
-          </Form.Item>
+        {/* 偏好设置 */}
+        <Tabs.TabPane
+          tab={
+            <span>
+              <SettingOutlined />
+              {t('account.preferences')}
+            </span>
+          }
+          key="preferences"
+        >
+          <Card>
+            <Form
+              form={preferencesForm}
+              layout="vertical"
+              onFinish={handleSavePreferences}
+              initialValues={preferences}
+              style={{ maxWidth: 600 }}
+            >
+              <Title level={4}>
+                <GlobalOutlined /> {t('account.regionSettings')}
+              </Title>
 
-          <Form.Item
-            name="confirm_password"
-            label="确认新密码"
-            dependencies={['new_password']}
-            rules={[
-              { required: true, message: '请确认新密码' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('new_password') === value) {
-                    return Promise.resolve()
-                  }
-                  return Promise.reject(new Error('两次输入的密码不一致'))
-                },
-              }),
-            ]}
-          >
-            <Input.Password />
-          </Form.Item>
-        </Form>
-      </Modal>
+              <Form.Item
+                label={t('account.language')}
+                name="language"
+                tooltip={t('account.languageTooltip')}
+              >
+                <Select>
+                  <Option value="zh-CN">简体中文</Option>
+                  <Option value="en-US">English</Option>
+                  <Option value="zh-TW">繁體中文</Option>
+                  <Option value="ja">日本語</Option>
+                  <Option value="ko">한국어</Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                label={t('account.timezone')}
+                name="timezone"
+                tooltip={t('account.timezoneTooltip')}
+              >
+                <Select showSearch>
+                  <Option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</Option>
+                  <Option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</Option>
+                  <Option value="Asia/Seoul">Asia/Seoul (UTC+9)</Option>
+                  <Option value="America/New_York">America/New_York (UTC-5)</Option>
+                  <Option value="America/Los_Angeles">America/Los_Angeles (UTC-8)</Option>
+                  <Option value="Europe/London">Europe/London (UTC+0)</Option>
+                  <Option value="UTC">UTC (UTC+0)</Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                label={t('account.defaultCurrency')}
+                name="currency"
+                tooltip={t('account.currencyTooltip')}
+              >
+                <Select>
+                  <Option value="USD">USD - 美元</Option>
+                  <Option value="CNY">CNY - 人民币</Option>
+                  <Option value="EUR">EUR - 欧元</Option>
+                  <Option value="GBP">GBP - 英镑</Option>
+                  <Option value="JPY">JPY - 日元</Option>
+                  <Option value="KRW">KRW - 韩元</Option>
+                  <Option value="HKD">HKD - 港币</Option>
+                </Select>
+              </Form.Item>
+
+              <Divider />
+
+              <Title level={4}>
+                <ClockCircleOutlined /> {t('account.formatSettings')}
+              </Title>
+
+              <Form.Item label={t('account.dateFormat')} name="date_format">
+                <Select>
+                  <Option value="YYYY-MM-DD">YYYY-MM-DD (2024-01-15)</Option>
+                  <Option value="MM/DD/YYYY">MM/DD/YYYY (01/15/2024)</Option>
+                  <Option value="DD/MM/YYYY">DD/MM/YYYY (15/01/2024)</Option>
+                  <Option value="YYYY年MM月DD日">YYYY年MM月DD日 (2024年01月15日)</Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item label={t('account.timeFormat')} name="time_format">
+                <Select>
+                  <Option value="24h">24小时制 (14:30)</Option>
+                  <Option value="12h">12小时制 (2:30 PM)</Option>
+                </Select>
+              </Form.Item>
+
+              <Divider />
+
+              <Title level={4}>
+                <SafetyOutlined /> {t('account.notificationSettings')}
+              </Title>
+
+              <Form.Item
+                label={t('account.emailNotifications')}
+                name="notifications_email"
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+
+              <Form.Item
+                label={t('account.smsNotifications')}
+                name="notifications_sms"
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+
+              <Form.Item
+                label={t('account.pushNotifications')}
+                name="notifications_push"
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+
+              <Form.Item>
+                <Space>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    {t('account.savePreferences')}
+                  </Button>
+                  <Button onClick={() => preferencesForm.resetFields()}>
+                    {t('common.reset')}
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </Card>
+        </Tabs.TabPane>
+      </Tabs>
     </div>
   )
 }

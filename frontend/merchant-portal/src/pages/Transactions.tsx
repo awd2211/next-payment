@@ -19,6 +19,9 @@ import {
   InputNumber,
   message,
   Popconfirm,
+  Tooltip,
+  Badge,
+  Skeleton,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -31,9 +34,13 @@ import {
   ClockCircleOutlined,
   UndoOutlined,
   DownloadOutlined,
+  ReloadOutlined,
+  FilterOutlined,
+  ClearOutlined,
 } from '@ant-design/icons'
 import { paymentService, Payment, PaymentStats } from '../services/paymentService'
 import { useAuthStore } from '../stores/authStore'
+import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 
@@ -41,7 +48,9 @@ const { Title } = Typography
 const { RangePicker } = DatePicker
 
 const Transactions = () => {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(false)
   const [payments, setPayments] = useState<Payment[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -51,6 +60,7 @@ const Transactions = () => {
   const [detailDrawerVisible, setDetailDrawerVisible] = useState(false)
   const [refundModalVisible, setRefundModalVisible] = useState(false)
   const [refundForm] = Form.useForm()
+  const [filterVisible, setFilterVisible] = useState(false)
 
   // Filter states
   const [orderIdFilter, setOrderIdFilter] = useState('')
@@ -58,6 +68,15 @@ const Transactions = () => {
   const [channelFilter, setChannelFilter] = useState<string | undefined>()
   const [methodFilter, setMethodFilter] = useState<string | undefined>()
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null)
+
+  // 计算激活的过滤器数量
+  const activeFilterCount = [
+    orderIdFilter,
+    statusFilter,
+    channelFilter,
+    methodFilter,
+    dateRange,
+  ].filter(Boolean).length
 
   useEffect(() => {
     loadPayments()
@@ -106,13 +125,25 @@ const Transactions = () => {
       return
     }
 
+    setStatsLoading(true)
     try {
       const response = await paymentService.getStats({})
       setStats(response.data)
     } catch (error) {
       // Stats API 可能不存在，暂时忽略错误
       console.log('Stats API not available yet')
+    } finally {
+      setStatsLoading(false)
     }
+  }
+
+  const handleClearFilters = () => {
+    setOrderIdFilter('')
+    setStatusFilter(undefined)
+    setChannelFilter(undefined)
+    setMethodFilter(undefined)
+    setDateRange(null)
+    setPage(1)
   }
 
   const handleViewDetail = (payment: Payment) => {
@@ -202,110 +233,134 @@ const Transactions = () => {
 
   const getStatusText = (status: string) => {
     const texts: Record<string, string> = {
-      pending: '待支付',
-      success: '成功',
-      failed: '失败',
-      cancelled: '已取消',
-      refunded: '已退款',
+      pending: t('transactions.statusPending'),
+      success: t('transactions.statusSuccess'),
+      failed: t('transactions.statusFailed'),
+      cancelled: t('orders.statusCancelled'),
+      refunded: t('transactions.statusRefunded'),
     }
     return texts[status] || status
   }
 
   const columns: ColumnsType<Payment> = [
     {
-      title: '交易ID',
+      title: t('transactions.transactionNo'),
       dataIndex: 'id',
       key: 'id',
-      width: 100,
+      width: 120,
       ellipsis: true,
+      render: (id: string) => (
+        <Tooltip title={id}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {id.slice(0, 8)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
-      title: '订单号',
+      title: t('transactions.orderNo'),
       dataIndex: 'order_id',
       key: 'order_id',
-      width: 100,
+      width: 120,
       ellipsis: true,
+      render: (orderId: string) => (
+        <Tooltip title={orderId}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {orderId?.slice(0, 8)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
-      title: '金额',
+      title: t('transactions.amount'),
       dataIndex: 'amount',
       key: 'amount',
-      width: 120,
+      width: 140,
       render: (amount: number, record) => (
-        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+        <span style={{ fontWeight: 600, color: '#1890ff', fontSize: 14 }}>
           {record.currency} {(amount / 100).toFixed(2)}
         </span>
       ),
     },
     {
-      title: '状态',
+      title: t('transactions.status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{getStatusText(status)}</Tag>
+        <Tag color={getStatusColor(status)} style={{ borderRadius: 12, fontWeight: 500 }}>
+          {getStatusText(status)}
+        </Tag>
       ),
     },
     {
-      title: '支付渠道',
+      title: t('transactions.channel'),
       dataIndex: 'channel',
       key: 'channel',
       width: 100,
-      render: (channel: string) => <Tag>{channel}</Tag>,
-    },
-    {
-      title: '支付方式',
-      dataIndex: 'method',
-      key: 'method',
-      width: 100,
-      render: (method: string) => <Tag color="blue">{method}</Tag>,
+      render: (channel: string) => (
+        <Tag style={{ borderRadius: 12 }}>{channel?.toUpperCase()}</Tag>
+      ),
     },
     {
       title: '客户邮箱',
       dataIndex: 'customer_email',
       key: 'customer_email',
       ellipsis: true,
+      width: 180,
     },
     {
-      title: '创建时间',
+      title: t('common.createdAt'),
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
-      render: (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm:ss'),
+      render: (time: string) => (
+        <Tooltip title={dayjs(time).format('YYYY-MM-DD HH:mm:ss')}>
+          {dayjs(time).format('MM-DD HH:mm')}
+        </Tooltip>
+      ),
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'action',
       width: 180,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetail(record)}
-          >
-            详情
-          </Button>
-          {record.status === 'success' && (
+        <Space size="small">
+          <Tooltip title={t('transactions.viewDetails')}>
             <Button
               type="link"
               size="small"
-              icon={<UndoOutlined />}
-              onClick={() => handleRefund(record)}
+              icon={<EyeOutlined />}
+              onClick={() => handleViewDetail(record)}
+              style={{ padding: '4px 8px' }}
             >
-              退款
+              {t('common.detail')}
             </Button>
+          </Tooltip>
+          {record.status === 'success' && (
+            <Tooltip title={t('transactions.refund')}>
+              <Button
+                type="link"
+                size="small"
+                icon={<UndoOutlined />}
+                onClick={() => handleRefund(record)}
+                style={{ padding: '4px 8px' }}
+              >
+                {t('transactions.refund')}
+              </Button>
+            </Tooltip>
           )}
           {record.status === 'pending' && (
             <Popconfirm
-              title="确认取消"
+              title={t('common.confirm')}
               description="确定要取消这笔交易吗？"
               onConfirm={() => handleCancel(record)}
+              okText={t('common.yes')}
+              cancelText={t('common.no')}
             >
-              <Button type="link" size="small" danger>
-                取消
+              <Button type="link" size="small" danger style={{ padding: '4px 8px' }}>
+                {t('common.cancel')}
               </Button>
             </Popconfirm>
           )}
@@ -316,71 +371,157 @@ const Transactions = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={2}>交易记录</Title>
-        <Button
-          type="primary"
-          icon={<DownloadOutlined />}
-          onClick={handleExport}
-          loading={loading}
-        >
-          导出CSV
-        </Button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>{t('transactions.title')}</Title>
+        <Space>
+          <Tooltip title={t('common.refresh')}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                loadPayments()
+                loadStats()
+              }}
+              loading={loading || statsLoading}
+              style={{ borderRadius: 8 }}
+            >
+              {t('common.refresh')}
+            </Button>
+          </Tooltip>
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            onClick={handleExport}
+            loading={loading}
+            style={{ borderRadius: 8 }}
+          >
+            {t('common.export')}
+          </Button>
+        </Space>
       </div>
 
       {/* Statistics Cards */}
-      {stats && (
-        <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col span={6}>
-            <Card>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+          >
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
               <Statistic
-                title="总交易额"
-                value={(stats.total_amount / 100).toFixed(2)}
-                prefix={<DollarOutlined />}
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>总交易额</span>}
+                value={stats ? (stats.total_amount / 100).toFixed(2) : 0}
+                prefix={<DollarOutlined style={{ color: '#1890ff' }} />}
                 suffix="USD"
+                valueStyle={{ color: '#1890ff', fontSize: 24, fontWeight: 600 }}
               />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+          >
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
               <Statistic
-                title="交易笔数"
-                value={stats.total_count}
-                prefix={<TransactionOutlined />}
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>交易笔数</span>}
+                value={stats?.total_count || 0}
+                prefix={<TransactionOutlined style={{ color: '#fa8c16' }} />}
+                valueStyle={{ color: '#fa8c16', fontSize: 24, fontWeight: 600 }}
               />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+          >
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
               <Statistic
-                title="成功率"
-                value={(stats.success_rate * 100).toFixed(2)}
-                prefix={<CheckCircleOutlined />}
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>成功率</span>}
+                value={stats ? (stats.success_rate * 100).toFixed(2) : 0}
+                prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
                 suffix="%"
-                valueStyle={{ color: '#3f8600' }}
+                valueStyle={{ color: '#52c41a', fontSize: 24, fontWeight: 600 }}
               />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+          >
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
               <Statistic
-                title="今日交易额"
-                value={(stats.today_amount / 100).toFixed(2)}
-                prefix={<ClockCircleOutlined />}
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>今日交易</span>}
+                value={stats?.today_amount ? (stats.today_amount / 100).toFixed(2) : 0}
+                prefix={<ClockCircleOutlined style={{ color: '#722ed1' }} />}
                 suffix="USD"
+                valueStyle={{ color: '#722ed1', fontSize: 24, fontWeight: 600 }}
               />
-            </Card>
-          </Col>
-        </Row>
-      )}
+            )}
+          </Card>
+        </Col>
+      </Row>
 
       {/* Filters */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space wrap>
+      <Card
+        style={{
+          marginBottom: 16,
+          borderRadius: 12,
+        }}
+        bodyStyle={{ padding: '20px' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <Space align="center">
+            <FilterOutlined style={{ fontSize: 16 }} />
+            <span style={{ fontWeight: 500, fontSize: 14 }}>{t('common.filter')}</span>
+            {activeFilterCount > 0 && (
+              <Badge count={activeFilterCount} style={{ backgroundColor: '#1890ff' }} />
+            )}
+          </Space>
+          {activeFilterCount > 0 && (
+            <Button
+              type="link"
+              icon={<ClearOutlined />}
+              onClick={handleClearFilters}
+              size="small"
+            >
+              清除筛选
+            </Button>
+          )}
+        </div>
+        <Space wrap size="middle">
           <Input
             placeholder="搜索订单号"
             prefix={<SearchOutlined />}
-            style={{ width: 200 }}
+            style={{ width: 220, borderRadius: 8 }}
             allowClear
             value={orderIdFilter}
             onChange={(e) => {
@@ -390,7 +531,7 @@ const Transactions = () => {
           />
           <Select
             placeholder="交易状态"
-            style={{ width: 120 }}
+            style={{ width: 140, borderRadius: 8 }}
             allowClear
             value={statusFilter}
             onChange={(value) => {
@@ -398,15 +539,15 @@ const Transactions = () => {
               setPage(1)
             }}
           >
-            <Select.Option value="pending">待支付</Select.Option>
-            <Select.Option value="success">成功</Select.Option>
-            <Select.Option value="failed">失败</Select.Option>
-            <Select.Option value="cancelled">已取消</Select.Option>
-            <Select.Option value="refunded">已退款</Select.Option>
+            <Select.Option value="pending">{t('transactions.statusPending')}</Select.Option>
+            <Select.Option value="success">{t('transactions.statusSuccess')}</Select.Option>
+            <Select.Option value="failed">{t('transactions.statusFailed')}</Select.Option>
+            <Select.Option value="cancelled">{t('orders.statusCancelled')}</Select.Option>
+            <Select.Option value="refunded">{t('transactions.statusRefunded')}</Select.Option>
           </Select>
           <Select
             placeholder="支付渠道"
-            style={{ width: 120 }}
+            style={{ width: 140, borderRadius: 8 }}
             allowClear
             value={channelFilter}
             onChange={(value) => {
@@ -419,53 +560,56 @@ const Transactions = () => {
             <Select.Option value="alipay">支付宝</Select.Option>
             <Select.Option value="wechat">微信支付</Select.Option>
           </Select>
-          <Select
-            placeholder="支付方式"
-            style={{ width: 120 }}
-            allowClear
-            value={methodFilter}
-            onChange={(value) => {
-              setMethodFilter(value)
-              setPage(1)
-            }}
-          >
-            <Select.Option value="card">信用卡</Select.Option>
-            <Select.Option value="bank_transfer">银行转账</Select.Option>
-            <Select.Option value="e_wallet">电子钱包</Select.Option>
-          </Select>
           <RangePicker
             showTime
-            format="YYYY-MM-DD HH:mm:ss"
+            format="YYYY-MM-DD HH:mm"
             placeholder={['开始时间', '结束时间']}
             value={dateRange}
             onChange={(dates) => {
               setDateRange(dates)
               setPage(1)
             }}
+            style={{ borderRadius: 8 }}
           />
-          <Button onClick={resetFilters}>重置筛选</Button>
         </Space>
       </Card>
 
       {/* Table */}
-      <Table
-        columns={columns}
-        dataSource={payments}
-        rowKey="id"
-        loading={loading}
-        pagination={{
-          current: page,
-          pageSize: pageSize,
-          total: total,
-          showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, pageSize) => {
-            setPage(page)
-            setPageSize(pageSize)
-          },
+      <Card
+        style={{
+          borderRadius: 12,
         }}
-        scroll={{ x: 1400 }}
-      />
+        bodyStyle={{ padding: 0 }}
+      >
+        <Table
+          columns={columns}
+          dataSource={payments}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: page,
+            pageSize: pageSize,
+            total: total,
+            showSizeChanger: true,
+            showTotal: (total) => t('common.total', { count: total }),
+            onChange: (page, pageSize) => {
+              setPage(page)
+              setPageSize(pageSize)
+            },
+            style: { padding: '16px' },
+          }}
+          scroll={{ x: 1400 }}
+          size="middle"
+          locale={{
+            emptyText: (
+              <div style={{ padding: '40px', textAlign: 'center' }}>
+                <TransactionOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 16, display: 'block' }} />
+                <span style={{ color: '#999' }}>{t('common.noData')}</span>
+              </div>
+            ),
+          }}
+        />
+      </Card>
 
       {/* Detail Drawer */}
       <Drawer

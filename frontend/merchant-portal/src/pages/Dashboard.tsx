@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Row, Col, Card, Statistic, Typography, Table, Button, Space, Tag } from 'antd'
+import { Row, Col, Card, Statistic, Typography, Table, Button, Space, Tag, Skeleton, Tooltip } from 'antd'
 import {
   DollarOutlined,
   TransactionOutlined,
@@ -12,6 +12,7 @@ import {
   RollbackOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { Line, Pie, Column } from '@ant-design/charts'
@@ -371,69 +372,141 @@ const Dashboard = () => {
 
   return (
     <div>
-      <Title level={2}>{t('dashboard.title')}</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>{t('dashboard.title')}</Title>
+        <Tooltip title={t('common.refresh')}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={loadDashboardData}
+            loading={loading}
+            style={{ borderRadius: 8 }}
+          >
+            {t('common.refresh')}
+          </Button>
+        </Tooltip>
+      </div>
 
       {/* Key Statistics Cards */}
-      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('dashboard.todayRevenue')}
-              value={todayStats ? todayStats.total_amount / 100 : 0}
-              precision={2}
-              prefix={<DollarOutlined />}
-              suffix="USD"
-              valueStyle={{ color: '#3f8600' }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              <ArrowUpOutlined style={{ color: '#3f8600' }} /> +12.5%
-            </Text>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              overflow: 'hidden',
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+            bodyStyle={{ padding: '24px' }}
+          >
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : (
+              <>
+                <Statistic
+                  title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('dashboard.todayRevenue')}</span>}
+                  value={todayStats ? todayStats.total_amount / 100 : 0}
+                  precision={2}
+                  prefix={<DollarOutlined style={{ color: '#3f8600' }} />}
+                  suffix="USD"
+                  valueStyle={{ color: '#3f8600', fontSize: 28, fontWeight: 600 }}
+                />
+                <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+                  <ArrowUpOutlined style={{ color: '#3f8600' }} /> +12.5%
+                </Text>
+              </>
+            )}
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('dashboard.monthRevenue')}
-              value={monthStats ? monthStats.total_amount / 100 : 0}
-              precision={2}
-              prefix={<RiseOutlined />}
-              suffix="USD"
-              valueStyle={{ color: '#1890ff' }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              <ArrowUpOutlined style={{ color: '#3f8600' }} /> +8.3%
-            </Text>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              overflow: 'hidden',
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+            bodyStyle={{ padding: '24px' }}
+          >
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : (
+              <>
+                <Statistic
+                  title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('dashboard.monthRevenue')}</span>}
+                  value={monthStats ? monthStats.total_amount / 100 : 0}
+                  precision={2}
+                  prefix={<RiseOutlined style={{ color: '#1890ff' }} />}
+                  suffix="USD"
+                  valueStyle={{ color: '#1890ff', fontSize: 28, fontWeight: 600 }}
+                />
+                <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+                  <ArrowUpOutlined style={{ color: '#3f8600' }} /> +8.3%
+                </Text>
+              </>
+            )}
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('dashboard.todayOrders')}
-              value={todayStats?.total_count || 0}
-              prefix={<TransactionOutlined />}
-              valueStyle={{ color: '#fa8c16' }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('dashboard.totalOrders')}: {stats?.total_count || 0}
-            </Text>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              overflow: 'hidden',
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+            bodyStyle={{ padding: '24px' }}
+          >
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : (
+              <>
+                <Statistic
+                  title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('dashboard.todayOrders')}</span>}
+                  value={todayStats?.total_count || 0}
+                  prefix={<TransactionOutlined style={{ color: '#fa8c16' }} />}
+                  valueStyle={{ color: '#fa8c16', fontSize: 28, fontWeight: 600 }}
+                />
+                <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+                  {t('dashboard.totalOrders')}: {stats?.total_count || 0}
+                </Text>
+              </>
+            )}
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('dashboard.successRate')}
-              value={stats ? stats.success_rate * 100 : 0}
-              precision={2}
-              suffix="%"
-              prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#52c41a' }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('dashboard.todayOrders')}: {todayStats?.success_count || 0}
-            </Text>
+          <Card
+            hoverable
+            style={{
+              borderRadius: 12,
+              overflow: 'hidden',
+              transition: 'all 0.3s ease',
+              cursor: 'default',
+            }}
+            bodyStyle={{ padding: '24px' }}
+          >
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : (
+              <>
+                <Statistic
+                  title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('dashboard.successRate')}</span>}
+                  value={stats ? stats.success_rate * 100 : 0}
+                  precision={2}
+                  suffix="%"
+                  prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                  valueStyle={{ color: '#52c41a', fontSize: 28, fontWeight: 600 }}
+                />
+                <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+                  {t('dashboard.todayOrders')}: {todayStats?.success_count || 0}
+                </Text>
+              </>
+            )}
           </Card>
         </Col>
       </Row>
@@ -441,50 +514,96 @@ const Dashboard = () => {
       {/* Account Balance Card */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24}>
-          <Card>
-            <Row>
-              <Col xs={24} md={6}>
-                <Statistic
-                  title={t('dashboard.accountBalance')}
-                  value={stats ? stats.total_amount / 100 : 0}
-                  precision={2}
-                  prefix={<WalletOutlined />}
-                  suffix="USD"
-                  valueStyle={{ color: '#1890ff', fontSize: 32 }}
-                />
-              </Col>
-              <Col xs={24} md={18}>
-                <Space direction="vertical" style={{ width: '100%' }} size="small">
-                  <div style={{ marginBottom: 16 }}>
-                    <Text type="secondary">{t('dashboard.quickActions')}</Text>
-                  </div>
-                  <Space wrap>
-                    <Button
-                      type="primary"
-                      icon={<PlusCircleOutlined />}
-                      onClick={() => navigate('/create-payment')}
-                    >
-                      {t('menu.createPayment')}
-                    </Button>
-                    <Button
-                      icon={<SearchOutlined />}
-                      onClick={() => navigate('/transactions')}
-                    >
-                      {t('menu.transactions')}
-                    </Button>
-                    <Button
-                      icon={<RollbackOutlined />}
-                      onClick={() => navigate('/refunds')}
-                    >
-                      {t('menu.refunds')}
-                    </Button>
-                    <Button onClick={() => navigate('/settlements')}>
-                      {t('menu.settlement')}
-                    </Button>
+          <Card
+            style={{
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: '#fff',
+            }}
+            bodyStyle={{ padding: '32px' }}
+          >
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 3 }} />
+            ) : (
+              <Row gutter={[24, 24]}>
+                <Col xs={24} md={6}>
+                  <Statistic
+                    title={<span style={{ color: '#fff', fontSize: 16, opacity: 0.9 }}>{t('dashboard.accountBalance')}</span>}
+                    value={stats ? stats.total_amount / 100 : 0}
+                    precision={2}
+                    prefix={<WalletOutlined style={{ color: '#fff' }} />}
+                    suffix="USD"
+                    valueStyle={{ color: '#fff', fontSize: 36, fontWeight: 700 }}
+                  />
+                </Col>
+                <Col xs={24} md={18}>
+                  <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                    <Text style={{ color: '#fff', fontSize: 14, opacity: 0.9, fontWeight: 500 }}>
+                      {t('dashboard.quickActions')}
+                    </Text>
+                    <Space wrap size="middle">
+                      <Button
+                        type="primary"
+                        size="large"
+                        icon={<PlusCircleOutlined />}
+                        onClick={() => navigate('/create-payment')}
+                        style={{
+                          background: '#fff',
+                          color: '#667eea',
+                          border: 'none',
+                          borderRadius: 8,
+                          fontWeight: 500,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        }}
+                      >
+                        {t('menu.createPayment')}
+                      </Button>
+                      <Button
+                        size="large"
+                        icon={<SearchOutlined />}
+                        onClick={() => navigate('/transactions')}
+                        style={{
+                          background: 'rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          borderRadius: 8,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {t('menu.transactions')}
+                      </Button>
+                      <Button
+                        size="large"
+                        icon={<RollbackOutlined />}
+                        onClick={() => navigate('/refunds')}
+                        style={{
+                          background: 'rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          borderRadius: 8,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {t('menu.refunds')}
+                      </Button>
+                      <Button
+                        size="large"
+                        onClick={() => navigate('/settlements')}
+                        style={{
+                          background: 'rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          borderRadius: 8,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {t('menu.settlement')}
+                      </Button>
+                    </Space>
                   </Space>
-                </Space>
-              </Col>
-            </Row>
+                </Col>
+              </Row>
+            )}
           </Card>
         </Col>
       </Row>
@@ -492,11 +611,19 @@ const Dashboard = () => {
       {/* Charts */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={16}>
-          <Card title={t('dashboard.transactionTrend')} loading={loading}>
+          <Card
+            title={<span style={{ fontSize: 16, fontWeight: 600 }}>{t('dashboard.transactionTrend')}</span>}
+            loading={loading}
+            style={{ borderRadius: 12 }}
+            bodyStyle={{ padding: '24px' }}
+          >
             {trendData.length > 0 ? (
-              <Line {...lineConfig} />
+              <div style={{ height: 300 }}>
+                <Line {...lineConfig} />
+              </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+              <div style={{ textAlign: 'center', padding: '80px 40px', color: '#999' }}>
+                <TransactionOutlined style={{ fontSize: 48, opacity: 0.3, marginBottom: 16, display: 'block' }} />
                 {t('common.noData')}
               </div>
             )}
@@ -504,11 +631,19 @@ const Dashboard = () => {
         </Col>
 
         <Col xs={24} lg={8}>
-          <Card title={t('dashboard.channelDistribution')}>
+          <Card
+            title={<span style={{ fontSize: 16, fontWeight: 600 }}>{t('dashboard.channelDistribution')}</span>}
+            loading={loading}
+            style={{ borderRadius: 12 }}
+            bodyStyle={{ padding: '24px' }}
+          >
             {channelData.length > 0 ? (
-              <Pie {...pieConfig} />
+              <div style={{ height: 300 }}>
+                <Pie {...pieConfig} />
+              </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+              <div style={{ textAlign: 'center', padding: '80px 40px', color: '#999' }}>
+                <DollarOutlined style={{ fontSize: 48, opacity: 0.3, marginBottom: 16, display: 'block' }} />
                 {t('common.noData')}
               </div>
             )}
@@ -518,11 +653,19 @@ const Dashboard = () => {
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title={t('dashboard.paymentMethodStats')}>
+          <Card
+            title={<span style={{ fontSize: 16, fontWeight: 600 }}>{t('dashboard.paymentMethodStats')}</span>}
+            loading={loading}
+            style={{ borderRadius: 12 }}
+            bodyStyle={{ padding: '24px' }}
+          >
             {methodData.length > 0 ? (
-              <Column {...columnConfig} />
+              <div style={{ height: 300 }}>
+                <Column {...columnConfig} />
+              </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+              <div style={{ textAlign: 'center', padding: '80px 40px', color: '#999' }}>
+                <WalletOutlined style={{ fontSize: 48, opacity: 0.3, marginBottom: 16, display: 'block' }} />
                 {t('common.noData')}
               </div>
             )}
@@ -531,20 +674,28 @@ const Dashboard = () => {
 
         <Col xs={24} lg={12}>
           <Card
-            title={t('dashboard.recentTransactions')}
+            title={<span style={{ fontSize: 16, fontWeight: 600 }}>{t('dashboard.recentTransactions')}</span>}
             extra={
-              <Button type="link" onClick={() => navigate('/transactions')}>
-                {t('dashboard.viewAll')}
+              <Button
+                type="link"
+                onClick={() => navigate('/transactions')}
+                style={{ fontWeight: 500 }}
+              >
+                {t('dashboard.viewAll')} →
               </Button>
             }
+            style={{ borderRadius: 12 }}
+            bodyStyle={{ padding: 0 }}
           >
             <Table
               columns={columns}
               dataSource={recentPayments}
               rowKey="id"
               pagination={false}
-              size="small"
+              size="middle"
+              loading={loading}
               locale={{ emptyText: t('common.noData') }}
+              style={{ borderRadius: 12 }}
             />
           </Card>
         </Col>

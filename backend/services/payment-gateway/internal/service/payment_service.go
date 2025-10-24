@@ -534,6 +534,58 @@ func (s *paymentService) HandleCallback(ctx context.Context, channel string, dat
 		return err
 	}
 
+	// ========== Saga 模式（推荐）==========
+	if s.callbackSagaService != nil {
+		logger.Info("使用 Callback Saga 分布式事务处理支付回调",
+			zap.String("payment_no", payment.PaymentNo),
+			zap.String("channel", channel))
+
+		// 解析回调状态
+		status, ok := data["status"].(string)
+		if !ok {
+			return fmt.Errorf("回调数据中缺少status")
+		}
+
+		// 构建 CallbackData
+		callbackData := &CallbackData{
+			PaymentNo:      payment.PaymentNo,
+			ChannelOrderNo: "",
+			Status:         status,
+			PaidAt:         nil,
+			FailureReason:  "",
+			RawData:        string(rawData),
+		}
+
+		// 提取额外信息
+		if channelOrderNo, ok := data["channel_order_no"].(string); ok {
+			callbackData.ChannelOrderNo = channelOrderNo
+		}
+		if errorMsg, ok := data["error_msg"].(string); ok {
+			callbackData.FailureReason = errorMsg
+		}
+		if status == "success" || status == "paid" {
+			now := time.Now()
+			callbackData.PaidAt = &now
+		}
+
+		// 执行 Callback Saga
+		err := s.callbackSagaService.ExecuteCallbackSaga(ctx, payment, callbackData)
+		if err != nil {
+			logger.Error("Callback Saga 执行失败", zap.Error(err))
+			return fmt.Errorf("处理支付回调失败: %w", err)
+		}
+
+		logger.Info("Callback Saga 执行成功",
+			zap.String("payment_no", payment.PaymentNo))
+		return nil
+	}
+
+	// ========== 降级到旧逻辑（向后兼容）==========
+	logger.Warn("未启用 Callback Saga 服务，使用传统方式处理支付回调（不推荐）",
+		zap.String("payment_no", payment.PaymentNo),
+		zap.String("channel", channel))
+	// ⚠️ 数据一致性风险：以下操作无法自动回滚
+
 	// 4. 创建回调记录
 	callback := &model.PaymentCallback{
 		PaymentID:   payment.ID,

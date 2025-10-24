@@ -28,6 +28,7 @@ import { useAuthStore } from '../stores/authStore'
 import LanguageSwitcher from './LanguageSwitcher'
 import ThemeSwitcher from './ThemeSwitcher'
 import NotificationDropdown from './NotificationDropdown'
+import NetworkStatus from './NetworkStatus'
 
 const { Header, Sider, Content } = AntLayout
 const { Text } = Typography
@@ -38,6 +39,12 @@ const Layout = () => {
   const { t } = useTranslation()
   const { merchant, clearAuth } = useAuthStore()
   const [collapsed, setCollapsed] = useState(false)
+
+  // 记住侧边栏状态
+  const handleCollapse = (value: boolean) => {
+    setCollapsed(value)
+    localStorage.setItem('sidebarCollapsed', String(value))
+  }
 
   const {
     token: { colorBgContainer, borderRadiusLG },
@@ -120,70 +127,148 @@ const Layout = () => {
   }
 
   return (
-    <AntLayout style={{ minHeight: '100vh' }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        theme="dark"
-      >
-        <div
-          style={{
-            height: 64,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontSize: collapsed ? 16 : 20,
-            fontWeight: 'bold',
-          }}
-        >
-          {collapsed ? t('layout.logoShort') : t('layout.logo')}
-        </div>
-        <Menu
+    <>
+      <NetworkStatus />
+      <AntLayout style={{ minHeight: '100vh' }}>
+        {/* 固定侧边栏 */}
+        <Sider
+          collapsible
+          collapsed={collapsed}
+          onCollapse={handleCollapse}
           theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={handleMenuClick}
-        />
-      </Sider>
-      <AntLayout>
-        <Header
+          width={240}
+          collapsedWidth={80}
           style={{
-            padding: '0 24px',
-            background: colorBgContainer,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            overflow: 'auto',
+            height: '100vh',
+            position: 'fixed',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            zIndex: 10,
+            boxShadow: '2px 0 8px rgba(0,0,0,0.15)',
           }}
+          trigger={null}
         >
-          <div />
-          <Space size="large">
-            <ThemeSwitcher />
-            <LanguageSwitcher />
-            <NotificationDropdown />
-            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }}>
-              <Space style={{ cursor: 'pointer' }}>
-                <Avatar icon={<UserOutlined />} />
-                <Text>{merchant?.name}</Text>
-              </Space>
-            </Dropdown>
-          </Space>
-        </Header>
-        <Content
-          style={{
-            margin: '16px',
-            padding: 24,
-            minHeight: 280,
-            background: colorBgContainer,
-            borderRadius: borderRadiusLG,
-          }}
-        >
-          <Outlet />
-        </Content>
+          {/* Logo区域 */}
+          <div
+            style={{
+              height: 64,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: collapsed ? 18 : 22,
+              fontWeight: 'bold',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              transition: 'all 0.2s',
+            }}
+          >
+            {collapsed ? t('layout.logoShort') : t('layout.logo')}
+          </div>
+
+          {/* 菜单 */}
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            items={menuItems}
+            onClick={handleMenuClick}
+            style={{
+              borderRight: 0,
+              paddingTop: 8,
+            }}
+          />
+
+          {/* 折叠按钮 */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 20,
+              left: 0,
+              right: 0,
+              display: 'flex',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              onClick={() => handleCollapse(!collapsed)}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                background: 'rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'white',
+                fontSize: 16,
+                transition: 'all 0.3s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'
+                e.currentTarget.style.transform = 'scale(1.1)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
+                e.currentTarget.style.transform = 'scale(1)'
+              }}
+            >
+              {collapsed ? '»' : '«'}
+            </div>
+          </div>
+        </Sider>
+
+        {/* 主内容区域 */}
+        <AntLayout style={{ marginLeft: collapsed ? 80 : 240, transition: 'margin-left 0.2s' }}>
+          {/* 固定顶部导航栏 */}
+          <Header
+            style={{
+              padding: '0 24px',
+              background: colorBgContainer,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              position: 'sticky',
+              top: 0,
+              zIndex: 9,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              borderBottom: '1px solid #f0f0f0',
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 500 }}>
+              {/* 可以在这里显示当前页面标题 */}
+            </div>
+            <Space size="large">
+              <ThemeSwitcher />
+              <LanguageSwitcher />
+              <NotificationDropdown />
+              <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }}>
+                <Space style={{ cursor: 'pointer', padding: '8px 12px', borderRadius: 8 }}>
+                  <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+                  <Text strong>{merchant?.name}</Text>
+                </Space>
+              </Dropdown>
+            </Space>
+          </Header>
+
+          {/* 内容区域 */}
+          <Content
+            style={{
+              margin: '24px 16px 16px',
+              padding: 24,
+              minHeight: 'calc(100vh - 64px - 40px)',
+              background: colorBgContainer,
+              borderRadius: borderRadiusLG,
+            }}
+          >
+            <Outlet />
+          </Content>
+        </AntLayout>
       </AntLayout>
-    </AntLayout>
+    </>
   )
 }
 

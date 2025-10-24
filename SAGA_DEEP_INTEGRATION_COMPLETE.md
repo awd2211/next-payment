@@ -11,7 +11,7 @@
 | **Withdrawal Saga** | withdrawal-service | `ExecuteWithdrawal()` | ✅ 完成 | ✅ 通过 |
 | **Refund Saga** | payment-gateway | `CreateRefund()` | ✅ 完成 | ✅ 通过 |
 | **Settlement Saga** | settlement-service | `ExecuteSettlement()` | ✅ 完成 | ✅ 通过 |
-| **Callback Saga** | payment-gateway | 结构注入完成 | ✅ 完成 | ✅ 通过 |
+| **Callback Saga** | payment-gateway | `HandleCallback()` | ✅ 完成 | ✅ 通过 |
 
 ---
 
@@ -208,14 +208,72 @@ go build -o /tmp/test-settlement ./cmd/main.go
 
 ---
 
-### 4. Callback Saga 集成
+### 4. Callback Saga 深度集成 ⭐ NEW
 
 **文件**: `services/payment-gateway/internal/service/payment_service.go`
 
 **修改内容**:
 1. 添加 `callbackSagaService *CallbackSagaService` 字段
 2. 添加 `SetCallbackSagaService()` setter 方法
-3. 结构注入完成，后续可在 webhook handler 中使用
+3. 修改 `HandleCallback()` 方法实现双模式兼容
+
+**核心代码**:
+```go
+func (s *paymentService) HandleCallback(ctx context.Context, channel string, data map[string]interface{}) error {
+    // ... 1-3. 记录原始回调数据、提取支付流水号、获取支付记录 ...
+
+    // ========== Saga 模式（推荐）==========
+    if s.callbackSagaService != nil {
+        logger.Info("使用 Callback Saga 分布式事务处理支付回调",
+            zap.String("payment_no", payment.PaymentNo),
+            zap.String("channel", channel))
+
+        // 解析回调状态
+        status, ok := data["status"].(string)
+        if !ok {
+            return fmt.Errorf("回调数据中缺少status")
+        }
+
+        // 构建 CallbackData
+        callbackData := &CallbackData{
+            PaymentNo:      payment.PaymentNo,
+            ChannelOrderNo: "",
+            Status:         status,
+            PaidAt:         nil,
+            FailureReason:  "",
+            RawData:        string(rawData),
+        }
+
+        // 提取额外信息
+        if channelOrderNo, ok := data["channel_order_no"].(string); ok {
+            callbackData.ChannelOrderNo = channelOrderNo
+        }
+        if errorMsg, ok := data["error_msg"].(string); ok {
+            callbackData.FailureReason = errorMsg
+        }
+        if status == "success" || status == "paid" {
+            now := time.Now()
+            callbackData.PaidAt = &now
+        }
+
+        // 执行 Callback Saga
+        err := s.callbackSagaService.ExecuteCallbackSaga(ctx, payment, callbackData)
+        if err != nil {
+            logger.Error("Callback Saga 执行失败", zap.Error(err))
+            return fmt.Errorf("处理支付回调失败: %w", err)
+        }
+
+        logger.Info("Callback Saga 执行成功",
+            zap.String("payment_no", payment.PaymentNo))
+        return nil
+    }
+
+    // ========== 降级到旧逻辑 ==========
+    logger.Warn("未启用 Callback Saga 服务，使用传统方式处理支付回调（不推荐）")
+    // ⚠️ 数据一致性风险：以下操作无法自动回滚
+    // ... 旧逻辑代码（保留向后兼容）...
+}
+```
 
 **注入代码** (`cmd/main.go`):
 ```go
@@ -224,6 +282,7 @@ callbackSagaService := service.NewCallbackSagaService(
     sagaOrchestrator,
     paymentRepo,
     orderClient,
+    kafkaProducer,
 )
 
 // 注入到 PaymentService
@@ -232,6 +291,21 @@ if ps, ok := paymentService.(interface{ SetCallbackSagaService(*service.Callback
     logger.Info("Callback Saga Service 已注入到 PaymentService")
 }
 ```
+
+**编译验证**:
+```bash
+cd backend/services/payment-gateway
+export GOWORK=/home/eric/payment/backend/go.work
+go build -o /tmp/test-payment-gateway ./cmd/main.go
+# ✅ 编译成功
+```
+
+**Callback Saga 步骤流程**:
+1. **RecordCallback**: 创建回调记录 (PaymentCallback 表)
+2. **UpdatePaymentStatus**: 更新支付状态 (pending → success/failed)
+3. **NotifyOrderService**: 通知 Order Service 更新订单状态
+4. **PublishPaymentEvent**: 发布 Kafka 事件 (异步通知下游服务)
+5. **NotifyMerchant**: 通知商户回调 URL (异步 HTTP 回调)
 
 ---
 
