@@ -41,3 +41,4 @@ echo "  pm2 restart all  - 重启所有"
 echo "  pm2 stop all     - 停止所有"
 echo ""
 
+
