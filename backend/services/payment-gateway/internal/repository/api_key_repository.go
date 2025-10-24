@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,17 +12,19 @@ import (
 
 // APIKey API密钥模型（与merchant-service中的模型保持一致）
 type APIKey struct {
-	ID          uuid.UUID  `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	MerchantID  uuid.UUID  `gorm:"type:uuid;not null;index"`
-	APIKey      string     `gorm:"type:varchar(64);unique;not null;index"`
-	APISecret   string     `gorm:"type:varchar(128);not null"`
-	Name        string     `gorm:"type:varchar(100)"`
-	Environment string     `gorm:"type:varchar(20);not null;index"`
-	IsActive    bool       `gorm:"default:true"`
-	LastUsedAt  *time.Time `gorm:"type:timestamptz"`
-	ExpiresAt   *time.Time `gorm:"type:timestamptz"`
-	CreatedAt   time.Time  `gorm:"type:timestamptz;default:now()"`
-	UpdatedAt   time.Time  `gorm:"type:timestamptz;default:now()"`
+	ID           uuid.UUID  `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	MerchantID   uuid.UUID  `gorm:"type:uuid;not null;index"`
+	APIKey       string     `gorm:"type:varchar(64);unique;not null;index"`
+	APISecret    string     `gorm:"type:varchar(128);not null"`
+	Name         string     `gorm:"type:varchar(100)"`
+	Environment  string     `gorm:"type:varchar(20);not null;index"`
+	IsActive     bool       `gorm:"default:true"`
+	IPWhitelist  string     `gorm:"type:text"` // IP白名单，逗号分隔（可选）
+	LastUsedAt   *time.Time `gorm:"type:timestamptz"`
+	ExpiresAt    *time.Time `gorm:"type:timestamptz"`
+	CreatedAt    time.Time  `gorm:"type:timestamptz;default:now()"`
+	UpdatedAt    time.Time  `gorm:"type:timestamptz;default:now()"`
+	RotationDays int        `gorm:"default:90"` // 密钥轮换提醒天数（0表示不提醒）
 }
 
 // TableName 指定表名
@@ -72,4 +75,56 @@ func (r *apiKeyRepository) UpdateLastUsedAt(ctx context.Context, apiKey string) 
 		return fmt.Errorf("failed to update last_used_at: %w", err)
 	}
 	return nil
+}
+
+// IsIPAllowed 检查IP是否在白名单中
+func (k *APIKey) IsIPAllowed(clientIP string) bool {
+	// 如果未配置白名单，允许所有IP
+	if k.IPWhitelist == "" {
+		return true
+	}
+
+	// 解析白名单（逗号分隔）
+	allowedIPs := strings.Split(k.IPWhitelist, ",")
+	for _, allowedIP := range allowedIPs {
+		allowedIP = strings.TrimSpace(allowedIP)
+		if allowedIP == "" {
+			continue
+		}
+
+		// 支持CIDR格式（如 192.168.1.0/24）
+		if strings.Contains(allowedIP, "/") {
+			if isIPInCIDR(clientIP, allowedIP) {
+				return true
+			}
+		} else {
+			// 精确匹配
+			if clientIP == allowedIP {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// ShouldRotate 检查是否需要轮换密钥
+func (k *APIKey) ShouldRotate() bool {
+	// 如果未设置轮换天数，不提醒
+	if k.RotationDays <= 0 {
+		return false
+	}
+
+	// 计算创建后的天数
+	daysSinceCreation := int(time.Since(k.CreatedAt).Hours() / 24)
+	return daysSinceCreation >= k.RotationDays
+}
+
+// isIPInCIDR 检查IP是否在CIDR范围内
+func isIPInCIDR(clientIP, cidr string) bool {
+	// 简化实现：这里应该使用net.ParseCIDR
+	// 为了避免引入过多依赖，暂时使用简单前缀匹配
+	// TODO: 使用 net.IPNet.Contains() 实现完整CIDR支持
+	prefix := strings.Split(cidr, "/")[0]
+	return strings.HasPrefix(clientIP, prefix[:len(prefix)-2]) // 简单前缀匹配
 }

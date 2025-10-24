@@ -202,11 +202,13 @@ func main() {
 
 			// 转换为中间件需要的数据结构
 			return &localMiddleware.APIKeyData{
-				Secret:      key.APISecret,
-				MerchantID:  key.MerchantID,
-				IsActive:    key.IsActive,
-				ExpiresAt:   key.ExpiresAt,
-				Environment: key.Environment,
+				Secret:       key.APISecret,
+				MerchantID:   key.MerchantID,
+				IsActive:     key.IsActive,
+				ExpiresAt:    key.ExpiresAt,
+				Environment:  key.Environment,
+				IPWhitelist:  key.IPWhitelist,  // IP白名单
+				ShouldRotate: key.ShouldRotate(), // 轮换提醒
 			}, nil
 		},
 		redisClient,

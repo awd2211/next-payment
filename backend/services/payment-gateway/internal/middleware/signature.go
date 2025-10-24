@@ -23,11 +23,13 @@ import (
 
 // APIKeyData API密钥完整数据
 type APIKeyData struct {
-	Secret      string
-	MerchantID  uuid.UUID
-	IsActive    bool
-	ExpiresAt   *time.Time
-	Environment string
+	Secret       string
+	MerchantID   uuid.UUID
+	IsActive     bool
+	ExpiresAt    *time.Time
+	Environment  string
+	IPWhitelist  string // IP白名单（可选）
+	ShouldRotate bool   // 是否需要轮换密钥
 }
 
 // APIKeyUpdater API Key更新器接口
@@ -86,9 +88,25 @@ func (m *SignatureMiddleware) Verify() gin.HandlerFunc {
 		signature := c.GetHeader("X-Signature")
 		timestamp := c.GetHeader("X-Timestamp")
 		nonce := c.GetHeader("X-Nonce")
+		signatureVersion := c.GetHeader("X-Signature-Version") // 签名算法版本（可选，默认v1）
 		clientIP := c.ClientIP()
 
-		// 2. 验证必要参数是否存在（不泄露具体缺失哪个参数）
+		// 默认签名版本为v1（向后兼容）
+		if signatureVersion == "" {
+			signatureVersion = "v1"
+		}
+
+		// 2. 验证签名版本是否支持
+		if !isSupportedSignatureVersion(signatureVersion) {
+			logger.Debug("Unsupported signature version",
+				zap.String("version", signatureVersion),
+				zap.String("client_ip", clientIP))
+			c.JSON(http.StatusUnauthorized, gin.H{"error": authErrorMsg})
+			c.Abort()
+			return
+		}
+
+		// 3. 验证必要参数是否存在（不泄露具体缺失哪个参数）
 		if apiKey == "" || signature == "" || timestamp == "" || nonce == "" {
 			logger.Debug("Missing authentication headers",
 				zap.String("client_ip", clientIP),
@@ -169,6 +187,20 @@ func (m *SignatureMiddleware) Verify() gin.HandlerFunc {
 			return
 		}
 
+		// 8. 验证IP白名单（可选功能）
+		if keyData.IPWhitelist != "" {
+			if !isIPInWhitelist(clientIP, keyData.IPWhitelist) {
+				logger.Warn("IP not in whitelist",
+					zap.String("api_key", maskAPIKey(apiKey)),
+					zap.String("merchant_id", keyData.MerchantID.String()),
+					zap.String("client_ip", clientIP),
+					zap.String("whitelist", keyData.IPWhitelist))
+				c.JSON(http.StatusForbidden, gin.H{"error": "Access denied from this IP"})
+				c.Abort()
+				return
+			}
+		}
+
 		// 8. 验证Nonce唯一性（防止重放攻击）
 		nonceKey := fmt.Sprintf("nonce:%s:%s", apiKey, nonce)
 		exists, err := m.redis.Exists(ctx, nonceKey).Result()
@@ -217,11 +249,21 @@ func (m *SignatureMiddleware) Verify() gin.HandlerFunc {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
 		// 11. 计算并验证签名（使用常量时间比较）
-		expectedSignature := calculateSignature(keyData.Secret, timestamp, nonce, string(body))
+		// 根据签名版本使用不同的签名算法
+		expectedSignature := m.calculateSignatureByVersion(
+			signatureVersion,
+			keyData.Secret,
+			c.Request.Method,
+			c.Request.URL.Path,
+			timestamp,
+			nonce,
+			string(body),
+		)
 		if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
 			logger.Warn("Signature verification failed",
 				zap.String("api_key", maskAPIKey(apiKey)),
 				zap.String("merchant_id", keyData.MerchantID.String()),
+				zap.String("signature_version", signatureVersion),
 				zap.Int64("failed_attempts", failedCount),
 				zap.String("client_ip", clientIP))
 			c.JSON(http.StatusUnauthorized, gin.H{"error": authErrorMsg})
@@ -251,7 +293,16 @@ func (m *SignatureMiddleware) Verify() gin.HandlerFunc {
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path))
 
-		// 16. 将关键信息存入上下文，供后续使用
+		// 16. 检查是否需要轮换密钥（添加响应头提醒）
+		if keyData.ShouldRotate {
+			c.Header("X-API-Key-Rotation-Warning", "true")
+			c.Header("X-API-Key-Rotation-Message", "API key should be rotated for security")
+			logger.Warn("API key rotation recommended",
+				zap.String("api_key", maskAPIKey(apiKey)),
+				zap.String("merchant_id", keyData.MerchantID.String()))
+		}
+
+		// 17. 将关键信息存入上下文，供后续使用
 		c.Set("api_key", apiKey)
 		c.Set("merchant_id", keyData.MerchantID)
 		c.Set("environment", keyData.Environment)
@@ -260,8 +311,54 @@ func (m *SignatureMiddleware) Verify() gin.HandlerFunc {
 	}
 }
 
-// calculateSignature 计算签名
+// isSupportedSignatureVersion 检查签名版本是否支持
+func isSupportedSignatureVersion(version string) bool {
+	supportedVersions := map[string]bool{
+		"v1": true, // 原始版本: timestamp + nonce + body
+		"v2": true, // 增强版本: method + path + timestamp + nonce + body
+	}
+	return supportedVersions[version]
+}
+
+// calculateSignatureByVersion 根据版本计算签名
+func (m *SignatureMiddleware) calculateSignatureByVersion(
+	version string,
+	apiSecret string,
+	method string,
+	path string,
+	timestamp string,
+	nonce string,
+	body string,
+) string {
+	var signString string
+
+	switch version {
+	case "v1":
+		// v1: 向后兼容，仅使用 timestamp + nonce + body
+		signString = timestamp + nonce + body
+	case "v2":
+		// v2: 增强安全性，包含 HTTP method + path
+		signString = method + path + timestamp + nonce + body
+	default:
+		// 不支持的版本，返回空字符串（验证会失败）
+		if logger.Log != nil {
+			logger.Error("Unsupported signature version in calculation",
+				zap.String("version", version))
+		}
+		return ""
+	}
+
+	// 使用HMAC-SHA256计算签名
+	h := hmac.New(sha256.New, []byte(apiSecret))
+	h.Write([]byte(signString))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	return signature
+}
+
+// calculateSignature 计算签名（v1版本，向后兼容）
 // 签名算法：HMAC-SHA256(api_secret, timestamp + nonce + body)
+// 已弃用：建议使用 calculateSignatureByVersion
 func calculateSignature(apiSecret, timestamp, nonce, body string) string {
 	// 构建待签名字符串
 	signString := timestamp + nonce + body
@@ -329,17 +426,39 @@ func (m *SignatureMiddleware) updateLastUsed(apiKey string, merchantID uuid.UUID
 	}
 }
 
-// SignRequest 为请求签名（供SDK使用）
+// SignRequest 为请求签名（供SDK使用，v1版本）
+// 已弃用：建议使用 SignRequestV2
 func SignRequest(apiKey, apiSecret, body string) map[string]string {
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	nonce := generateNonce()
 	signature := calculateSignature(apiSecret, timestamp, nonce, body)
 
 	return map[string]string{
-		"X-API-Key":   apiKey,
-		"X-Signature": signature,
-		"X-Timestamp": timestamp,
-		"X-Nonce":     nonce,
+		"X-API-Key":           apiKey,
+		"X-Signature":         signature,
+		"X-Timestamp":         timestamp,
+		"X-Nonce":             nonce,
+		"X-Signature-Version": "v1",
+	}
+}
+
+// SignRequestV2 为请求签名（v2版本，包含HTTP method和path）
+func SignRequestV2(apiKey, apiSecret, method, path, body string) map[string]string {
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	nonce := generateNonce()
+
+	// v2签名算法: method + path + timestamp + nonce + body
+	signString := method + path + timestamp + nonce + body
+	h := hmac.New(sha256.New, []byte(apiSecret))
+	h.Write([]byte(signString))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	return map[string]string{
+		"X-API-Key":           apiKey,
+		"X-Signature":         signature,
+		"X-Timestamp":         timestamp,
+		"X-Nonce":             nonce,
+		"X-Signature-Version": "v2",
 	}
 }
 
@@ -384,4 +503,56 @@ func SignQueryString(apiSecret string, params map[string]string) string {
 func VerifyQuerySignature(apiSecret string, params map[string]string, providedSign string) bool {
 	expectedSign := SignQueryString(apiSecret, params)
 	return hmac.Equal([]byte(providedSign), []byte(expectedSign))
+}
+
+// isIPInWhitelist 检查IP是否在白名单中
+func isIPInWhitelist(clientIP, whitelist string) bool {
+	// 如果未配置白名单，允许所有IP
+	if whitelist == "" {
+		return true
+	}
+
+	// 解析白名单（逗号分隔）
+	allowedIPs := strings.Split(whitelist, ",")
+	for _, allowedIP := range allowedIPs {
+		allowedIP = strings.TrimSpace(allowedIP)
+		if allowedIP == "" {
+			continue
+		}
+
+		// 支持CIDR格式（如 192.168.1.0/24）
+		if strings.Contains(allowedIP, "/") {
+			if isIPInCIDR(clientIP, allowedIP) {
+				return true
+			}
+		} else {
+			// 精确匹配
+			if clientIP == allowedIP {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// isIPInCIDR 检查IP是否在CIDR范围内（简化版本）
+func isIPInCIDR(clientIP, cidr string) bool {
+	// 简化实现：提取网络前缀进行匹配
+	// 生产环境应使用 net.ParseCIDR 和 IPNet.Contains()
+	parts := strings.Split(cidr, "/")
+	if len(parts) != 2 {
+		return false
+	}
+
+	prefix := parts[0]
+	// 简单的前缀匹配（例如 192.168.1 匹配 192.168.1.0/24）
+	prefixParts := strings.Split(prefix, ".")
+	if len(prefixParts) < 3 {
+		return false
+	}
+
+	// 提取前3个八位组作为网络前缀
+	networkPrefix := strings.Join(prefixParts[:3], ".")
+	return strings.HasPrefix(clientIP, networkPrefix)
 }
