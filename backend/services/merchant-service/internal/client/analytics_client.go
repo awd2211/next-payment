@@ -2,27 +2,20 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 // AnalyticsClient Analytics Service HTTP客户端
 type AnalyticsClient struct {
-	baseURL    string
-	httpClient *http.Client
+	*ServiceClient
 }
 
-// NewAnalyticsClient 创建Analytics客户端实例
+// NewAnalyticsClient 创建Analytics客户端实例（带熔断器）
 func NewAnalyticsClient(baseURL string) *AnalyticsClient {
 	return &AnalyticsClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "analytics-service"),
 	}
 }
 
@@ -85,26 +78,16 @@ type ChannelStats struct {
 
 // GetStatistics 获取统计数据
 func (c *AnalyticsClient) GetStatistics(ctx context.Context, merchantID uuid.UUID) (*StatisticsData, error) {
-	url := fmt.Sprintf("%s/api/v1/statistics/merchant/%s", c.baseURL, merchantID.String())
+	path := fmt.Sprintf("/api/v1/statistics/merchant/%s", merchantID.String())
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.http.Get(ctx, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
 
 	var result StatisticsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
 	}
 
 	if result.Code != 0 {
@@ -116,27 +99,17 @@ func (c *AnalyticsClient) GetStatistics(ctx context.Context, merchantID uuid.UUI
 
 // GetTransactionSummary 获取交易汇总
 func (c *AnalyticsClient) GetTransactionSummary(ctx context.Context, merchantID uuid.UUID, startDate, endDate string) (*TransactionSummaryData, error) {
-	url := fmt.Sprintf("%s/api/v1/statistics/merchant/%s/summary?start_date=%s&end_date=%s",
-		c.baseURL, merchantID.String(), startDate, endDate)
+	path := fmt.Sprintf("/api/v1/statistics/merchant/%s/summary?start_date=%s&end_date=%s",
+		merchantID.String(), startDate, endDate)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.http.Get(ctx, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
 
 	var result TransactionSummaryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
 	}
 
 	if result.Code != 0 {

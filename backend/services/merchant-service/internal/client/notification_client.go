@@ -2,27 +2,20 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 // NotificationClient Notification Service HTTP客户端
 type NotificationClient struct {
-	baseURL    string
-	httpClient *http.Client
+	*ServiceClient
 }
 
-// NewNotificationClient 创建Notification客户端实例
+// NewNotificationClient 创建Notification客户端实例（带熔断器）
 func NewNotificationClient(baseURL string) *NotificationClient {
 	return &NotificationClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "notification-service"),
 	}
 }
 
@@ -43,26 +36,16 @@ type UnreadCount struct {
 
 // GetUnreadCount 获取未读通知数
 func (c *NotificationClient) GetUnreadCount(ctx context.Context, merchantID uuid.UUID) (*UnreadCount, error) {
-	url := fmt.Sprintf("%s/api/v1/notifications/merchants/%s/unread/count", c.baseURL, merchantID.String())
+	path := fmt.Sprintf("/api/v1/notifications/merchants/%s/unread/count", merchantID.String())
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.http.Get(ctx, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
 
 	var result UnreadCountResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
 	}
 
 	if result.Code != 0 {

@@ -2,27 +2,20 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 // AccountingClient Accounting Service HTTP客户端
 type AccountingClient struct {
-	baseURL    string
-	httpClient *http.Client
+	*ServiceClient
 }
 
-// NewAccountingClient 创建Accounting客户端实例
+// NewAccountingClient 创建Accounting客户端实例（带熔断器）
 func NewAccountingClient(baseURL string) *AccountingClient {
 	return &AccountingClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "accounting-service"),
 	}
 }
 
@@ -85,26 +78,16 @@ type SettlementInfo struct {
 
 // GetBalanceSummary 获取余额汇总
 func (c *AccountingClient) GetBalanceSummary(ctx context.Context, merchantID uuid.UUID) (*BalanceSummaryData, error) {
-	url := fmt.Sprintf("%s/api/v1/balances/merchants/%s/summary", c.baseURL, merchantID.String())
+	path := fmt.Sprintf("/api/v1/balances/merchants/%s/summary", merchantID.String())
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.http.Get(ctx, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
 
 	var result BalanceSummaryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
 	}
 
 	if result.Code != 0 {
@@ -116,27 +99,17 @@ func (c *AccountingClient) GetBalanceSummary(ctx context.Context, merchantID uui
 
 // GetSettlements 获取结算列表
 func (c *AccountingClient) GetSettlements(ctx context.Context, merchantID uuid.UUID, page, pageSize int) (*SettlementListData, error) {
-	url := fmt.Sprintf("%s/api/v1/settlements?merchant_id=%s&page=%d&page_size=%d",
-		c.baseURL, merchantID.String(), page, pageSize)
+	path := fmt.Sprintf("/api/v1/settlements?merchant_id=%s&page=%d&page_size=%d",
+		merchantID.String(), page, pageSize)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.http.Get(ctx, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
 
 	var result SettlementListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
 	}
 
 	if result.Code != 0 {

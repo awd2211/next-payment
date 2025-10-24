@@ -2,34 +2,27 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 // PaymentClient Payment Gateway HTTP客户端
 type PaymentClient struct {
-	baseURL    string
-	httpClient *http.Client
+	*ServiceClient
 }
 
-// NewPaymentClient 创建Payment客户端实例
+// NewPaymentClient 创建Payment客户端实例（带熔断器）
 func NewPaymentClient(baseURL string) *PaymentClient {
 	return &PaymentClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "payment-gateway"),
 	}
 }
 
 // PaymentListResponse 支付列表响应
 type PaymentListResponse struct {
-	Code    int             `json:"code"`
-	Message string          `json:"message"`
+	Code    int              `json:"code"`
+	Message string           `json:"message"`
 	Data    *PaymentListData `json:"data"`
 }
 
@@ -58,33 +51,26 @@ type PaymentInfo struct {
 
 // GetPayments 获取支付列表
 func (c *PaymentClient) GetPayments(ctx context.Context, merchantID uuid.UUID, params map[string]string) (*PaymentListData, error) {
-	url := fmt.Sprintf("%s/api/v1/payments?merchant_id=%s", c.baseURL, merchantID.String())
+	// 构建查询路径
+	path := fmt.Sprintf("/api/v1/payments?merchant_id=%s", merchantID.String())
 
 	// 添加查询参数
 	for key, value := range params {
 		if value != "" {
-			url += fmt.Sprintf("&%s=%s", key, value)
+			path += fmt.Sprintf("&%s=%s", key, value)
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	// 通过熔断器发送请求
+	resp, err := c.http.Get(ctx, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var result PaymentListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
 	}
 
 	if result.Code != 0 {

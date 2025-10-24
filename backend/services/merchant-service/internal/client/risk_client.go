@@ -2,27 +2,20 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 // RiskClient Risk Service HTTP客户端
 type RiskClient struct {
-	baseURL    string
-	httpClient *http.Client
+	*ServiceClient
 }
 
-// NewRiskClient 创建Risk客户端实例
+// NewRiskClient 创建Risk客户端实例（带熔断器）
 func NewRiskClient(baseURL string) *RiskClient {
 	return &RiskClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		ServiceClient: NewServiceClientWithBreaker(baseURL, "risk-service"),
 	}
 }
 
@@ -45,26 +38,16 @@ type RiskInfo struct {
 
 // GetRiskInfo 获取风控信息
 func (c *RiskClient) GetRiskInfo(ctx context.Context, merchantID uuid.UUID) (*RiskInfo, error) {
-	url := fmt.Sprintf("%s/api/v1/risk/merchants/%s", c.baseURL, merchantID.String())
+	path := fmt.Sprintf("/api/v1/risk/merchants/%s", merchantID.String())
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.http.Get(ctx, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
 
 	var result RiskInfoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
 	}
 
 	if result.Code != 0 {
