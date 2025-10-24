@@ -13,15 +13,14 @@ import (
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
-	pkggrpc "github.com/payment-platform/pkg/grpc"
-	pb "github.com/payment-platform/proto/notification"
+	// pb "github.com/payment-platform/proto/notification" // gRPC proto (预留,暂不使用)
 	"payment-platform/notification-service/internal/handler"
 	"payment-platform/notification-service/internal/model"
 	"payment-platform/notification-service/internal/provider"
 	"payment-platform/notification-service/internal/repository"
 	"payment-platform/notification-service/internal/service"
 	"payment-platform/notification-service/internal/worker"
-	grpcServer "payment-platform/notification-service/internal/grpc"
+	// grpcServer "payment-platform/notification-service/internal/grpc" // gRPC 实现(预留,暂不使用)
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -47,7 +46,7 @@ func main() {
 		ServiceName: "notification-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_notification"),
 		Port:        config.GetEnvInt("PORT", 40008),
-		GRPCPort:    config.GetEnvInt("GRPC_PORT", 50008),
+		// GRPCPort:    config.GetEnvInt("GRPC_PORT", 50008), // 不使用 gRPC,保持 HTTP 通信
 
 		// 自动迁移数据库模型
 		AutoMigrate: []any{
@@ -58,11 +57,11 @@ func main() {
 			&model.NotificationPreference{},
 		},
 
-		// 启用所有企业级功能
+		// 启用企业级功能(gRPC 默认关闭,使用 HTTP/REST)
 		EnableTracing:     true,
 		EnableMetrics:     true,
 		EnableRedis:       true,
-		EnableGRPC:        true, // 启用 gRPC 服务器
+		EnableGRPC:        false, // 默认关闭 gRPC,使用 HTTP 通信
 		EnableHealthCheck: true,
 		EnableRateLimit:   true,
 
@@ -222,16 +221,16 @@ func main() {
 	// 10. 注册通知路由（带认证）
 	notificationHandler.RegisterRoutes(application.Router, authMiddleware)
 
-	// 11. 注册 gRPC 服务
-	notificationGrpcServer := grpcServer.NewNotificationServer(notificationService)
-	pb.RegisterNotificationServiceServer(application.GRPCServer, notificationGrpcServer)
-	logger.Info(fmt.Sprintf("gRPC Server 已注册，将监听端口 %d", config.GetEnvInt("GRPC_PORT", 50008)))
+	// 11. gRPC 服务（预留但不启用，系统使用 HTTP/REST 通信）
+	// notificationGrpcServer := grpcServer.NewNotificationServer(notificationService)
+	// pb.RegisterNotificationServiceServer(application.GRPCServer, notificationGrpcServer)
+	// logger.Info(fmt.Sprintf("gRPC Server 已注册，将监听端口 %d", config.GetEnvInt("GRPC_PORT", 50008)))
 
 	// 12. 启动后台任务
 	go startBackgroundWorkers(notificationService)
 
-	// 13. 启动服务（HTTP + gRPC 双协议，优雅关闭）
-	if err := application.RunDualProtocol(); err != nil {
+	// 13. 启动服务（仅 HTTP，优雅关闭）
+	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal(fmt.Sprintf("服务启动失败: %v", err))
 	}
 }

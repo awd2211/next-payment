@@ -11,6 +11,7 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"payment-platform/accounting-service/internal/client"
 	"payment-platform/accounting-service/internal/model"
 	"payment-platform/accounting-service/internal/repository"
 )
@@ -30,6 +31,10 @@ type AccountService interface {
 	GetTransaction(ctx context.Context, transactionNo string) (*model.AccountTransaction, error)
 	ListTransactions(ctx context.Context, query *repository.TransactionQuery) ([]*model.AccountTransaction, int64, error)
 	ReverseTransaction(ctx context.Context, transactionNo string, reason string) error
+
+	// 复式记账
+	CreateDoubleEntry(ctx context.Context, input *CreateDoubleEntryInput) (*model.DoubleEntry, error)
+	ListDoubleEntries(ctx context.Context, query *repository.DoubleEntryQuery) ([]*model.DoubleEntry, int64, error)
 
 	// 结算管理
 	CreateSettlement(ctx context.Context, input *CreateSettlementInput) (*model.Settlement, error)
@@ -80,15 +85,17 @@ type AccountService interface {
 }
 
 type accountService struct {
-	db          *gorm.DB                      // 添加数据库连接，用于事务支持
-	accountRepo repository.AccountRepository
+	db                   *gorm.DB                      // 添加数据库连接，用于事务支持
+	accountRepo          repository.AccountRepository
+	channelAdapterClient *client.ChannelAdapterClient  // 汇率查询客户端（可选）
 }
 
 // NewAccountService 创建账户服务实例
-func NewAccountService(db *gorm.DB, accountRepo repository.AccountRepository) AccountService {
+func NewAccountService(db *gorm.DB, accountRepo repository.AccountRepository, channelAdapterClient *client.ChannelAdapterClient) AccountService {
 	return &accountService{
-		db:          db,
-		accountRepo: accountRepo,
+		db:                   db,
+		accountRepo:          accountRepo,
+		channelAdapterClient: channelAdapterClient,
 	}
 }
 
@@ -108,6 +115,18 @@ type CreateTransactionInput struct {
 	RelatedNo       string                 `json:"related_no"`
 	Description     string                 `json:"description"`
 	Extra           map[string]interface{} `json:"extra"`
+}
+
+// CreateDoubleEntryInput 创建复式记账输入
+type CreateDoubleEntryInput struct {
+	RelatedID     uuid.UUID `json:"related_id"`
+	RelatedNo     string    `json:"related_no"`
+	EntryType     string    `json:"entry_type" binding:"required"`
+	DebitAccount  string    `json:"debit_account" binding:"required"`
+	CreditAccount string    `json:"credit_account" binding:"required"`
+	Amount        int64     `json:"amount" binding:"required"`
+	Currency      string    `json:"currency" binding:"required"`
+	Description   string    `json:"description"`
 }
 
 // CreateSettlementInput 创建结算输入
@@ -631,6 +650,14 @@ func (s *accountService) generateTransactionNo() string {
 	return fmt.Sprintf("TX%s%s", timestamp, randomStr)
 }
 
+func (s *accountService) generateEntryNo() string {
+	timestamp := time.Now().Format("20060102150405")
+	randomBytes := make([]byte, 8)
+	rand.Read(randomBytes)
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:10]
+	return fmt.Sprintf("ENT%s%s", timestamp, randomStr)
+}
+
 func (s *accountService) generateSettlementNo() string {
 	timestamp := time.Now().Format("20060102150405")
 	randomBytes := make([]byte, 8)
@@ -663,6 +690,37 @@ func (s *accountService) generateReconciliationNo() string {
 	return fmt.Sprintf("REC%s%s", timestamp, randomStr)
 }
 
+// CreateDoubleEntry 创建复式记账（公共方法）
+func (s *accountService) CreateDoubleEntry(ctx context.Context, input *CreateDoubleEntryInput) (*model.DoubleEntry, error) {
+	entry := &model.DoubleEntry{
+		EntryNo:       s.generateEntryNo(),
+		RelatedID:     input.RelatedID,
+		RelatedNo:     input.RelatedNo,
+		EntryType:     input.EntryType,
+		DebitAccount:  input.DebitAccount,
+		CreditAccount: input.CreditAccount,
+		Amount:        input.Amount,
+		Currency:      input.Currency,
+		Description:   input.Description,
+	}
+
+	if err := s.accountRepo.CreateDoubleEntry(ctx, entry); err != nil {
+		return nil, fmt.Errorf("创建复式记账失败: %w", err)
+	}
+
+	return entry, nil
+}
+
+// ListDoubleEntries 复式记账列表
+func (s *accountService) ListDoubleEntries(ctx context.Context, query *repository.DoubleEntryQuery) ([]*model.DoubleEntry, int64, error) {
+	entries, total, err := s.accountRepo.ListDoubleEntries(ctx, query)
+	if err != nil {
+		return nil, 0, fmt.Errorf("查询复式记账列表失败: %w", err)
+	}
+	return entries, total, nil
+}
+
+// createDoubleEntry 自动创建复式记账（私有方法，异步调用）
 func (s *accountService) createDoubleEntry(ctx context.Context, tx *model.AccountTransaction) {
 	entryNo := fmt.Sprintf("DE%s", tx.TransactionNo[2:])
 
@@ -1754,10 +1812,38 @@ func (s *accountService) CancelCurrencyConversion(ctx context.Context, conversio
 	return nil
 }
 
-// getExchangeRate 获取汇率（临时实现，生产环境需调用 channel-adapter 的汇率API）
+// getExchangeRate 获取汇率（优先使用 channel-adapter 的实时汇率API）
 func (s *accountService) getExchangeRate(fromCurrency, toCurrency string) float64 {
-	// 临时硬编码常用汇率
-	rates := map[string]map[string]float64{
+	// 同一货币，汇率为1
+	if fromCurrency == toCurrency {
+		return 1.0
+	}
+
+	// 如果配置了 channel-adapter 客户端，优先使用实时汇率
+	if s.channelAdapterClient != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		rate, err := s.channelAdapterClient.GetExchangeRate(ctx, fromCurrency, toCurrency)
+		if err == nil && rate > 0 {
+			logger.Info("获取实时汇率成功",
+				zap.String("from", fromCurrency),
+				zap.String("to", toCurrency),
+				zap.Float64("rate", rate),
+			)
+			return rate
+		}
+
+		// 如果获取实时汇率失败，记录警告并降级到备用汇率
+		logger.Warn("获取实时汇率失败，使用备用汇率",
+			zap.String("from", fromCurrency),
+			zap.String("to", toCurrency),
+			zap.Error(err),
+		)
+	}
+
+	// 备用静态汇率（当channel-adapter不可用时使用）
+	fallbackRates := map[string]map[string]float64{
 		"USD": {
 			"EUR": 0.92,
 			"GBP": 0.79,
@@ -1778,13 +1864,22 @@ func (s *accountService) getExchangeRate(fromCurrency, toCurrency string) float6
 		},
 	}
 
-	if from, ok := rates[fromCurrency]; ok {
+	if from, ok := fallbackRates[fromCurrency]; ok {
 		if rate, ok := from[toCurrency]; ok {
+			logger.Info("使用备用静态汇率",
+				zap.String("from", fromCurrency),
+				zap.String("to", toCurrency),
+				zap.Float64("rate", rate),
+			)
 			return rate
 		}
 	}
 
 	// 如果没有找到汇率，返回0表示不支持
+	logger.Warn("未找到汇率数据",
+		zap.String("from", fromCurrency),
+		zap.String("to", toCurrency),
+	)
 	return 0
 }
 

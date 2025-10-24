@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -115,17 +116,11 @@ func (s *adminService) CreateAdmin(ctx context.Context, req *CreateAdminRequest)
 		IsSuper:      false,
 	}
 
-	// 加载角色
+	// 批量加载角色（优化N+1查询）
 	if len(req.RoleIDs) > 0 {
-		roles := make([]model.Role, 0, len(req.RoleIDs))
-		for _, roleID := range req.RoleIDs {
-			role, err := s.roleRepo.GetByID(ctx, roleID)
-			if err != nil {
-				return nil, err
-			}
-			if role != nil {
-				roles = append(roles, *role)
-			}
+		roles, err := s.roleRepo.GetByIDs(ctx, req.RoleIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch roles: %w", err)
 		}
 		admin.Roles = roles
 	}

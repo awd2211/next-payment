@@ -13,6 +13,7 @@ import (
 type RoleRepository interface {
 	Create(ctx context.Context, role *model.Role) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Role, error)
+	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]model.Role, error)
 	GetByName(ctx context.Context, name string) (*model.Role, error)
 	List(ctx context.Context, page, pageSize int) ([]*model.Role, int64, error)
 	Update(ctx context.Context, role *model.Role) error
@@ -47,6 +48,23 @@ func (r *roleRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Role
 		return nil, err
 	}
 	return &role, nil
+}
+
+// GetByIDs 根据ID列表批量获取角色（解决N+1查询问题）
+func (r *roleRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]model.Role, error) {
+	var roles []model.Role
+	if len(ids) == 0 {
+		return roles, nil
+	}
+
+	err := r.db.WithContext(ctx).
+		Where("id IN ?", ids).
+		Preload("Permissions").
+		Find(&roles).Error
+	if err != nil {
+		return nil, err
+	}
+	return roles, nil
 }
 
 // GetByName 根据名称获取角色
