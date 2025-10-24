@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
+	"github.com/payment-platform/pkg/httpclient"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/redis/go-redis/v9"
+	"github.com/sony/gobreaker"
 	"go.uber.org/zap"
 	"payment-platform/channel-adapter/internal/model"
 	"payment-platform/channel-adapter/internal/repository"
@@ -16,11 +17,11 @@ import (
 
 // ExchangeRateClient 汇率API客户端
 type ExchangeRateClient struct {
-	baseURL    string
-	httpClient *http.Client
-	redis      *redis.Client
-	repo       repository.ExchangeRateRepository
-	cacheTTL   time.Duration
+	baseURL string
+	breaker *httpclient.BreakerClient
+	redis   *redis.Client
+	repo    repository.ExchangeRateRepository
+	cacheTTL time.Duration
 }
 
 // ExchangeRateResponse 汇率API响应
@@ -36,14 +37,27 @@ type ExchangeRateResponse struct {
 	ConversionRates    map[string]float64 `json:"conversion_rates"`
 }
 
-// NewExchangeRateClient 创建汇率API客户端
+// NewExchangeRateClient 创建汇率API客户端（带熔断器）
 // 使用 exchangerate-api.com 免费版（1500次/月）
 func NewExchangeRateClient(redis *redis.Client, repo repository.ExchangeRateRepository, cacheTTL time.Duration) *ExchangeRateClient {
+	// 创建 httpclient 配置
+	config := &httpclient.Config{
+		Timeout:    5 * time.Second, // 外部API使用较短超时
+		MaxRetries: 2,               // 外部API减少重试次数
+		RetryDelay: 500 * time.Millisecond,
+	}
+
+	// 创建熔断器配置（外部API更宽容的熔断策略）
+	breakerConfig := httpclient.DefaultBreakerConfig("exchangerate-api")
+	breakerConfig.ReadyToTrip = func(counts gobreaker.Counts) bool {
+		// 外部API: 10次请求中80%失败才熔断（更宽容）
+		failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+		return counts.Requests >= 10 && failureRatio >= 0.8
+	}
+
 	return &ExchangeRateClient{
-		baseURL: "https://api.exchangerate-api.com/v4/latest",
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+		baseURL:  "https://api.exchangerate-api.com/v4/latest",
+		breaker:  httpclient.NewBreakerClient(config, breakerConfig),
 		redis:    redis,
 		repo:     repo,
 		cacheTTL: cacheTTL,
@@ -149,27 +163,26 @@ func (c *ExchangeRateClient) GetRates(ctx context.Context, baseCurrency string) 
 	return rates, nil
 }
 
-// fetchRates 从API获取汇率数据
+// fetchRates 从API获取汇率数据（使用熔断器）
 func (c *ExchangeRateClient) fetchRates(ctx context.Context, baseCurrency string) (map[string]float64, error) {
 	url := fmt.Sprintf("%s/%s", c.baseURL, baseCurrency)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
 	}
 
-	resp, err := c.httpClient.Do(req)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("API调用失败: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API返回错误: status=%d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var apiResp ExchangeRateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 

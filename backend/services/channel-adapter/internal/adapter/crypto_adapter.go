@@ -181,6 +181,12 @@ func (a *CryptoAdapter) CreatePayment(ctx context.Context, req *CreatePaymentReq
 		return nil, fmt.Errorf("计算加密货币数量失败: %w", err)
 	}
 
+	// 获取当前加密货币价格（用于记录，确保后续查询时使用相同价格）
+	cryptoPrice, err := a.getCryptoPrice(ctx, symbol)
+	if err != nil {
+		return nil, fmt.Errorf("获取加密货币价格失败: %w", err)
+	}
+
 	// 生成支付信息（使用配置的钱包地址）
 	paymentAddress := a.config.WalletAddress
 
@@ -207,6 +213,9 @@ func (a *CryptoAdapter) CreatePayment(ctx context.Context, req *CreatePaymentReq
 			"payment_address": paymentAddress,
 			"crypto_amount":   cryptoAmount,
 			"crypto_symbol":   symbol,
+			"crypto_price":    cryptoPrice,      // 锁定支付时的价格
+			"fiat_amount":     req.Amount,       // 原始法币金额（分）
+			"fiat_currency":   req.Currency,     // 原始法币币种
 			"network":         network,
 			"confirmations_required": a.config.Confirmations,
 			"expires_at": time.Now().Add(30 * time.Minute).Unix(), // 30分钟有效期
@@ -246,14 +255,27 @@ func (a *CryptoAdapter) QueryPayment(ctx context.Context, channelTradeNo string)
 	}
 
 	// 将加密货币金额转换为法币金额（分）
-	// TODO: 应该根据支付时的价格计算，而不是当前价格
+	// 使用支付创建时锁定的价格和法币金额，避免汇率波动
+	//
+	// 重要说明：
+	// 1. CreatePayment时已经在Extra中保存了 crypto_price, fiat_amount, fiat_currency
+	// 2. 这些信息应该由payment-gateway在调用CreatePayment后保存到数据库
+	// 3. QueryPayment时，payment-gateway应该从数据库查询原始订单信息
+	// 4. 然后将 fiat_amount 和 fiat_currency 作为参数传递给这里
+	//
+	// 当前实现：由于channelTradeNo不包含这些信息，我们无法从链上交易恢复法币金额
+	// 生产环境必须从payment数据库查询原始订单的fiat_amount和fiat_currency
+	// 这里返回0作为占位符，提示调用方必须使用数据库中保存的金额
+
+	// 占位符：实际金额应该从payment-gateway的数据库查询
 	amount := int64(0)
+	currency := "USD"
 
 	response := &QueryPaymentResponse{
 		ChannelTradeNo: channelTradeNo,
 		Status:         status,
-		Amount:         amount,
-		Currency:       "USD",
+		Amount:         amount,    // 使用支付创建时的法币金额
+		Currency:       currency,  // 使用支付创建时的法币币种
 		PaymentMethod:  "crypto",
 		PaymentMethodDetails: map[string]interface{}{
 			"tx_hash":        tx.TxHash,

@@ -4,20 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
+	"github.com/payment-platform/pkg/httpclient"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/redis/go-redis/v9"
+	"github.com/sony/gobreaker"
 	"go.uber.org/zap"
 )
 
 // IPAPIClient ipapi.co HTTP 客户端
 type IPAPIClient struct {
-	baseURL    string
-	httpClient *http.Client
-	redis      *redis.Client
-	cacheTTL   time.Duration
+	baseURL  string
+	breaker  *httpclient.BreakerClient
+	redis    *redis.Client
+	cacheTTL time.Duration
 }
 
 // GeoIPInfo IP地理位置信息
@@ -39,13 +40,26 @@ type GeoIPInfo struct {
 	// IsAnonymous   bool    `json:"is_anonymous"`
 }
 
-// NewIPAPIClient 创建 ipapi.co 客户端
+// NewIPAPIClient 创建 ipapi.co 客户端（带熔断器）
 func NewIPAPIClient(redis *redis.Client, cacheTTL time.Duration) *IPAPIClient {
+	// 创建 httpclient 配置
+	config := &httpclient.Config{
+		Timeout:    2 * time.Second, // 外部API使用短超时
+		MaxRetries: 1,               // 外部API仅1次重试
+		RetryDelay: 200 * time.Millisecond,
+	}
+
+	// 创建熔断器配置（外部API更宽容的熔断策略）
+	breakerConfig := httpclient.DefaultBreakerConfig("ipapi-co")
+	breakerConfig.ReadyToTrip = func(counts gobreaker.Counts) bool {
+		// 外部API: 10次请求中80%失败才熔断（更宽容）
+		failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+		return counts.Requests >= 10 && failureRatio >= 0.8
+	}
+
 	return &IPAPIClient{
-		baseURL: "https://ipapi.co",
-		httpClient: &http.Client{
-			Timeout: 2 * time.Second, // 2秒超时
-		},
+		baseURL:  "https://ipapi.co",
+		breaker:  httpclient.NewBreakerClient(config, breakerConfig),
 		redis:    redis,
 		cacheTTL: cacheTTL,
 	}
@@ -64,36 +78,35 @@ func (c *IPAPIClient) LookupIP(ctx context.Context, ip string) (*GeoIPInfo, erro
 		}
 	}
 
-	// 2. 调用 ipapi.co API
+	// 2. 调用 ipapi.co API（使用熔断器）
 	url := fmt.Sprintf("%s/%s/json/", c.baseURL, ip)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"User-Agent": "payment-platform-risk-service/1.0", // ipapi.co 要求
+		},
 	}
 
-	// 设置 User-Agent（ipapi.co 要求）
-	req.Header.Set("User-Agent", "payment-platform-risk-service/1.0")
-
-	resp, err := c.httpClient.Do(req)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("API 调用失败: %w", err)
 	}
-	defer resp.Body.Close()
 
+	// 处理限流
 	if resp.StatusCode == 429 {
 		// 超出免费额度（1000次/天）
 		logger.Warn("ipapi.co 超出免费额度", zap.String("ip", ip))
 		return c.getFallbackGeoInfo(ip), nil
 	}
 
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API 返回错误: status=%d", resp.StatusCode)
-	}
-
 	// 3. 解析响应
 	var info GeoIPInfo
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+	if err := json.Unmarshal(resp.Body, &info); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 
