@@ -76,17 +76,56 @@ const Dashboard = () => {
       return
     }
 
+    setLoading(true)
     try {
       // 调用merchant-service的Dashboard API
       const response = await dashboardService.getDashboard()
       console.log('Dashboard data loaded:', response)
-      // TODO: 根据实际返回的数据结构更新stats
+
       if (response.data) {
-        // setStats(response.data)
+        const data = response.data
+
+        // 更新今日数据
+        setTodayStats({
+          total_count: data.today_payments || 0,
+          total_amount: data.today_amount || 0,
+          success_count: Math.floor((data.today_payments || 0) * (data.today_success_rate || 0)),
+          failed_count: 0,
+          success_rate: data.today_success_rate || 0,
+        })
+
+        // 更新本月数据
+        setMonthStats({
+          total_count: data.month_payments || 0,
+          total_amount: data.month_amount || 0,
+          success_count: Math.floor((data.month_payments || 0) * (data.month_success_rate || 0)),
+          failed_count: 0,
+          success_rate: data.month_success_rate || 0,
+        })
+
+        // 更新趋势数据
+        if (data.payment_trend && data.payment_trend.length > 0) {
+          const trendDataFormatted: TrendData[] = []
+          data.payment_trend.forEach((item: any) => {
+            trendDataFormatted.push({
+              date: dayjs(item.date).format('MM-DD'),
+              value: item.amount / 100,
+              type: t('dashboard.revenueLabel'),
+            })
+            trendDataFormatted.push({
+              date: dayjs(item.date).format('MM-DD'),
+              value: item.payments,
+              type: t('dashboard.ordersLabel'),
+            })
+          })
+          setTrendData(trendDataFormatted)
+        }
       }
     } catch (error) {
       console.error('Failed to load dashboard:', error)
       // 错误已被request.ts的拦截器处理
+    } finally {
+      setLoading(false)
     }
   }
 

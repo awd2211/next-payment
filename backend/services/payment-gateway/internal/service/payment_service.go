@@ -47,19 +47,21 @@ type PaymentService interface {
 }
 
 type paymentService struct {
-	db                 *gorm.DB
-	paymentRepo        repository.PaymentRepository
-	apiKeyRepo         repository.APIKeyRepository
-	orderClient        *client.OrderClient
-	channelClient      *client.ChannelClient
-	riskClient         *client.RiskClient
-	notificationClient *client.NotificationClient // 保留作为降级方案
-	analyticsClient    *client.AnalyticsClient    // 保留作为降级方案
-	redisClient        *redis.Client
-	paymentMetrics     *metrics.PaymentMetrics
-	messageService     MessageService
-	eventPublisher     *kafka.EventPublisher // 新增: 统一事件发布器
-	webhookBaseURL     string                // Webhook基础URL，用于构建回调地址
+	db                  *gorm.DB
+	paymentRepo         repository.PaymentRepository
+	apiKeyRepo          repository.APIKeyRepository
+	orderClient         *client.OrderClient
+	channelClient       *client.ChannelClient
+	riskClient          *client.RiskClient
+	notificationClient  *client.NotificationClient // 保留作为降级方案
+	analyticsClient     *client.AnalyticsClient    // 保留作为降级方案
+	redisClient         *redis.Client
+	paymentMetrics      *metrics.PaymentMetrics
+	messageService      MessageService
+	eventPublisher      *kafka.EventPublisher // 新增: 统一事件发布器
+	webhookBaseURL      string                // Webhook基础URL，用于构建回调地址
+	refundSagaService   *RefundSagaService    // Refund Saga 分布式事务服务
+	callbackSagaService *CallbackSagaService  // Callback Saga 分布式事务服务
 }
 
 // NewPaymentService 创建支付服务实例
@@ -91,8 +93,20 @@ func NewPaymentService(
 		paymentMetrics:     paymentMetrics,
 		messageService:     messageService,
 		eventPublisher:     eventPublisher, // 新增字段
-		webhookBaseURL:     webhookBaseURL,
+		webhookBaseURL:      webhookBaseURL,
+		refundSagaService:   nil, // 通过 setter 注入
+		callbackSagaService: nil, // 通过 setter 注入
 	}
+}
+
+// SetRefundSagaService 设置 Refund Saga 服务（依赖注入）
+func (s *paymentService) SetRefundSagaService(sagaService *RefundSagaService) {
+	s.refundSagaService = sagaService
+}
+
+// SetCallbackSagaService 设置 Callback Saga 服务（依赖注入）
+func (s *paymentService) SetCallbackSagaService(sagaService *CallbackSagaService) {
+	s.callbackSagaService = sagaService
 }
 
 // CreatePaymentInput 创建支付输入
@@ -794,7 +808,36 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 
 	// 7. 调用 Channel-Adapter 执行渠道退款（事务外，使用 Saga 模式）
 	var channelRefundSuccess bool
-	if s.channelClient != nil {
+
+	// ========== 使用 Saga 分布式事务执行退款（生产级方案）==========
+	if s.refundSagaService != nil && s.channelClient != nil {
+		logger.Info("使用 Saga 分布式事务执行退款",
+			zap.String("refund_no", refund.RefundNo),
+			zap.String("payment_no", payment.PaymentNo))
+
+		// 执行 Refund Saga (3 步骤):
+		// 1. 调用渠道退款
+		// 2. 更新支付状态
+		// 3. 更新退款状态
+		// 任何步骤失败会自动回滚所有已完成的步骤
+		err := s.refundSagaService.ExecuteRefundSaga(ctx, refund, payment)
+		if err != nil {
+			logger.Error("Refund Saga 执行失败",
+				zap.Error(err),
+				zap.String("refund_no", refund.RefundNo))
+			finalStatus = "failed"
+			return nil, fmt.Errorf("退款执行失败: %w", err)
+		}
+
+		logger.Info("Refund Saga 执行成功",
+			zap.String("refund_no", refund.RefundNo))
+		channelRefundSuccess = true
+		finalStatus = "success"
+	} else if s.channelClient != nil {
+		// ========== 旧逻辑（向后兼容，如果未启用 Saga）==========
+		logger.Warn("未启用 Refund Saga 服务，使用传统方式执行退款（不推荐）",
+			zap.String("refund_no", refund.RefundNo))
+
 		channelResult, err := s.channelClient.CreateRefund(ctx, &client.RefundRequest{
 			RefundNo:       refund.RefundNo,
 			PaymentNo:      payment.PaymentNo,
@@ -826,7 +869,8 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 
 		// 更新退款记录为成功状态
 		if err := s.paymentRepo.UpdateRefund(ctx, refund); err != nil {
-			// 警告：渠道已退款成功，但本地状态更新失败
+			// ⚠️ 警告：渠道已退款成功，但本地状态更新失败，数据不一致！
+			// 生产环境：应该使用上面的 Saga 方案自动回滚
 			logger.Error("channel refund succeeded but local status update failed",
 				zap.Error(err),
 				zap.String("refund_no", refund.RefundNo),
@@ -858,6 +902,7 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 			finalStatus = "partial_success"
 			return nil, fmt.Errorf("退款成功但状态更新失败，请手动确认: %w", err)
 		}
+		finalStatus = "success"
 	} else {
 		// 没有配置渠道客户端（测试环境）
 		logger.Warn("channel client not configured, refund record created but not processed",

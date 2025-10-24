@@ -1,5 +1,33 @@
 basePath: /api/v1
 definitions:
+  internal_handler.CancelOrderRequest:
+    properties:
+      operator_id:
+        type: string
+      operator_type:
+        type: string
+      reason:
+        type: string
+    required:
+    - reason
+    type: object
+  internal_handler.PayOrderRequest:
+    properties:
+      payment_no:
+        type: string
+    required:
+    - payment_no
+    type: object
+  internal_handler.RefundOrderRequest:
+    properties:
+      amount:
+        type: integer
+      reason:
+        type: string
+    required:
+    - amount
+    - reason
+    type: object
   internal_handler.Response:
     properties:
       code:
@@ -7,6 +35,29 @@ definitions:
       data: {}
       message:
         type: string
+    type: object
+  internal_handler.ShipOrderRequest:
+    properties:
+      shipping_info:
+        additionalProperties: true
+        type: object
+    required:
+    - shipping_info
+    type: object
+  internal_handler.UpdateOrderStatusRequest:
+    properties:
+      channel_order_no:
+        type: string
+      error_code:
+        type: string
+      error_msg:
+        type: string
+      paid_at:
+        type: string
+      status:
+        type: string
+    required:
+    - status
     type: object
   payment-platform_order-service_internal_model.Address:
     properties:
@@ -273,6 +324,313 @@ paths:
       summary: 获取订单详情
       tags:
       - Orders
+  /orders/{orderNo}/cancel:
+    post:
+      consumes:
+      - application/json
+      description: 取消指定订单
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 取消原因
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CancelOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 取消订单
+      tags:
+      - Orders
+  /orders/{orderNo}/complete:
+    post:
+      consumes:
+      - application/json
+      description: 将订单标记为已完成状态
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 完成订单
+      tags:
+      - Orders
+  /orders/{orderNo}/pay:
+    post:
+      consumes:
+      - application/json
+      description: 标记订单为已支付状态
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 支付信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.PayOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 支付订单
+      tags:
+      - Orders
+  /orders/{orderNo}/refund:
+    post:
+      consumes:
+      - application/json
+      description: 对已支付订单进行退款
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 退款信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.RefundOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 退款订单
+      tags:
+      - Orders
+  /orders/{orderNo}/ship:
+    post:
+      consumes:
+      - application/json
+      description: 更新订单发货信息
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 发货信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ShipOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 订单发货
+      tags:
+      - Orders
+  /orders/{orderNo}/status:
+    put:
+      consumes:
+      - application/json
+      description: 更新订单状态（供支付网关回调使用）
+      parameters:
+      - description: 订单号或支付流水号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 状态更新信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.UpdateOrderStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新订单状态
+      tags:
+      - Orders
+  /statistics/daily-summary:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定日期的订单每日汇总数据
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 日期 (YYYY-MM-DD)
+        in: query
+        name: date
+        required: true
+        type: string
+      - default: USD
+        description: 货币类型
+        in: query
+        name: currency
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取每日汇总
+      tags:
+      - Statistics
+  /statistics/orders:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定时间范围内的订单统计信息
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 开始时间 (RFC3339格式)
+        in: query
+        name: start_time
+        required: true
+        type: string
+      - description: 结束时间 (RFC3339格式)
+        in: query
+        name: end_time
+        required: true
+        type: string
+      - default: USD
+        description: 货币类型
+        in: query
+        name: currency
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取订单统计
+      tags:
+      - Statistics
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

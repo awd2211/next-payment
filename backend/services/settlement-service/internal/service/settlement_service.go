@@ -36,6 +36,7 @@ type settlementService struct {
 	merchantClient     *client.MerchantClient
 	notificationClient *client.NotificationClient // 保留作为降级方案
 	eventPublisher     *kafka.EventPublisher // 新增: 统一事件发布器
+	sagaService        *SettlementSagaService // Settlement Saga 分布式事务服务
 }
 
 // NewSettlementService 创建结算服务
@@ -56,7 +57,13 @@ func NewSettlementService(
 		merchantClient:     merchantClient,
 		notificationClient: notificationClient,
 		eventPublisher:     eventPublisher,
+		sagaService:        nil, // 通过 setter 注入
 	}
+}
+
+// SetSagaService 设置 Saga 服务（依赖注入）
+func (s *settlementService) SetSagaService(sagaService *SettlementSagaService) {
+	s.sagaService = sagaService
 }
 
 // CreateSettlementInput 创建结算单输入
@@ -316,6 +323,44 @@ func (s *settlementService) ExecuteSettlement(ctx context.Context, settlementID 
 		return fmt.Errorf("结算单状态不是已审批，无法执行")
 	}
 
+	// ========== 使用 Saga 分布式事务执行结算（生产级方案）==========
+	if s.sagaService != nil {
+		logger.Info("使用 Saga 分布式事务执行结算",
+			zap.String("settlement_no", settlement.SettlementNo),
+			zap.String("settlement_id", settlementID.String()))
+
+		// 执行 Settlement Saga (4 步骤):
+		// 1. 更新结算单为处理中
+		// 2. 获取商户结算账户
+		// 3. 创建提现单
+		// 4. 更新结算单为完成
+		// 任何步骤失败会自动回滚所有已完成的步骤
+		err := s.sagaService.ExecuteSettlementSaga(ctx, settlement)
+		if err != nil {
+			logger.Error("Settlement Saga 执行失败",
+				zap.Error(err),
+				zap.String("settlement_no", settlement.SettlementNo))
+
+			// Saga 已经自动补偿，这里只需返回错误
+			return fmt.Errorf("结算执行失败: %w", err)
+		}
+
+		logger.Info("Settlement Saga 执行成功",
+			zap.String("settlement_no", settlement.SettlementNo))
+
+		// 发布结算完成事件
+		s.publishSettlementEvent(ctx, events.SettlementCompleted, settlement)
+
+		// 注意: Settlement Saga 内部已经通过 notification step 发送了通知
+		// 这里无需重复调用 notificationClient
+
+		return nil
+	}
+
+	// ========== 旧逻辑（向后兼容，如果未启用 Saga）==========
+	logger.Warn("未启用 Saga 服务，使用传统方式执行结算（不推荐）",
+		zap.String("settlement_no", settlement.SettlementNo))
+
 	now := time.Now()
 	settlement.Status = model.SettlementStatusProcessing
 	settlement.ProcessedAt = &now
@@ -329,6 +374,8 @@ func (s *settlementService) ExecuteSettlement(ctx context.Context, settlementID 
 		// 从merchant-service获取商户默认银行账户
 		defaultAccount, err := s.merchantClient.GetDefaultSettlementAccount(ctx, settlement.MerchantID)
 		if err != nil {
+			// ⚠️ 状态已更新为处理中，但获取账户失败，数据可能不一致
+			// 生产环境：应该使用上面的 Saga 方案自动回滚
 			settlement.Status = model.SettlementStatusFailed
 			settlement.ErrorMessage = fmt.Sprintf("获取默认结算账户失败: %v", err)
 			s.settlementRepo.Update(ctx, settlement)
@@ -346,6 +393,8 @@ func (s *settlementService) ExecuteSettlement(ctx context.Context, settlementID 
 
 		withdrawalNo, err := s.withdrawalClient.CreateWithdrawalForSettlement(ctx, withdrawalReq)
 		if err != nil {
+			// ⚠️ 状态已更新为处理中，但创建提现失败，数据可能不一致
+			// 生产环境：应该使用上面的 Saga 方案自动回滚
 			settlement.Status = model.SettlementStatusFailed
 			settlement.ErrorMessage = fmt.Sprintf("创建提现失败: %v", err)
 			s.settlementRepo.Update(ctx, settlement)

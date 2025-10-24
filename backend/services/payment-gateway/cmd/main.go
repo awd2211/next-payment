@@ -163,7 +163,6 @@ func main() {
 		orderClient,
 		nil, // accountingClient 暂未实现
 	)
-	_ = refundSagaService // TODO: 集成到 paymentService 的退款流程
 	logger.Info("Refund Saga Service 初始化完成")
 
 	// 初始化 Callback Saga Service（支付回调 Saga 编排）
@@ -173,8 +172,7 @@ func main() {
 		orderClient,
 		nil, // TODO: 需要实现 KafkaProducer 适配器
 	)
-	_ = callbackSagaService // TODO: 集成到 paymentService 的回调处理流程
-	_ = eventPublisher      // 保留引用
+	_ = eventPublisher // 保留引用
 	logger.Info("Callback Saga Service 初始化完成")
 
 	// 7. Webhook基础URL配置（用于渠道回调）
@@ -196,6 +194,16 @@ func main() {
 		eventPublisher, // 事件发布器(事件驱动架构)
 		webhookBaseURL, // Webhook基础URL
 	)
+
+	// ✅ 将 Saga 服务注入到 Payment Service
+	if ps, ok := paymentService.(interface{ SetRefundSagaService(*service.RefundSagaService) }); ok {
+		ps.SetRefundSagaService(refundSagaService)
+		logger.Info("Refund Saga Service 已注入到 PaymentService")
+	}
+	if ps, ok := paymentService.(interface{ SetCallbackSagaService(*service.CallbackSagaService) }); ok {
+		ps.SetCallbackSagaService(callbackSagaService)
+		logger.Info("Callback Saga Service 已注入到 PaymentService")
+	}
 
 	// 8. 初始化Handler
 	paymentHandler := handler.NewPaymentHandler(paymentService)

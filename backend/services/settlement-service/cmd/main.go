@@ -132,7 +132,12 @@ func main() {
 		merchantClient,
 		withdrawalClient,
 	)
-	_ = settlementSagaService // TODO: 集成到 settlementService 的结算执行流程
+
+	// ✅ 将 Saga Service 注入到 Settlement Service
+	if ss, ok := settlementService.(interface{ SetSagaService(*service.SettlementSagaService) }); ok {
+		ss.SetSagaService(settlementSagaService)
+		logger.Info("Settlement Saga Service 已注入到 SettlementService")
+	}
 	logger.Info("Settlement Saga Service 初始化完成")
 
 	// 7. 初始化Handler

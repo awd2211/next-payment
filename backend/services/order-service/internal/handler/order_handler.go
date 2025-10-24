@@ -243,6 +243,19 @@ func (h *OrderHandler) QueryOrders(c *gin.Context) {
 }
 
 // CancelOrder 取消订单
+//
+//	@Summary		取消订单
+//	@Description	取消指定订单
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orderNo	path		string				true	"订单号"
+//	@Param			request	body		CancelOrderRequest	true	"取消原因"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/{orderNo}/cancel [post]
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 
@@ -283,6 +296,19 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 }
 
 // PayOrder 支付订单
+//
+//	@Summary		支付订单
+//	@Description	标记订单为已支付状态
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orderNo	path		string			true	"订单号"
+//	@Param			request	body		PayOrderRequest	true	"支付信息"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/{orderNo}/pay [post]
 func (h *OrderHandler) PayOrder(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 
@@ -315,6 +341,19 @@ func (h *OrderHandler) PayOrder(c *gin.Context) {
 }
 
 // RefundOrder 退款订单
+//
+//	@Summary		退款订单
+//	@Description	对已支付订单进行退款
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orderNo	path		string				true	"订单号"
+//	@Param			request	body		RefundOrderRequest	true	"退款信息"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/{orderNo}/refund [post]
 func (h *OrderHandler) RefundOrder(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 
@@ -347,6 +386,19 @@ func (h *OrderHandler) RefundOrder(c *gin.Context) {
 }
 
 // ShipOrder 发货
+//
+//	@Summary		订单发货
+//	@Description	更新订单发货信息
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orderNo	path		string			true	"订单号"
+//	@Param			request	body		ShipOrderRequest	true	"发货信息"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/{orderNo}/ship [post]
 func (h *OrderHandler) ShipOrder(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 
@@ -379,6 +431,18 @@ func (h *OrderHandler) ShipOrder(c *gin.Context) {
 }
 
 // CompleteOrder 完成订单
+//
+//	@Summary		完成订单
+//	@Description	将订单标记为已完成状态
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orderNo	path		string	true	"订单号"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/{orderNo}/complete [post]
 func (h *OrderHandler) CompleteOrder(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 
@@ -402,6 +466,20 @@ func (h *OrderHandler) CompleteOrder(c *gin.Context) {
 }
 
 // UpdateOrderStatus 更新订单状态（支付网关回调使用）
+//
+//	@Summary		更新订单状态
+//	@Description	更新订单状态（供支付网关回调使用）
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orderNo	path		string					true	"订单号或支付流水号"
+//	@Param			request	body		UpdateOrderStatusRequest	true	"状态更新信息"
+//	@Success		200		{object}	Response
+//	@Failure		400		{object}	Response
+//	@Failure		404		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/{orderNo}/status [put]
 func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 	orderNoOrPaymentNo := c.Param("orderNo") // 可以是订单号或支付流水号
 
@@ -450,6 +528,21 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 }
 
 // GetOrderStatistics 获取订单统计
+//
+//	@Summary		获取订单统计
+//	@Description	获取指定时间范围内的订单统计信息
+//	@Tags			Statistics
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			merchant_id	query		string	true	"商户ID"
+//	@Param			start_time	query		string	true	"开始时间 (RFC3339格式)"
+//	@Param			end_time	query		string	true	"结束时间 (RFC3339格式)"
+//	@Param			currency	query		string	false	"货币类型"	default(USD)
+//	@Success		200			{object}	Response
+//	@Failure		400			{object}	Response
+//	@Failure		500			{object}	Response
+//	@Router			/statistics/orders [get]
 func (h *OrderHandler) GetOrderStatistics(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
@@ -512,6 +605,20 @@ func (h *OrderHandler) GetOrderStatistics(c *gin.Context) {
 }
 
 // GetDailySummary 获取每日汇总
+//
+//	@Summary		获取每日汇总
+//	@Description	获取指定日期的订单每日汇总数据
+//	@Tags			Statistics
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			merchant_id	query		string	true	"商户ID"
+//	@Param			date		query		string	true	"日期 (YYYY-MM-DD)"
+//	@Param			currency	query		string	false	"货币类型"	default(USD)
+//	@Success		200			{object}	Response
+//	@Failure		400			{object}	Response
+//	@Failure		500			{object}	Response
+//	@Router			/statistics/daily-summary [get]
 func (h *OrderHandler) GetDailySummary(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {

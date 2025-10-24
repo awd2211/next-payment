@@ -39,6 +39,7 @@ type withdrawalService struct {
 	accountingClient    *client.AccountingClient
 	notificationClient  *client.NotificationClient
 	bankTransferClient  *client.BankTransferClient
+	sagaService         *WithdrawalSagaService // Saga 分布式事务服务
 }
 
 // NewWithdrawalService 创建提现服务
@@ -55,7 +56,13 @@ func NewWithdrawalService(
 		accountingClient:   accountingClient,
 		notificationClient: notificationClient,
 		bankTransferClient: bankTransferClient,
+		sagaService:        nil, // 通过 SetSagaService 注入
 	}
+}
+
+// SetSagaService 设置 Saga 服务（用于依赖注入）
+func (s *withdrawalService) SetSagaService(sagaService *WithdrawalSagaService) {
+	s.sagaService = sagaService
 }
 
 // CreateWithdrawalInput 创建提现输入
@@ -350,6 +357,50 @@ func (s *withdrawalService) ExecuteWithdrawal(ctx context.Context, withdrawalID 
 		return fmt.Errorf("提现状态不是已审批，无法执行")
 	}
 
+	// ========== 使用 Saga 分布式事务执行提现（生产级方案）==========
+	// 如果启用了 Saga，使用分布式事务保证原子性
+	if s.sagaService != nil {
+		logger.Info("使用 Saga 分布式事务执行提现",
+			zap.String("withdrawal_no", withdrawal.WithdrawalNo),
+			zap.String("withdrawal_id", withdrawalID.String()))
+
+		// 执行 Withdrawal Saga (4 步骤):
+		// 1. 预冻结余额
+		// 2. 银行转账
+		// 3. 扣减余额
+		// 4. 更新提现状态
+		// 任何步骤失败会自动回滚所有已完成的步骤
+		err := s.sagaService.ExecuteWithdrawalSaga(ctx, withdrawal)
+		if err != nil {
+			logger.Error("Withdrawal Saga 执行失败",
+				zap.Error(err),
+				zap.String("withdrawal_no", withdrawal.WithdrawalNo))
+
+			// Saga 已经自动补偿，这里只需返回错误
+			return fmt.Errorf("提现执行失败: %w", err)
+		}
+
+		logger.Info("Withdrawal Saga 执行成功",
+			zap.String("withdrawal_no", withdrawal.WithdrawalNo))
+
+		// 发送完成通知
+		if s.notificationClient != nil {
+			if err := s.notificationClient.SendWithdrawalStatusNotification(ctx, withdrawal.MerchantID, withdrawal.WithdrawalNo, "completed", withdrawal.Amount); err != nil {
+				logger.Error("failed to send completion notification",
+					zap.Error(err),
+					zap.String("merchant_id", withdrawal.MerchantID.String()),
+					zap.String("withdrawal_no", withdrawal.WithdrawalNo),
+					zap.Int64("amount", withdrawal.Amount))
+			}
+		}
+
+		return nil
+	}
+
+	// ========== 旧逻辑（向后兼容，如果未启用 Saga）==========
+	logger.Warn("未启用 Saga 服务，使用传统方式执行提现（不推荐）",
+		zap.String("withdrawal_no", withdrawal.WithdrawalNo))
+
 	now := time.Now()
 	withdrawal.Status = model.WithdrawalStatusProcessing
 	withdrawal.ProcessedAt = &now
@@ -400,9 +451,10 @@ func (s *withdrawalService) ExecuteWithdrawal(ctx context.Context, withdrawalID 
 		}
 
 		if err := s.accountingClient.DeductBalance(ctx, deductReq); err != nil {
-			// 余额扣减失败，需要回滚银行转账（生产环境需要实现）
+			// ⚠️ 余额扣减失败，但银行转账已完成，数据不一致！
+			// 生产环境：应该使用上面的 Saga 方案自动回滚
 			withdrawal.Status = model.WithdrawalStatusFailed
-			withdrawal.FailureReason = fmt.Sprintf("余额扣减失败: %v", err)
+			withdrawal.FailureReason = fmt.Sprintf("余额扣减失败: %v (银行转账已完成，需要人工处理)", err)
 			s.withdrawalRepo.Update(ctx, withdrawal)
 			return fmt.Errorf("余额扣减失败: %w", err)
 		}

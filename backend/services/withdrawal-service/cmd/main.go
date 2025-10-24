@@ -126,8 +126,14 @@ func main() {
 		notificationClient,
 	)
 
-	// 将 Saga Service 注入到 Withdrawal Service（待实现）
-	_ = withdrawalSagaService // TODO: 集成到 withdrawalService 的提现执行流程
+	// ✅ 将 Saga Service 注入到 Withdrawal Service
+	// 通过类型断言调用 SetSagaService 方法
+	if ws, ok := withdrawalService.(interface{ SetSagaService(*service.WithdrawalSagaService) }); ok {
+		ws.SetSagaService(withdrawalSagaService)
+		logger.Info("Withdrawal Saga Service 已注入到 WithdrawalService")
+	} else {
+		logger.Warn("WithdrawalService 不支持 SetSagaService 方法")
+	}
 
 	// 6. 初始化Handler
 	withdrawalHandler := handler.NewWithdrawalHandler(withdrawalService)

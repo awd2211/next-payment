@@ -2,6 +2,8 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } f
 import { message } from 'antd'
 import { useAuthStore } from '../stores/authStore'
 import type { ApiResponse } from '../types'
+import { apiRateLimiter, loginRateLimiter } from '../utils/rateLimiter'
+import { isValidURL } from '../utils/security'
 
 // 创建axios实例
 const instance: AxiosInstance = axios.create({
@@ -62,6 +64,22 @@ const refreshAccessToken = async (): Promise<string> => {
 // 请求拦截器
 instance.interceptors.request.use(
   (config) => {
+    // URL安全验证
+    if (config.url && !config.url.startsWith('/') && !isValidURL(config.url)) {
+      console.warn('[Security] Blocked potentially unsafe URL:', config.url)
+      return Promise.reject(new Error('Invalid URL'))
+    }
+
+    // 限流检查
+    const endpoint = config.url || 'unknown'
+    const rateLimiter = endpoint.includes('/login') ? loginRateLimiter : apiRateLimiter
+
+    if (!rateLimiter.isAllowed(endpoint)) {
+      const resetTime = rateLimiter.getResetTime(endpoint)
+      message.warning(`请求过于频繁，请 ${resetTime} 秒后重试`)
+      return Promise.reject(new Error('Rate limit exceeded'))
+    }
+
     const token = useAuthStore.getState().token
     if (token) {
       config.headers.Authorization = `Bearer ${token}`

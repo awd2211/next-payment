@@ -1,130 +1,109 @@
-import React from 'react'
-import { Result, Button } from 'antd'
+import { Component, ReactNode, ErrorInfo } from 'react'
+import { Button, Result } from 'antd'
 
-interface Props {
-  children: React.ReactNode
+interface ErrorBoundaryProps {
+  children: ReactNode
+  fallback?: ReactNode
+  onError?: (error: Error, errorInfo: ErrorInfo) => void
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean
-  error: Error | null
-  errorInfo: React.ErrorInfo | null
+  error?: Error
+  errorInfo?: ErrorInfo
 }
 
 /**
- * 错误边界组件
- * 捕获子组件树中的 JavaScript 错误，记录错误并展示降级 UI
+ * 错误边界组件 - 捕获子组件错误
+ *
+ * @example
+ * <ErrorBoundary
+ *   onError={(error, errorInfo) => {
+ *     // 上报错误到监控系统
+ *     console.error('Component error:', error, errorInfo)
+ *   }}
+ * >
+ *   <YourComponent />
+ * </ErrorBoundary>
  */
-export class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = {
       hasError: false,
-      error: null,
-      errorInfo: null,
     }
   }
 
-  static getDerivedStateFromError(error: Error): Partial<State> {
-    // 更新 state，下次渲染将显示降级 UI
-    return { hasError: true, error }
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    // 更新 state 使下一次渲染能够显示降级后的 UI
+    return {
+      hasError: true,
+      error,
+    }
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // 记录错误信息
-    console.error('Error caught by ErrorBoundary:', error, errorInfo)
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    // 记录错误到错误报告服务
+    console.error('ErrorBoundary caught an error:', error, errorInfo)
 
     this.setState({
       error,
       errorInfo,
     })
 
-    // 生产环境：上报错误到监控系统
-    if (import.meta.env.PROD) {
-      this.reportErrorToService(error, errorInfo)
-    }
+    // 调用自定义错误处理
+    this.props.onError?.(error, errorInfo)
+
+    // 可以在这里上报到监控系统
+    // reportErrorToService(error, errorInfo)
   }
 
-  reportErrorToService(error: Error, errorInfo: React.ErrorInfo) {
-    // TODO: 集成错误监控服务（如 Sentry、Bugsnag 等）
-    try {
-      const errorData = {
-        message: error.message,
-        stack: error.stack,
-        componentStack: errorInfo.componentStack,
-        timestamp: new Date().toISOString(),
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-      }
-
-      // 发送到错误监控服务
-      fetch('/api/v1/errors/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(errorData),
-      }).catch((err) => {
-        console.error('Failed to report error:', err)
-      })
-    } catch (reportError) {
-      console.error('Error in error reporting:', reportError)
-    }
-  }
-
-  handleReset = () => {
+  handleReset = (): void => {
     this.setState({
       hasError: false,
-      error: null,
-      errorInfo: null,
+      error: undefined,
+      errorInfo: undefined,
     })
   }
 
-  render() {
+  render(): ReactNode {
     if (this.state.hasError) {
+      // 如果有自定义降级 UI,渲染它
+      if (this.props.fallback) {
+        return this.props.fallback
+      }
+
+      // 默认错误 UI
       return (
-        <div style={{ padding: '50px', maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ padding: '50px', textAlign: 'center' }}>
           <Result
             status="error"
             title="页面出错了"
-            subTitle="抱歉，页面发生了错误。您可以刷新页面或返回首页。"
+            subTitle="抱歉，页面遇到了一些问题。您可以尝试刷新页面或返回首页。"
             extra={[
-              <Button type="primary" key="refresh" onClick={() => window.location.reload()}>
-                刷新页面
+              <Button type="primary" key="refresh" onClick={this.handleReset}>
+                重新加载
               </Button>,
-              <Button key="home" onClick={() => (window.location.href = '/')}>
+              <Button key="home" onClick={() => (window.location.href = '/dashboard')}>
                 返回首页
-              </Button>,
-              <Button key="retry" onClick={this.handleReset}>
-                重试
               </Button>,
             ]}
           >
-            {/* 开发环境显示详细错误信息 */}
-            {import.meta.env.DEV && this.state.error && (
-              <div style={{ textAlign: 'left', marginTop: '20px' }}>
-                <details style={{ whiteSpace: 'pre-wrap' }}>
-                  <summary style={{ cursor: 'pointer', fontWeight: 'bold', marginBottom: '10px' }}>
-                    错误详情 (仅开发环境显示)
-                  </summary>
-                  <div style={{ padding: '10px', background: '#f5f5f5', borderRadius: '4px' }}>
-                    <p>
-                      <strong>错误信息:</strong> {this.state.error.message}
-                    </p>
-                    {this.state.error.stack && (
-                      <p>
-                        <strong>错误堆栈:</strong>
-                        <br />
-                        {this.state.error.stack}
-                      </p>
-                    )}
-                    {this.state.errorInfo?.componentStack && (
-                      <p>
-                        <strong>组件堆栈:</strong>
-                        <br />
-                        {this.state.errorInfo.componentStack}
-                      </p>
-                    )}
-                  </div>
-                </details>
+            {process.env.NODE_ENV === 'development' && this.state.error && (
+              <div
+                style={{
+                  textAlign: 'left',
+                  padding: '20px',
+                  background: '#f5f5f5',
+                  borderRadius: '4px',
+                  marginTop: '20px',
+                }}
+              >
+                <h3>错误详情(开发模式):</h3>
+                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {this.state.error.toString()}
+                  {this.state.errorInfo?.componentStack}
+                </pre>
               </div>
             )}
           </Result>
