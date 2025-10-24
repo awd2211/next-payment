@@ -10,14 +10,14 @@ import (
 // Payment 支付记录表
 type Payment struct {
 	ID              uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	MerchantID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"merchant_id"`             // 商户ID
+	MerchantID      uuid.UUID      `gorm:"type:uuid;not null;index;index:idx_merchant_status_created,priority:1" json:"merchant_id"`  // 商户ID
 	OrderNo         string         `gorm:"type:varchar(64);unique;not null;index" json:"order_no"`  // 订单号（商户侧）
 	PaymentNo       string         `gorm:"type:varchar(64);unique;not null;index" json:"payment_no"` // 支付流水号（平台侧）
 	Channel         string         `gorm:"type:varchar(50);not null;index" json:"channel"`          // 支付渠道：stripe, paypal, crypto
 	ChannelOrderNo  string         `gorm:"type:varchar(128);index" json:"channel_order_no"`         // 渠道订单号
 	Amount          int64          `gorm:"type:bigint;not null" json:"amount"`                      // 支付金额（分）
 	Currency        string         `gorm:"type:varchar(10);not null" json:"currency"`               // 货币类型：USD, EUR, CNY等
-	Status          string         `gorm:"type:varchar(20);not null;index" json:"status"`           // 状态：pending, processing, success, failed, cancelled, expired
+	Status          string         `gorm:"type:varchar(20);not null;index;index:idx_merchant_status_created,priority:2" json:"status"` // 状态：pending, processing, success, failed, cancelled, expired
 	PayMethod       string         `gorm:"type:varchar(50)" json:"pay_method"`                      // 支付方式：card, bank_transfer, wallet, crypto
 	CustomerEmail   string         `gorm:"type:varchar(255)" json:"customer_email"`                 // 客户邮箱
 	CustomerName    string         `gorm:"type:varchar(100)" json:"customer_name"`                  // 客户姓名
@@ -34,7 +34,7 @@ type Payment struct {
 	LastNotifyAt    *time.Time     `gorm:"type:timestamptz" json:"last_notify_at"`                  // 最后通知时间
 	PaidAt          *time.Time     `gorm:"type:timestamptz" json:"paid_at"`                         // 支付完成时间
 	ExpiredAt       *time.Time     `gorm:"type:timestamptz" json:"expired_at"`                      // 过期时间
-	CreatedAt       time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	CreatedAt       time.Time      `gorm:"type:timestamptz;default:now();index:idx_merchant_status_created,priority:3,sort:desc" json:"created_at"`
 	UpdatedAt       time.Time      `gorm:"type:timestamptz;default:now()" json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }

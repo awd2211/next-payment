@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"payment-platform/order-service/internal/model"
 	"payment-platform/order-service/internal/repository"
 	"payment-platform/order-service/internal/service"
 )
@@ -40,18 +41,24 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *pb.CreateOrderReques
 		}
 	}
 
-	// 简化的订单创建 - 使用 proto 中定义的字段
-	// TODO: 需要更新 proto 定义以支持完整的订单字段
+	// 完整的订单创建 - 使用 proto 中更新后的字段
 	input := &service.CreateOrderInput{
-		MerchantID:    merchantID,
-		CustomerID:    customerID,
-		CustomerEmail: "", // proto 中没有这个字段
-		CustomerName:  "", // proto 中没有这个字段
-		CustomerIP:    req.ClientIp,
-		Currency:      req.Currency,
-		Items:         []service.OrderItemInput{}, // proto 中没有详细的商品信息
-		Remark:        req.Description,
-		Extra:         make(map[string]interface{}),
+		MerchantID:      merchantID,
+		CustomerID:      customerID,
+		CustomerEmail:   req.CustomerEmail,
+		CustomerName:    req.CustomerName,
+		CustomerPhone:   req.CustomerPhone,
+		CustomerIP:      req.ClientIp,
+		Currency:        req.Currency,
+		Language:        req.Language,
+		Items:           convertProtoItemsToService(req.Items),
+		ShippingMethod:  req.ShippingMethod,
+		ShippingFee:     req.ShippingFee,
+		ShippingAddress: convertProtoAddressToModel(req.ShippingAddress),
+		BillingAddress:  convertProtoAddressToModel(req.BillingAddress),
+		DiscountAmount:  req.DiscountAmount,
+		Remark:          req.Remark,
+		Extra:           make(map[string]interface{}),
 	}
 
 	// 将 metadata 转换到 extra
@@ -293,4 +300,54 @@ func (s *OrderServer) CancelOrder(ctx context.Context, req *pb.CancelOrderReques
 // GetOrderStats 获取订单统计
 func (s *OrderServer) GetOrderStats(ctx context.Context, req *pb.GetOrderStatsRequest) (*pb.OrderStatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+}
+
+// ========== 辅助转换函数 ==========
+
+// convertProtoItemsToService 将proto商品列表转换为service层输入
+func convertProtoItemsToService(protoItems []*pb.OrderItem) []service.OrderItemInput {
+	if len(protoItems) == 0 {
+		return []service.OrderItemInput{}
+	}
+
+	items := make([]service.OrderItemInput, 0, len(protoItems))
+	for _, item := range protoItems {
+		serviceItem := service.OrderItemInput{
+			ProductID:    item.ProductId,
+			ProductName:  item.ProductName,
+			ProductSKU:   item.ProductSku,
+			ProductImage: item.ProductImage,
+			UnitPrice:    item.UnitPrice,
+			Quantity:     int(item.Quantity),
+			Attributes:   make(map[string]interface{}),
+			Extra:        make(map[string]interface{}),
+		}
+
+		// 转换attributes
+		for k, v := range item.Attributes {
+			serviceItem.Attributes[k] = v
+		}
+
+		items = append(items, serviceItem)
+	}
+
+	return items
+}
+
+// convertProtoAddressToModel 将proto地址转换为model层Address
+func convertProtoAddressToModel(protoAddr *pb.Address) *model.Address {
+	if protoAddr == nil {
+		return nil
+	}
+
+	return &model.Address{
+		Country:    protoAddr.Country,
+		Province:   protoAddr.Province,
+		City:       protoAddr.City,
+		District:   protoAddr.District,
+		Street:     protoAddr.Street,
+		PostalCode: protoAddr.PostalCode,
+		Name:       protoAddr.RecipientName,
+		Phone:      protoAddr.RecipientPhone,
+	}
 }

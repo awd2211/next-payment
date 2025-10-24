@@ -10,7 +10,7 @@ import (
 // Order 订单表
 type Order struct {
 	ID              uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	MerchantID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"merchant_id"`              // 商户ID
+	MerchantID      uuid.UUID      `gorm:"type:uuid;not null;index;index:idx_merchant_status_created,priority:1" json:"merchant_id"`  // 商户ID
 	OrderNo         string         `gorm:"type:varchar(64);unique;not null;index" json:"order_no"`   // 订单号
 	PaymentNo       string         `gorm:"type:varchar(64);index" json:"payment_no"`                 // 支付流水号
 	TotalAmount     int64          `gorm:"type:bigint;not null" json:"total_amount"`                 // 订单总金额（分）
@@ -18,7 +18,7 @@ type Order struct {
 	DiscountAmount  int64          `gorm:"type:bigint;default:0" json:"discount_amount"`             // 优惠金额（分）
 	ShippingFee     int64          `gorm:"type:bigint;default:0" json:"shipping_fee"`                // 运费（分）
 	Currency        string         `gorm:"type:varchar(10);not null" json:"currency"`                // 货币类型
-	Status          string         `gorm:"type:varchar(20);not null;index" json:"status"`            // 订单状态
+	Status          string         `gorm:"type:varchar(20);not null;index;index:idx_merchant_status_created,priority:2" json:"status"`  // 订单状态
 	PayStatus       string         `gorm:"type:varchar(20);not null;index" json:"pay_status"`        // 支付状态
 	ShippingStatus  string         `gorm:"type:varchar(20);default:'pending'" json:"shipping_status"` // 配送状态
 	CustomerID      uuid.UUID      `gorm:"type:uuid;index" json:"customer_id"`                       // 客户ID
@@ -37,7 +37,7 @@ type Order struct {
 	CompletedAt     *time.Time     `gorm:"type:timestamptz" json:"completed_at"`                     // 完成时间
 	CancelledAt     *time.Time     `gorm:"type:timestamptz" json:"cancelled_at"`                     // 取消时间
 	ExpiredAt       *time.Time     `gorm:"type:timestamptz" json:"expired_at"`                       // 过期时间
-	CreatedAt       time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	CreatedAt       time.Time      `gorm:"type:timestamptz;default:now();index:idx_merchant_status_created,priority:3,sort:desc" json:"created_at"`
 	UpdatedAt       time.Time      `gorm:"type:timestamptz;default:now()" json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 

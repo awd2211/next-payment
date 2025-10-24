@@ -36,6 +36,8 @@ func (APIKey) TableName() string {
 type APIKeyRepository interface {
 	// GetByAPIKey 根据API Key查询密钥信息
 	GetByAPIKey(ctx context.Context, apiKey string) (*APIKey, error)
+	// GetByMerchantID 根据商户ID获取活跃的API密钥（用于通知签名）
+	GetByMerchantID(ctx context.Context, merchantID uuid.UUID) (*APIKey, error)
 	// UpdateLastUsedAt 更新最后使用时间
 	UpdateLastUsedAt(ctx context.Context, apiKey string) error
 }
@@ -60,6 +62,23 @@ func (r *apiKeyRepository) GetByAPIKey(ctx context.Context, apiKey string) (*API
 			return nil, fmt.Errorf("API key not found")
 		}
 		return nil, fmt.Errorf("failed to query API key: %w", err)
+	}
+	return &key, nil
+}
+
+// GetByMerchantID 根据商户ID获取活跃的API密钥
+func (r *apiKeyRepository) GetByMerchantID(ctx context.Context, merchantID uuid.UUID) (*APIKey, error) {
+	var key APIKey
+	err := r.db.WithContext(ctx).
+		Where("merchant_id = ? AND is_active = ? AND (expires_at IS NULL OR expires_at > ?)",
+			merchantID, true, time.Now()).
+		Order("created_at DESC"). // 获取最新的密钥
+		First(&key).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("no active API key found for merchant %s", merchantID)
+		}
+		return nil, fmt.Errorf("failed to query merchant API key: %w", err)
 	}
 	return &key, nil
 }

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -536,23 +537,26 @@ func isIPInWhitelist(clientIP, whitelist string) bool {
 	return false
 }
 
-// isIPInCIDR 检查IP是否在CIDR范围内（简化版本）
+// isIPInCIDR 检查IP是否在CIDR范围内（标准实现）
 func isIPInCIDR(clientIP, cidr string) bool {
-	// 简化实现：提取网络前缀进行匹配
-	// 生产环境应使用 net.ParseCIDR 和 IPNet.Contains()
-	parts := strings.Split(cidr, "/")
-	if len(parts) != 2 {
+	// 如果不包含 / 则是单个IP直接比较
+	if !strings.Contains(cidr, "/") {
+		return strings.TrimSpace(clientIP) == strings.TrimSpace(cidr)
+	}
+
+	// 使用标准库解析CIDR
+	ip := net.ParseIP(clientIP)
+	if ip == nil {
+		// 无效的IP地址
 		return false
 	}
 
-	prefix := parts[0]
-	// 简单的前缀匹配（例如 192.168.1 匹配 192.168.1.0/24）
-	prefixParts := strings.Split(prefix, ".")
-	if len(prefixParts) < 3 {
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		// 无效的CIDR格式
 		return false
 	}
 
-	// 提取前3个八位组作为网络前缀
-	networkPrefix := strings.Join(prefixParts[:3], ".")
-	return strings.HasPrefix(clientIP, networkPrefix)
+	// 标准CIDR包含检查
+	return ipNet.Contains(ip)
 }

@@ -219,13 +219,18 @@ func (s *SagaPaymentService) executeCallPaymentChannel(ctx context.Context, paym
 	if resp.PaymentURL != "" {
 		var extraMap map[string]interface{}
 		if payment.Extra != "" {
-			json.Unmarshal([]byte(payment.Extra), &extraMap)
+			if err := json.Unmarshal([]byte(payment.Extra), &extraMap); err != nil {
+				// 如果解析失败，创建新的 map
+				extraMap = make(map[string]interface{})
+			}
 		} else {
 			extraMap = make(map[string]interface{})
 		}
 		extraMap["payment_url"] = resp.PaymentURL
-		extraBytes, _ := json.Marshal(extraMap)
-		payment.Extra = string(extraBytes)
+		if extraBytes, err := json.Marshal(extraMap); err == nil {
+			payment.Extra = string(extraBytes)
+		}
+		// 如果 Marshal 失败，保持原有的 Extra 不变
 	}
 
 	if err := s.paymentRepo.Update(ctx, payment); err != nil {
