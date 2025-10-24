@@ -14,6 +14,7 @@ import (
 	"github.com/payment-platform/pkg/middleware"
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"payment-platform/withdrawal-service/internal/client"
 	"payment-platform/withdrawal-service/internal/handler"
 	"payment-platform/withdrawal-service/internal/model"
 	"payment-platform/withdrawal-service/internal/repository"
@@ -119,8 +120,24 @@ func main() {
 	// 初始化Repository
 	withdrawalRepo := repository.NewWithdrawalRepository(database)
 
+	// 初始化HTTP客户端
+	accountingServiceURL := config.GetEnv("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
+	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+
+	accountingClient := client.NewAccountingClient(accountingServiceURL)
+	notificationClient := client.NewNotificationClient(notificationServiceURL)
+	bankTransferClient := client.NewBankTransferClient()
+
+	logger.Info("HTTP客户端初始化完成")
+
 	// 初始化Service
-	withdrawalService := service.NewWithdrawalService(database, withdrawalRepo)
+	withdrawalService := service.NewWithdrawalService(
+		database,
+		withdrawalRepo,
+		accountingClient,
+		notificationClient,
+		bankTransferClient,
+	)
 
 	// 初始化Handler
 	withdrawalHandler := handler.NewWithdrawalHandler(withdrawalService)

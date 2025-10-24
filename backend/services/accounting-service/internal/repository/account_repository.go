@@ -62,6 +62,13 @@ type AccountRepository interface {
 	UpdateReconciliation(ctx context.Context, reconciliation *model.Reconciliation) error
 	GetReconciliationItems(ctx context.Context, reconciliationID uuid.UUID) ([]*model.ReconciliationItem, error)
 	UpdateReconciliationItem(ctx context.Context, item *model.ReconciliationItem) error
+
+	// 货币转换管理
+	CreateCurrencyConversion(ctx context.Context, conversion *model.CurrencyConversion) error
+	GetCurrencyConversionByID(ctx context.Context, id uuid.UUID) (*model.CurrencyConversion, error)
+	GetCurrencyConversionByNo(ctx context.Context, conversionNo string) (*model.CurrencyConversion, error)
+	ListCurrencyConversions(ctx context.Context, query *CurrencyConversionQuery) ([]*model.CurrencyConversion, int64, error)
+	UpdateCurrencyConversion(ctx context.Context, conversion *model.CurrencyConversion) error
 }
 
 type accountRepository struct {
@@ -147,6 +154,20 @@ type ReconciliationQuery struct {
 	EndDate    *time.Time
 	Page       int
 	PageSize   int
+}
+
+// CurrencyConversionQuery 货币转换查询参数
+type CurrencyConversionQuery struct {
+	MerchantID       *uuid.UUID
+	SourceCurrency   string
+	TargetCurrency   string
+	Status           string
+	SourceAccountID  *uuid.UUID
+	TargetAccountID  *uuid.UUID
+	StartTime        *time.Time
+	EndTime          *time.Time
+	Page             int
+	PageSize         int
 }
 
 // CreateAccount 创建账户
@@ -638,4 +659,79 @@ func (r *accountRepository) GetReconciliationItems(ctx context.Context, reconcil
 // UpdateReconciliationItem 更新对账明细
 func (r *accountRepository) UpdateReconciliationItem(ctx context.Context, item *model.ReconciliationItem) error {
 	return r.db.WithContext(ctx).Save(item).Error
+}
+
+// CreateCurrencyConversion 创建货币转换记录
+func (r *accountRepository) CreateCurrencyConversion(ctx context.Context, conversion *model.CurrencyConversion) error {
+	return r.db.WithContext(ctx).Create(conversion).Error
+}
+
+// GetCurrencyConversionByID 根据ID获取货币转换记录
+func (r *accountRepository) GetCurrencyConversionByID(ctx context.Context, id uuid.UUID) (*model.CurrencyConversion, error) {
+	var conversion model.CurrencyConversion
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&conversion).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &conversion, err
+}
+
+// GetCurrencyConversionByNo 根据转换单号获取货币转换记录
+func (r *accountRepository) GetCurrencyConversionByNo(ctx context.Context, conversionNo string) (*model.CurrencyConversion, error) {
+	var conversion model.CurrencyConversion
+	err := r.db.WithContext(ctx).Where("conversion_no = ?", conversionNo).First(&conversion).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &conversion, err
+}
+
+// ListCurrencyConversions 查询货币转换记录列表
+func (r *accountRepository) ListCurrencyConversions(ctx context.Context, query *CurrencyConversionQuery) ([]*model.CurrencyConversion, int64, error) {
+	var conversions []*model.CurrencyConversion
+	var total int64
+
+	db := r.db.WithContext(ctx).Model(&model.CurrencyConversion{})
+
+	// 条件过滤
+	if query.MerchantID != nil {
+		db = db.Where("merchant_id = ?", *query.MerchantID)
+	}
+	if query.SourceCurrency != "" {
+		db = db.Where("source_currency = ?", query.SourceCurrency)
+	}
+	if query.TargetCurrency != "" {
+		db = db.Where("target_currency = ?", query.TargetCurrency)
+	}
+	if query.Status != "" {
+		db = db.Where("status = ?", query.Status)
+	}
+	if query.SourceAccountID != nil {
+		db = db.Where("source_account_id = ?", *query.SourceAccountID)
+	}
+	if query.TargetAccountID != nil {
+		db = db.Where("target_account_id = ?", *query.TargetAccountID)
+	}
+	if query.StartTime != nil {
+		db = db.Where("created_at >= ?", *query.StartTime)
+	}
+	if query.EndTime != nil {
+		db = db.Where("created_at <= ?", *query.EndTime)
+	}
+
+	// 获取总数
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	offset := (query.Page - 1) * query.PageSize
+	err := db.Order("created_at DESC").Offset(offset).Limit(query.PageSize).Find(&conversions).Error
+
+	return conversions, total, err
+}
+
+// UpdateCurrencyConversion 更新货币转换记录
+func (r *accountRepository) UpdateCurrencyConversion(ctx context.Context, conversion *model.CurrencyConversion) error {
+	return r.db.WithContext(ctx).Save(conversion).Error
 }

@@ -6,16 +6,20 @@ import (
 	pb "github.com/payment-platform/proto/analytics"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"payment-platform/analytics-service/internal/service"
 )
 
 // AnalyticsServer gRPC服务实现
 type AnalyticsServer struct {
 	pb.UnimplementedAnalyticsServiceServer
+	analyticsService service.AnalyticsService
 }
 
 // NewAnalyticsServer 创建gRPC服务实例
-func NewAnalyticsServer() *AnalyticsServer {
-	return &AnalyticsServer{}
+func NewAnalyticsServer(analyticsService service.AnalyticsService) *AnalyticsServer {
+	return &AnalyticsServer{
+		analyticsService: analyticsService,
+	}
 }
 
 // 所有方法暂时返回未实现

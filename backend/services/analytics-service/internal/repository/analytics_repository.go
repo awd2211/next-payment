@@ -14,16 +14,19 @@ type AnalyticsRepository interface {
 	// 支付指标
 	CreatePaymentMetrics(ctx context.Context, metrics *model.PaymentMetrics) error
 	GetPaymentMetrics(ctx context.Context, merchantID uuid.UUID, startDate, endDate time.Time) ([]*model.PaymentMetrics, error)
+	GetPaymentMetricsByDate(ctx context.Context, merchantID uuid.UUID, date time.Time) (*model.PaymentMetrics, error)
 	UpdatePaymentMetrics(ctx context.Context, metrics *model.PaymentMetrics) error
 
 	// 商户指标
 	CreateMerchantMetrics(ctx context.Context, metrics *model.MerchantMetrics) error
 	GetMerchantMetrics(ctx context.Context, merchantID uuid.UUID, startDate, endDate time.Time) ([]*model.MerchantMetrics, error)
+	GetMerchantMetricsByDate(ctx context.Context, merchantID uuid.UUID, date time.Time) (*model.MerchantMetrics, error)
 	UpdateMerchantMetrics(ctx context.Context, metrics *model.MerchantMetrics) error
 
 	// 渠道指标
 	CreateChannelMetrics(ctx context.Context, metrics *model.ChannelMetrics) error
 	GetChannelMetrics(ctx context.Context, channelCode string, startDate, endDate time.Time) ([]*model.ChannelMetrics, error)
+	GetChannelMetricsByDate(ctx context.Context, channelCode string, date time.Time) (*model.ChannelMetrics, error)
 	UpdateChannelMetrics(ctx context.Context, metrics *model.ChannelMetrics) error
 
 	// 实时统计
@@ -65,6 +68,17 @@ func (r *analyticsRepository) GetPaymentMetrics(ctx context.Context, merchantID 
 	return metrics, err
 }
 
+func (r *analyticsRepository) GetPaymentMetricsByDate(ctx context.Context, merchantID uuid.UUID, date time.Time) (*model.PaymentMetrics, error) {
+	var metrics model.PaymentMetrics
+	err := r.db.WithContext(ctx).
+		Where("merchant_id = ? AND date = ?", merchantID, date.Format("2006-01-02")).
+		First(&metrics).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &metrics, err
+}
+
 func (r *analyticsRepository) UpdatePaymentMetrics(ctx context.Context, metrics *model.PaymentMetrics) error {
 	return r.db.WithContext(ctx).Save(metrics).Error
 }
@@ -84,6 +98,17 @@ func (r *analyticsRepository) GetMerchantMetrics(ctx context.Context, merchantID
 	return metrics, err
 }
 
+func (r *analyticsRepository) GetMerchantMetricsByDate(ctx context.Context, merchantID uuid.UUID, date time.Time) (*model.MerchantMetrics, error) {
+	var metrics model.MerchantMetrics
+	err := r.db.WithContext(ctx).
+		Where("merchant_id = ? AND date = ?", merchantID, date.Format("2006-01-02")).
+		First(&metrics).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &metrics, err
+}
+
 func (r *analyticsRepository) UpdateMerchantMetrics(ctx context.Context, metrics *model.MerchantMetrics) error {
 	return r.db.WithContext(ctx).Save(metrics).Error
 }
@@ -101,6 +126,17 @@ func (r *analyticsRepository) GetChannelMetrics(ctx context.Context, channelCode
 		Order("date DESC").
 		Find(&metrics).Error
 	return metrics, err
+}
+
+func (r *analyticsRepository) GetChannelMetricsByDate(ctx context.Context, channelCode string, date time.Time) (*model.ChannelMetrics, error) {
+	var metrics model.ChannelMetrics
+	err := r.db.WithContext(ctx).
+		Where("channel_code = ? AND date = ?", channelCode, date.Format("2006-01-02")).
+		First(&metrics).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &metrics, err
 }
 
 func (r *analyticsRepository) UpdateChannelMetrics(ctx context.Context, metrics *model.ChannelMetrics) error {

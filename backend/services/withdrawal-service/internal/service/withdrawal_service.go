@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"payment-platform/withdrawal-service/internal/client"
 	"payment-platform/withdrawal-service/internal/model"
 	"payment-platform/withdrawal-service/internal/repository"
 )
@@ -31,15 +32,27 @@ type WithdrawalService interface {
 }
 
 type withdrawalService struct {
-	db             *gorm.DB
-	withdrawalRepo repository.WithdrawalRepository
+	db                  *gorm.DB
+	withdrawalRepo      repository.WithdrawalRepository
+	accountingClient    *client.AccountingClient
+	notificationClient  *client.NotificationClient
+	bankTransferClient  *client.BankTransferClient
 }
 
 // NewWithdrawalService 创建提现服务
-func NewWithdrawalService(db *gorm.DB, withdrawalRepo repository.WithdrawalRepository) WithdrawalService {
+func NewWithdrawalService(
+	db *gorm.DB,
+	withdrawalRepo repository.WithdrawalRepository,
+	accountingClient *client.AccountingClient,
+	notificationClient *client.NotificationClient,
+	bankTransferClient *client.BankTransferClient,
+) WithdrawalService {
 	return &withdrawalService{
-		db:             db,
-		withdrawalRepo: withdrawalRepo,
+		db:                 db,
+		withdrawalRepo:     withdrawalRepo,
+		accountingClient:   accountingClient,
+		notificationClient: notificationClient,
+		bankTransferClient: bankTransferClient,
 	}
 }
 
@@ -74,11 +87,17 @@ func (s *withdrawalService) CreateWithdrawal(ctx context.Context, input *CreateW
 		return nil, fmt.Errorf("银行账户不可用")
 	}
 
-	// TODO: 查询商户可用余额（调用 accounting-service）
-	// availableBalance := getAvailableBalance(merchantID)
-	// if availableBalance < amount {
-	//     return nil, fmt.Errorf("余额不足")
-	// }
+	// 查询商户可用余额（调用 accounting-service）
+	if s.accountingClient != nil {
+		availableBalance, err := s.accountingClient.GetAvailableBalance(ctx, input.MerchantID)
+		if err != nil {
+			return nil, fmt.Errorf("查询商户余额失败: %w", err)
+		}
+		if availableBalance < input.Amount {
+			return nil, fmt.Errorf("余额不足，可用余额: %.2f元，提现金额: %.2f元",
+				float64(availableBalance)/100, float64(input.Amount)/100)
+		}
+	}
 
 	// 计算手续费
 	fee := s.calculateFee(input.Amount, input.Type)
@@ -113,7 +132,13 @@ func (s *withdrawalService) CreateWithdrawal(ctx context.Context, input *CreateW
 		return nil, fmt.Errorf("创建提现记录失败: %w", err)
 	}
 
-	// TODO: 发送审批通知（调用 notification-service）
+	// 发送审批通知（调用 notification-service）
+	if s.notificationClient != nil {
+		if err := s.notificationClient.SendApprovalNotification(ctx, input.MerchantID, withdrawalNo, input.Amount); err != nil {
+			// 通知发送失败不影响提现创建，仅记录日志
+			fmt.Printf("发送审批通知失败: %v\n", err)
+		}
+	}
 
 	return withdrawal, nil
 }
@@ -327,23 +352,72 @@ func (s *withdrawalService) ExecuteWithdrawal(ctx context.Context, withdrawalID 
 		return fmt.Errorf("更新提现状态失败: %w", err)
 	}
 
-	// TODO: 调用银行转账接口
-	// channelTradeNo, err := bankTransferService.Transfer(withdrawal)
-	// if err != nil {
-	//     withdrawal.Status = model.WithdrawalStatusFailed
-	//     withdrawal.FailureReason = err.Error()
-	//     s.withdrawalRepo.Update(ctx, withdrawal)
-	//     return err
-	// }
-	// withdrawal.ChannelTradeNo = channelTradeNo
+	// 调用银行转账接口
+	if s.bankTransferClient != nil {
+		transferReq := &client.TransferRequest{
+			OrderNo:         withdrawal.WithdrawalNo,
+			BankName:        withdrawal.BankName,
+			BankAccountName: withdrawal.BankAccountName,
+			BankAccountNo:   withdrawal.BankAccountNo,
+			Amount:          withdrawal.ActualAmount,
+			Currency:        "CNY",
+			Remarks:         withdrawal.Remarks,
+		}
 
-	// TODO: 调用 accounting-service 扣减余额
+		transferResp, err := s.bankTransferClient.Transfer(ctx, transferReq)
+		if err != nil {
+			withdrawal.Status = model.WithdrawalStatusFailed
+			withdrawal.FailureReason = err.Error()
+			s.withdrawalRepo.Update(ctx, withdrawal)
+
+			// 发送失败通知
+			if s.notificationClient != nil {
+				s.notificationClient.SendWithdrawalStatusNotification(ctx, withdrawal.MerchantID, withdrawal.WithdrawalNo, "failed", withdrawal.Amount)
+			}
+			return fmt.Errorf("银行转账失败: %w", err)
+		}
+
+		withdrawal.ChannelTradeNo = transferResp.ChannelTradeNo
+	}
+
+	// 调用 accounting-service 扣减余额
+	if s.accountingClient != nil {
+		deductReq := &client.DeductBalanceRequest{
+			MerchantID:      withdrawal.MerchantID,
+			Amount:          withdrawal.Amount, // 扣减总金额（包含手续费）
+			TransactionType: "withdrawal",
+			RelatedNo:       withdrawal.WithdrawalNo,
+			Description:     fmt.Sprintf("提现: %s, 实际到账: %.2f元, 手续费: %.2f元",
+				withdrawal.WithdrawalNo,
+				float64(withdrawal.ActualAmount)/100,
+				float64(withdrawal.Fee)/100),
+		}
+
+		if err := s.accountingClient.DeductBalance(ctx, deductReq); err != nil {
+			// 余额扣减失败，需要回滚银行转账（生产环境需要实现）
+			withdrawal.Status = model.WithdrawalStatusFailed
+			withdrawal.FailureReason = fmt.Sprintf("余额扣减失败: %v", err)
+			s.withdrawalRepo.Update(ctx, withdrawal)
+			return fmt.Errorf("余额扣减失败: %w", err)
+		}
+	}
 
 	// 标记为完成
 	withdrawal.Status = model.WithdrawalStatusCompleted
 	withdrawal.CompletedAt = &now
 
-	return s.withdrawalRepo.Update(ctx, withdrawal)
+	if err := s.withdrawalRepo.Update(ctx, withdrawal); err != nil {
+		return fmt.Errorf("更新提现状态失败: %w", err)
+	}
+
+	// 发送完成通知
+	if s.notificationClient != nil {
+		if err := s.notificationClient.SendWithdrawalStatusNotification(ctx, withdrawal.MerchantID, withdrawal.WithdrawalNo, "completed", withdrawal.Amount); err != nil {
+			fmt.Printf("发送完成通知失败: %v\n", err)
+		}
+	}
+
+	return nil
 }
 
 // CancelWithdrawal 取消提现

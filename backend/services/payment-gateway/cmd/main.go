@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -140,6 +141,19 @@ func main() {
 	logger.Info(fmt.Sprintf("Channel Service URL: %s", channelServiceURL))
 	logger.Info(fmt.Sprintf("Risk Service URL: %s", riskServiceURL))
 
+	// 初始化Kafka Brokers（可选，如果未配置则为nil）
+	var kafkaBrokers []string
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	if kafkaBrokersStr != "" {
+		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
+		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
+	} else {
+		logger.Info("未配置Kafka，将使用降级模式（打印日志）")
+	}
+
+	// 初始化MessageService
+	messageService := service.NewMessageService(kafkaBrokers)
+
 	// 初始化Service
 	paymentService := service.NewPaymentService(
 		database, // 添加 db 参数，用于事务支持
@@ -149,6 +163,7 @@ func main() {
 		riskClient,
 		redisClient,
 		paymentMetrics, // 添加 Prometheus 指标
+		messageService, // 添加消息服务
 	)
 
 	// 初始化Handler

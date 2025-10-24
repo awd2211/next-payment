@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"payment-platform/settlement-service/internal/client"
 	"payment-platform/settlement-service/internal/model"
 	"payment-platform/settlement-service/internal/repository"
 )
@@ -24,15 +25,24 @@ type SettlementService interface {
 }
 
 type settlementService struct {
-	db             *gorm.DB
-	settlementRepo repository.SettlementRepository
+	db               *gorm.DB
+	settlementRepo   repository.SettlementRepository
+	accountingClient *client.AccountingClient
+	withdrawalClient *client.WithdrawalClient
 }
 
 // NewSettlementService 创建结算服务
-func NewSettlementService(db *gorm.DB, settlementRepo repository.SettlementRepository) SettlementService {
+func NewSettlementService(
+	db *gorm.DB,
+	settlementRepo repository.SettlementRepository,
+	accountingClient *client.AccountingClient,
+	withdrawalClient *client.WithdrawalClient,
+) SettlementService {
 	return &settlementService{
-		db:             db,
-		settlementRepo: settlementRepo,
+		db:               db,
+		settlementRepo:   settlementRepo,
+		accountingClient: accountingClient,
+		withdrawalClient: withdrawalClient,
 	}
 }
 
@@ -291,7 +301,31 @@ func (s *settlementService) ExecuteSettlement(ctx context.Context, settlementID 
 		return fmt.Errorf("更新结算单状态失败: %w", err)
 	}
 
-	// TODO: 实际转账逻辑（调用 withdrawal-service 或 accounting-service）
+	// 实际转账逻辑：调用 withdrawal-service 创建提现
+	if s.withdrawalClient != nil {
+		// 获取商户的默认银行账户ID（这里简化处理，实际应该查询商户信息）
+		// TODO: 从merchant-service获取商户默认银行账户
+		defaultBankAccountID := uuid.New() // 临时使用新UUID，生产环境需要实际查询
+
+		withdrawalReq := &client.CreateWithdrawalRequest{
+			MerchantID:    settlement.MerchantID,
+			Amount:        settlement.SettlementAmount,
+			Type:          "settlement_auto",
+			BankAccountID: defaultBankAccountID,
+			Remarks:       fmt.Sprintf("自动结算: %s, 周期: %s", settlement.SettlementNo, settlement.Cycle),
+			CreatedBy:     uuid.MustParse("00000000-0000-0000-0000-000000000000"), // 系统自动
+		}
+
+		withdrawalNo, err := s.withdrawalClient.CreateWithdrawalForSettlement(ctx, withdrawalReq)
+		if err != nil {
+			settlement.Status = model.SettlementStatusFailed
+			settlement.ErrorMessage = fmt.Sprintf("创建提现失败: %v", err)
+			s.settlementRepo.Update(ctx, settlement)
+			return fmt.Errorf("创建提现失败: %w", err)
+		}
+
+		settlement.WithdrawalNo = withdrawalNo
+	}
 
 	// 标记为完成
 	settlement.Status = model.SettlementStatusCompleted
@@ -321,14 +355,49 @@ func (s *settlementService) GenerateAutoSettlement(ctx context.Context, merchant
 		return nil, fmt.Errorf("不支持的结算周期: %s", cycle)
 	}
 
-	// TODO: 从 accounting-service 获取交易数据
+	// 从 accounting-service 获取交易数据
+	var transactions []TransactionItem
+	if s.accountingClient != nil {
+		txList, err := s.accountingClient.GetTransactions(ctx, merchantID, startDate, endDate)
+		if err != nil {
+			return nil, fmt.Errorf("获取交易数据失败: %w", err)
+		}
+
+		transactions = make([]TransactionItem, 0, len(txList))
+		for _, tx := range txList {
+			// 解析交易时间
+			transactionAt, _ := time.Parse("2006-01-02 15:04:05", tx.TransactionAt)
+			if transactionAt.IsZero() {
+				transactionAt = now
+			}
+
+			// 解析UUID
+			txID, err := uuid.Parse(tx.ID)
+			if err != nil {
+				continue // 跳过无效的交易记录
+			}
+
+			transactions = append(transactions, TransactionItem{
+				TransactionID: txID,
+				OrderNo:       tx.OrderNo,
+				PaymentNo:     tx.PaymentNo,
+				Amount:        tx.Amount,
+				Fee:           tx.Fee,
+				TransactionAt: transactionAt,
+			})
+		}
+	}
+
+	if len(transactions) == 0 {
+		return nil, fmt.Errorf("没有可结算的交易数据")
+	}
 
 	input := &CreateSettlementInput{
 		MerchantID:   merchantID,
 		Cycle:        cycle,
 		StartDate:    startDate,
 		EndDate:      endDate,
-		Transactions: []TransactionItem{}, // 实际需要从外部获取
+		Transactions: transactions,
 	}
 
 	return s.CreateSettlement(ctx, input)

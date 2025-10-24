@@ -44,6 +44,7 @@ type Settlement struct {
 	RefundCount     int              `gorm:"not null;default:0" json:"refund_count"`                     // 退款笔数
 	SettlementAmount int64           `gorm:"not null;default:0" json:"settlement_amount"`                // 结算金额（分）
 	Status          SettlementStatus `gorm:"type:varchar(20);not null;default:'pending'" json:"status"` // 状态
+	WithdrawalNo    string           `gorm:"type:varchar(64);index" json:"withdrawal_no"`                // 提现单号
 	ApprovedAt      *time.Time       `json:"approved_at"`                                                // 审批时间
 	ApprovedBy      *uuid.UUID       `gorm:"type:uuid" json:"approved_by"`                               // 审批人ID
 	ProcessedAt     *time.Time       `json:"processed_at"`                                               // 处理时间

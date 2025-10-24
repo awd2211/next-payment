@@ -12,11 +12,11 @@ import (
 // WithdrawalServer implements the WithdrawalService gRPC service
 type WithdrawalServer struct {
 	pb.UnimplementedWithdrawalServiceServer
-	withdrawalService *service.WithdrawalService
+	withdrawalService service.WithdrawalService
 }
 
 // NewWithdrawalServer creates a new Withdrawal gRPC server
-func NewWithdrawalServer(withdrawalService *service.WithdrawalService) *WithdrawalServer {
+func NewWithdrawalServer(withdrawalService service.WithdrawalService) *WithdrawalServer {
 	return &WithdrawalServer{
 		withdrawalService: withdrawalService,
 	}

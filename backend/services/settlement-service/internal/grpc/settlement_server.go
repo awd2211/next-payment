@@ -12,11 +12,11 @@ import (
 // SettlementServer implements the SettlementService gRPC service
 type SettlementServer struct {
 	pb.UnimplementedSettlementServiceServer
-	settlementService *service.SettlementService
+	settlementService service.SettlementService
 }
 
 // NewSettlementServer creates a new Settlement gRPC server
-func NewSettlementServer(settlementService *service.SettlementService) *SettlementServer {
+func NewSettlementServer(settlementService service.SettlementService) *SettlementServer {
 	return &SettlementServer{
 		settlementService: settlementService,
 	}

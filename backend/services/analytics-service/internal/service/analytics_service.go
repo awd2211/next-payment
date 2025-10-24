@@ -142,9 +142,53 @@ func (s *analyticsService) GetPaymentSummary(ctx context.Context, merchantID uui
 }
 
 func (s *analyticsService) RecordPayment(ctx context.Context, input *RecordPaymentInput) error {
-	// TODO: 实现支付记录逻辑
-	// 可以异步处理或批量更新指标
-	return nil
+	// 获取今天的日期（不包含时间部分）
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// 查询当天的支付指标
+	metrics, err := s.analyticsRepo.GetPaymentMetricsByDate(ctx, input.MerchantID, today)
+	if err != nil {
+		return fmt.Errorf("查询支付指标失败: %w", err)
+	}
+
+	// 如果不存在，创建新记录
+	if metrics == nil {
+		metrics = &model.PaymentMetrics{
+			MerchantID: input.MerchantID,
+			Date:       today,
+			Currency:   input.Currency,
+		}
+	}
+
+	// 更新指标
+	if input.IsRefund {
+		// 退款统计
+		metrics.TotalRefunds++
+		metrics.TotalRefundAmount += input.Amount
+	} else {
+		// 支付统计
+		metrics.TotalPayments++
+		metrics.TotalAmount += input.Amount
+
+		if input.Status == "success" {
+			metrics.SuccessPayments++
+			metrics.SuccessAmount += input.Amount
+		} else if input.Status == "failed" {
+			metrics.FailedPayments++
+		}
+	}
+
+	// 计算成功率和平均金额
+	if metrics.TotalPayments > 0 {
+		metrics.SuccessRate = float64(metrics.SuccessPayments) / float64(metrics.TotalPayments) * 100
+		metrics.AverageAmount = metrics.TotalAmount / int64(metrics.TotalPayments)
+	}
+
+	// 保存或更新
+	if metrics.ID == uuid.Nil {
+		return s.analyticsRepo.CreatePaymentMetrics(ctx, metrics)
+	}
+	return s.analyticsRepo.UpdatePaymentMetrics(ctx, metrics)
 }
 
 // Merchant Metrics
@@ -180,8 +224,49 @@ func (s *analyticsService) GetMerchantSummary(ctx context.Context, merchantID uu
 }
 
 func (s *analyticsService) RecordOrder(ctx context.Context, input *RecordOrderInput) error {
-	// TODO: 实现订单记录逻辑
-	return nil
+	// 获取今天的日期
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// 查询当天的商户指标
+	metrics, err := s.analyticsRepo.GetMerchantMetricsByDate(ctx, input.MerchantID, today)
+	if err != nil {
+		return fmt.Errorf("查询商户指标失败: %w", err)
+	}
+
+	// 如果不存在，创建新记录
+	if metrics == nil {
+		metrics = &model.MerchantMetrics{
+			MerchantID: input.MerchantID,
+			Date:       today,
+			Currency:   input.Currency,
+		}
+	}
+
+	// 更新指标
+	metrics.TotalOrders++
+	metrics.TotalRevenue += input.Amount
+	metrics.TotalFees += input.Fee
+	metrics.NetRevenue = metrics.TotalRevenue - metrics.TotalFees
+
+	// 根据订单状态更新
+	if input.Status == "completed" {
+		metrics.CompletedOrders++
+	} else if input.Status == "cancelled" {
+		metrics.CancelledOrders++
+	}
+
+	// 客户类型统计
+	if input.IsNewCustomer {
+		metrics.NewCustomers++
+	} else {
+		metrics.ReturningCustomers++
+	}
+
+	// 保存或更新
+	if metrics.ID == uuid.Nil {
+		return s.analyticsRepo.CreateMerchantMetrics(ctx, metrics)
+	}
+	return s.analyticsRepo.UpdateMerchantMetrics(ctx, metrics)
 }
 
 // Channel Metrics
@@ -222,8 +307,52 @@ func (s *analyticsService) GetChannelSummary(ctx context.Context, channelCode st
 }
 
 func (s *analyticsService) RecordChannelTransaction(ctx context.Context, input *RecordChannelTransactionInput) error {
-	// TODO: 实现渠道交易记录逻辑
-	return nil
+	// 获取今天的日期
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// 查询当天的渠道指标
+	metrics, err := s.analyticsRepo.GetChannelMetricsByDate(ctx, input.ChannelCode, today)
+	if err != nil {
+		return fmt.Errorf("查询渠道指标失败: %w", err)
+	}
+
+	// 如果不存在，创建新记录
+	if metrics == nil {
+		metrics = &model.ChannelMetrics{
+			ChannelCode: input.ChannelCode,
+			Date:        today,
+			Currency:    input.Currency,
+		}
+	}
+
+	// 更新指标
+	metrics.TotalTransactions++
+	metrics.TotalAmount += input.Amount
+
+	// 根据交易状态更新
+	if input.Status == "success" {
+		metrics.SuccessTransactions++
+		metrics.SuccessAmount += input.Amount
+	} else if input.Status == "failed" {
+		metrics.FailedTransactions++
+	}
+
+	// 更新平均延迟（采用滑动平均）
+	if input.Latency > 0 {
+		totalLatency := metrics.AverageLatency * (metrics.TotalTransactions - 1)
+		metrics.AverageLatency = (totalLatency + input.Latency) / metrics.TotalTransactions
+	}
+
+	// 计算成功率
+	if metrics.TotalTransactions > 0 {
+		metrics.SuccessRate = float64(metrics.SuccessTransactions) / float64(metrics.TotalTransactions) * 100
+	}
+
+	// 保存或更新
+	if metrics.ID == uuid.Nil {
+		return s.analyticsRepo.CreateChannelMetrics(ctx, metrics)
+	}
+	return s.analyticsRepo.UpdateChannelMetrics(ctx, metrics)
 }
 
 // Realtime Stats

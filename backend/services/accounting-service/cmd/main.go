@@ -79,6 +79,7 @@ func main() {
 		&model.InvoiceItem{},
 		&model.Reconciliation{},
 		&model.ReconciliationItem{},
+		&model.CurrencyConversion{},
 	); err != nil {
 		logger.Fatal("数据库迁移失败")
 		log.Fatalf("Error: %v", err)
@@ -168,7 +169,7 @@ func main() {
 	// 启动 gRPC 服务器（独立 goroutine）
 	grpcPort := config.GetEnvInt("GRPC_PORT", 50007)
 	gRPCServer := pkggrpc.NewSimpleServer()
-	accountingGrpcServer := grpcServer.NewAccountingServer(accountService)
+	accountingGrpcServer := grpcServer.NewAccountingServer()
 	pb.RegisterAccountingServiceServer(gRPCServer, accountingGrpcServer)
 
 	go func() {

@@ -326,3 +326,48 @@ const (
 	ReconciliationItemTypeRefund  = "refund"  // 退款
 	ReconciliationItemTypeFee     = "fee"     // 手续费
 )
+
+// CurrencyConversion 货币转换记录
+type CurrencyConversion struct {
+	ID                 uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ConversionNo       string         `gorm:"type:varchar(64);unique;not null;index" json:"conversion_no"`        // 转换单号
+	MerchantID         uuid.UUID      `gorm:"type:uuid;not null;index" json:"merchant_id"`                        // 商户ID
+	SourceAccountID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"source_account_id"`                  // 源账户ID
+	TargetAccountID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"target_account_id"`                  // 目标账户ID
+	SourceCurrency     string         `gorm:"type:varchar(10);not null" json:"source_currency"`                   // 源货币
+	TargetCurrency     string         `gorm:"type:varchar(10);not null" json:"target_currency"`                   // 目标货币
+	SourceAmount       int64          `gorm:"type:bigint;not null" json:"source_amount"`                          // 源货币金额（分）
+	TargetAmount       int64          `gorm:"type:bigint;not null" json:"target_amount"`                          // 目标货币金额（分）
+	ExchangeRate       float64        `gorm:"type:decimal(20,8);not null" json:"exchange_rate"`                   // 汇率
+	FeeAmount          int64          `gorm:"type:bigint;default:0" json:"fee_amount"`                            // 手续费（分，以源货币计）
+	FeePercentage      float64        `gorm:"type:decimal(5,4);default:0" json:"fee_percentage"`                  // 手续费率（如0.005表示0.5%）
+	Status             string         `gorm:"type:varchar(20);not null;default:'pending'" json:"status"`          // 状态：pending, completed, failed, cancelled
+	SourceTransactionNo string        `gorm:"type:varchar(64);index" json:"source_transaction_no"`                // 源账户交易流水号
+	TargetTransactionNo string        `gorm:"type:varchar(64);index" json:"target_transaction_no"`                // 目标账户交易流水号
+	RequestedBy        uuid.UUID      `gorm:"type:uuid" json:"requested_by"`                                      // 请求人ID
+	ProcessedAt        *time.Time     `gorm:"type:timestamptz" json:"processed_at"`                               // 处理时间
+	Reason             string         `gorm:"type:text" json:"reason"`                                            // 转换原因
+	Notes              string         `gorm:"type:text" json:"notes"`                                             // 备注
+	CreatedAt          time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	UpdatedAt          time.Time      `gorm:"type:timestamptz;default:now()" json:"updated_at"`
+	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// TableName 指定表名
+func (CurrencyConversion) TableName() string {
+	return "currency_conversions"
+}
+
+// 货币转换状态常量
+const (
+	ConversionStatusPending   = "pending"   // 待处理
+	ConversionStatusCompleted = "completed" // 已完成
+	ConversionStatusFailed    = "failed"    // 失败
+	ConversionStatusCancelled = "cancelled" // 已取消
+)
+
+// 交易类型常量扩展（添加货币转换）
+const (
+	TransactionTypeCurrencyConversionOut = "currency_conversion_out" // 货币转换出账
+	TransactionTypeCurrencyConversionIn  = "currency_conversion_in"  // 货币转换入账
+)

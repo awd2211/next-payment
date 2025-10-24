@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
+	"payment-platform/merchant-service/internal/client"
 )
 
 // DashboardService Dashboard聚合服务接口
@@ -12,18 +14,33 @@ type DashboardService interface {
 	GetDashboard(ctx context.Context, merchantID uuid.UUID) (*DashboardData, error)
 	GetTransactionSummary(ctx context.Context, merchantID uuid.UUID, startDate, endDate string) (*TransactionSummary, error)
 	GetBalanceInfo(ctx context.Context, merchantID uuid.UUID) (*BalanceInfo, error)
+	GetTransactions(ctx context.Context, merchantID uuid.UUID, filter *TransactionFilter) (*TransactionListResult, error)
+	GetSettlements(ctx context.Context, merchantID uuid.UUID, page, pageSize int) (*SettlementListResult, error)
 }
 
 type dashboardService struct {
-	// TODO: 添加HTTP客户端调用其他微服务
-	// analyticsClient  *http.Client
-	// accountingClient *http.Client
-	// riskClient       *http.Client
+	analyticsClient    *client.AnalyticsClient
+	accountingClient   *client.AccountingClient
+	riskClient         *client.RiskClient
+	notificationClient *client.NotificationClient
+	paymentClient      *client.PaymentClient
 }
 
 // NewDashboardService 创建Dashboard服务实例
-func NewDashboardService() DashboardService {
-	return &dashboardService{}
+func NewDashboardService(
+	analyticsClient *client.AnalyticsClient,
+	accountingClient *client.AccountingClient,
+	riskClient *client.RiskClient,
+	notificationClient *client.NotificationClient,
+	paymentClient *client.PaymentClient,
+) DashboardService {
+	return &dashboardService{
+		analyticsClient:    analyticsClient,
+		accountingClient:   accountingClient,
+		riskClient:         riskClient,
+		notificationClient: notificationClient,
+		paymentClient:      paymentClient,
+	}
 }
 
 // DashboardData Dashboard数据
@@ -111,69 +128,109 @@ type AccountBalance struct {
 
 // GetDashboard 获取Dashboard数据
 func (s *dashboardService) GetDashboard(ctx context.Context, merchantID uuid.UUID) (*DashboardData, error) {
-	// TODO: 调用 analytics-service 获取交易统计数据
-	// TODO: 调用 accounting-service 获取余额信息
-	// TODO: 调用 risk-service 获取风控信息
-	// TODO: 调用 notification-service 获取未读通知数
+	dashboard := &DashboardData{}
 
-	// 示例数据（实际应该从各个微服务聚合）
-	dashboard := &DashboardData{
-		TodayPayments:    150,
-		TodayAmount:      1500000, // $15,000
-		TodaySuccessRate: 98.5,
+	// 调用 analytics-service 获取交易统计数据
+	if s.analyticsClient != nil {
+		stats, err := s.analyticsClient.GetStatistics(ctx, merchantID)
+		if err != nil {
+			// 统计数据获取失败不影响整体，记录日志继续
+			fmt.Printf("获取统计数据失败: %v\n", err)
+		} else {
+			dashboard.TodayPayments = stats.TodayPayments
+			dashboard.TodayAmount = stats.TodayAmount
+			dashboard.TodaySuccessRate = stats.TodaySuccessRate
+			dashboard.MonthPayments = stats.MonthPayments
+			dashboard.MonthAmount = stats.MonthAmount
+			dashboard.MonthSuccessRate = stats.MonthSuccessRate
 
-		MonthPayments:    4500,
-		MonthAmount:      45000000, // $450,000
-		MonthSuccessRate: 97.8,
-
-		AvailableBalance:  10000000, // $100,000
-		FrozenBalance:     500000,   // $5,000
-		PendingSettlement: 2000000,  // $20,000
-
-		RiskLevel:      "low",
-		PendingReviews: 3,
-
-		PendingWithdrawals:  2,
-		UnreadNotifications: 5,
-
-		PaymentTrend: []DailyData{
-			{Date: "2025-01-17", Payments: 120, Amount: 1200000, SuccessRate: 98.0},
-			{Date: "2025-01-18", Payments: 135, Amount: 1350000, SuccessRate: 97.5},
-			{Date: "2025-01-19", Payments: 142, Amount: 1420000, SuccessRate: 98.2},
-			{Date: "2025-01-20", Payments: 158, Amount: 1580000, SuccessRate: 98.5},
-			{Date: "2025-01-21", Payments: 165, Amount: 1650000, SuccessRate: 98.8},
-			{Date: "2025-01-22", Payments: 155, Amount: 1550000, SuccessRate: 97.9},
-			{Date: "2025-01-23", Payments: 150, Amount: 1500000, SuccessRate: 98.5},
-		},
+			// 转换趋势数据
+			dashboard.PaymentTrend = make([]DailyData, len(stats.PaymentTrend))
+			for i, trend := range stats.PaymentTrend {
+				dashboard.PaymentTrend[i] = DailyData{
+					Date:        trend.Date,
+					Payments:    trend.Payments,
+					Amount:      trend.Amount,
+					SuccessRate: trend.SuccessRate,
+				}
+			}
+		}
 	}
+
+	// 调用 accounting-service 获取余额信息
+	if s.accountingClient != nil {
+		balance, err := s.accountingClient.GetBalanceSummary(ctx, merchantID)
+		if err != nil {
+			fmt.Printf("获取余额信息失败: %v\n", err)
+		} else {
+			dashboard.AvailableBalance = balance.AvailableBalance
+			dashboard.FrozenBalance = balance.FrozenBalance
+			dashboard.PendingSettlement = balance.PendingSettlement
+		}
+	}
+
+	// 调用 risk-service 获取风控信息
+	if s.riskClient != nil {
+		risk, err := s.riskClient.GetRiskInfo(ctx, merchantID)
+		if err != nil {
+			fmt.Printf("获取风控信息失败: %v\n", err)
+		} else {
+			dashboard.RiskLevel = risk.RiskLevel
+			dashboard.PendingReviews = risk.PendingReviews
+		}
+	}
+
+	// 调用 notification-service 获取未读通知数
+	if s.notificationClient != nil {
+		unread, err := s.notificationClient.GetUnreadCount(ctx, merchantID)
+		if err != nil {
+			fmt.Printf("获取未读通知数失败: %v\n", err)
+		} else {
+			dashboard.UnreadNotifications = unread.Total
+		}
+	}
+
+	// 待处理提现数（目前设为0，等待 withdrawal-service 实现）
+	dashboard.PendingWithdrawals = 0
 
 	return dashboard, nil
 }
 
 // GetTransactionSummary 获取交易汇总
 func (s *dashboardService) GetTransactionSummary(ctx context.Context, merchantID uuid.UUID, startDate, endDate string) (*TransactionSummary, error) {
-	// TODO: 调用 analytics-service 获取交易汇总数据
-	// TODO: 调用 order-service 获取订单数据
+	summary := &TransactionSummary{}
 
-	// 示例数据
-	summary := &TransactionSummary{
-		TotalPayments:     5000,
-		SuccessPayments:   4900,
-		FailedPayments:    100,
-		TotalAmount:       50000000, // $500,000
-		SuccessAmount:     49000000, // $490,000
-		SuccessRate:       98.0,
-		AverageAmount:     10000, // $100
+	// 调用 analytics-service 获取交易汇总数据
+	if s.analyticsClient != nil {
+		data, err := s.analyticsClient.GetTransactionSummary(ctx, merchantID, startDate, endDate)
+		if err != nil {
+			return nil, fmt.Errorf("获取交易汇总失败: %w", err)
+		}
 
-		TotalRefunds:      50,
-		TotalRefundAmount: 500000, // $5,000
-		RefundRate:        1.0,
+		summary.TotalPayments = data.TotalPayments
+		summary.SuccessPayments = data.SuccessPayments
+		summary.FailedPayments = data.FailedPayments
+		summary.TotalAmount = data.TotalAmount
+		summary.SuccessAmount = data.SuccessAmount
+		summary.SuccessRate = data.SuccessRate
+		summary.AverageAmount = data.AverageAmount
+		summary.TotalRefunds = data.TotalRefunds
+		summary.TotalRefundAmount = data.TotalRefundAmount
+		summary.RefundRate = data.RefundRate
 
-		ChannelBreakdown: []ChannelData{
-			{Channel: "stripe", Payments: 3000, Amount: 30000000, SuccessRate: 98.5, Percentage: 60.0},
-			{Channel: "paypal", Payments: 1500, Amount: 15000000, SuccessRate: 97.5, Percentage: 30.0},
-			{Channel: "crypto", Payments: 500, Amount: 5000000, SuccessRate: 96.0, Percentage: 10.0},
-		},
+		// 转换渠道分布数据
+		summary.ChannelBreakdown = make([]ChannelData, len(data.ChannelBreakdown))
+		for i, ch := range data.ChannelBreakdown {
+			summary.ChannelBreakdown[i] = ChannelData{
+				Channel:     ch.Channel,
+				Payments:    ch.Payments,
+				Amount:      ch.Amount,
+				SuccessRate: ch.SuccessRate,
+				Percentage:  ch.Percentage,
+			}
+		}
+	} else {
+		return nil, fmt.Errorf("analytics客户端未初始化")
 	}
 
 	return summary, nil
@@ -181,23 +238,33 @@ func (s *dashboardService) GetTransactionSummary(ctx context.Context, merchantID
 
 // GetBalanceInfo 获取余额信息
 func (s *dashboardService) GetBalanceInfo(ctx context.Context, merchantID uuid.UUID) (*BalanceInfo, error) {
-	// TODO: 调用 accounting-service 获取余额信息
-	// TODO: 调用 accounting-service 获取各账户明细
+	if s.accountingClient == nil {
+		return nil, fmt.Errorf("accounting客户端未初始化")
+	}
 
-	// 示例数据
+	// 调用 accounting-service 获取余额汇总和各账户明细
+	balance, err := s.accountingClient.GetBalanceSummary(ctx, merchantID)
+	if err != nil {
+		return nil, fmt.Errorf("获取余额信息失败: %w", err)
+	}
+
 	balanceInfo := &BalanceInfo{
-		Currency:          "USD",
-		AvailableBalance:  10000000, // $100,000
-		FrozenBalance:     500000,   // $5,000
-		TotalBalance:      10500000, // $105,000
-		PendingSettlement: 2000000,  // $20,000
-		InTransit:         300000,   // $3,000
+		Currency:          "USD", // 默认币种，后续可以从配置获取
+		AvailableBalance:  balance.AvailableBalance,
+		FrozenBalance:     balance.FrozenBalance,
+		TotalBalance:      balance.TotalBalance,
+		PendingSettlement: balance.PendingSettlement,
+		InTransit:         balance.InTransit,
+		Accounts:          make([]AccountBalance, len(balance.Accounts)),
+	}
 
-		Accounts: []AccountBalance{
-			{AccountType: "operating", Balance: 8000000, Currency: "USD"},   // $80,000
-			{AccountType: "reserve", Balance: 2000000, Currency: "USD"},     // $20,000
-			{AccountType: "settlement", Balance: 500000, Currency: "USD"},   // $5,000
-		},
+	// 转换账户明细
+	for i, acc := range balance.Accounts {
+		balanceInfo.Accounts[i] = AccountBalance{
+			AccountType: acc.AccountType,
+			Balance:     acc.Balance,
+			Currency:    acc.Currency,
+		}
 	}
 
 	return balanceInfo, nil
@@ -239,15 +306,71 @@ type TransactionListResult struct {
 }
 
 // GetTransactions 获取交易列表（聚合查询）
-func GetTransactions(ctx context.Context, merchantID uuid.UUID, filter *TransactionFilter) (*TransactionListResult, error) {
-	// TODO: 调用 order-service 或 payment-gateway 获取交易列表
+func (s *dashboardService) GetTransactions(ctx context.Context, merchantID uuid.UUID, filter *TransactionFilter) (*TransactionListResult, error) {
+	if s.paymentClient == nil {
+		return nil, fmt.Errorf("payment客户端未初始化")
+	}
 
-	return &TransactionListResult{
-		List:     []Transaction{},
-		Total:    0,
-		Page:     filter.Page,
-		PageSize: filter.PageSize,
-	}, fmt.Errorf("功能待实现：需要调用payment-gateway或order-service")
+	// 构建查询参数
+	params := make(map[string]string)
+	if filter.StartDate != "" {
+		params["start_date"] = filter.StartDate
+	}
+	if filter.EndDate != "" {
+		params["end_date"] = filter.EndDate
+	}
+	if filter.Status != "" {
+		params["status"] = filter.Status
+	}
+	if filter.Channel != "" {
+		params["channel"] = filter.Channel
+	}
+	if filter.PaymentMethod != "" {
+		params["payment_method"] = filter.PaymentMethod
+	}
+	if filter.MinAmount > 0 {
+		params["min_amount"] = strconv.FormatInt(filter.MinAmount, 10)
+	}
+	if filter.MaxAmount > 0 {
+		params["max_amount"] = strconv.FormatInt(filter.MaxAmount, 10)
+	}
+	if filter.Page > 0 {
+		params["page"] = strconv.Itoa(filter.Page)
+	}
+	if filter.PageSize > 0 {
+		params["page_size"] = strconv.Itoa(filter.PageSize)
+	}
+
+	// 调用 payment-gateway 获取交易列表
+	data, err := s.paymentClient.GetPayments(ctx, merchantID, params)
+	if err != nil {
+		return nil, fmt.Errorf("获取交易列表失败: %w", err)
+	}
+
+	// 转换数据格式
+	result := &TransactionListResult{
+		Total:    data.Total,
+		Page:     data.Page,
+		PageSize: data.PageSize,
+		List:     make([]Transaction, len(data.List)),
+	}
+
+	for i, p := range data.List {
+		result.List[i] = Transaction{
+			ID:            p.ID,
+			OrderNo:       p.OrderNo,
+			PaymentNo:     p.PaymentNo,
+			Amount:        p.Amount,
+			Currency:      p.Currency,
+			Status:        p.Status,
+			Channel:       p.Channel,
+			PaymentMethod: p.PayMethod,
+			CustomerEmail: p.CustomerEmail,
+			CreatedAt:     p.CreatedAt,
+		}
+	}
+
+	return result, nil
 }
 
 // Settlement 结算记录
@@ -274,13 +397,40 @@ type SettlementListResult struct {
 }
 
 // GetSettlements 获取结算列表（聚合查询）
-func GetSettlements(ctx context.Context, merchantID uuid.UUID, page, pageSize int) (*SettlementListResult, error) {
-	// TODO: 调用 accounting-service 获取结算列表
+func (s *dashboardService) GetSettlements(ctx context.Context, merchantID uuid.UUID, page, pageSize int) (*SettlementListResult, error) {
+	if s.accountingClient == nil {
+		return nil, fmt.Errorf("accounting客户端未初始化")
+	}
 
-	return &SettlementListResult{
-		List:     []Settlement{},
-		Total:    0,
-		Page:     page,
-		PageSize: pageSize,
-	}, fmt.Errorf("功能待实现：需要调用accounting-service")
+	// 调用 accounting-service 获取结算列表
+	data, err := s.accountingClient.GetSettlements(ctx, merchantID, page, pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("获取结算列表失败: %w", err)
+	}
+
+	// 转换数据格式
+	result := &SettlementListResult{
+		Total:    data.Total,
+		Page:     data.Page,
+		PageSize: data.PageSize,
+		List:     make([]Settlement, len(data.List)),
+	}
+
+	for i, s := range data.List {
+		result.List[i] = Settlement{
+			ID:           s.ID,
+			SettlementNo: s.SettlementNo,
+			PeriodStart:  s.PeriodStart,
+			PeriodEnd:    s.PeriodEnd,
+			TotalAmount:  s.TotalAmount,
+			FeeAmount:    s.FeeAmount,
+			NetAmount:    s.NetAmount,
+			Currency:     s.Currency,
+			Status:       s.Status,
+			PaymentCount: s.PaymentCount,
+			SettledAt:    s.SettledAt,
+		}
+	}
+
+	return result, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/payment-platform/pkg/middleware"
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"payment-platform/settlement-service/internal/client"
 	"payment-platform/settlement-service/internal/handler"
 	"payment-platform/settlement-service/internal/model"
 	"payment-platform/settlement-service/internal/repository"
@@ -118,8 +119,22 @@ func main() {
 	// 初始化Repository
 	settlementRepo := repository.NewSettlementRepository(database)
 
+	// 初始化HTTP客户端
+	accountingServiceURL := config.GetEnv("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
+	withdrawalServiceURL := config.GetEnv("WITHDRAWAL_SERVICE_URL", "http://localhost:40014")
+
+	accountingClient := client.NewAccountingClient(accountingServiceURL)
+	withdrawalClient := client.NewWithdrawalClient(withdrawalServiceURL)
+
+	logger.Info("HTTP客户端初始化完成")
+
 	// 初始化Service
-	settlementService := service.NewSettlementService(database, settlementRepo)
+	settlementService := service.NewSettlementService(
+		database,
+		settlementRepo,
+		accountingClient,
+		withdrawalClient,
+	)
 
 	// 初始化Handler
 	settlementHandler := handler.NewSettlementHandler(settlementService)

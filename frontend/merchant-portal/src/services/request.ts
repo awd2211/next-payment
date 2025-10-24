@@ -38,9 +38,9 @@ const refreshAccessToken = async (): Promise<string> => {
 
       if (response.data.code === 0 && response.data.data) {
         const { token, refresh_token } = response.data.data
-        const { admin } = useAuthStore.getState()
-        if (admin) {
-          useAuthStore.getState().setAuth(token, refresh_token, admin)
+        const { merchant } = useAuthStore.getState()
+        if (merchant) {
+          useAuthStore.getState().setAuth(token, refresh_token, merchant)
         }
         return token
       } else {

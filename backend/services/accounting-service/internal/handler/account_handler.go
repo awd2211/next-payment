@@ -101,6 +101,16 @@ func (h *AccountHandler) RegisterRoutes(router *gin.Engine) {
 			balances.GET("/merchants/:merchantID/account-types/:accountType", h.GetBalanceByAccountType)
 			balances.GET("/merchants/:merchantID/currencies", h.GetAllCurrencyBalances)
 		}
+
+		// 货币转换管理
+		conversions := v1.Group("/conversions")
+		{
+			conversions.POST("", h.CreateCurrencyConversion)
+			conversions.GET("/:conversionNo", h.GetCurrencyConversion)
+			conversions.GET("", h.ListCurrencyConversions)
+			conversions.POST("/:conversionNo/process", h.ProcessCurrencyConversion)
+			conversions.POST("/:conversionNo/cancel", h.CancelCurrencyConversion)
+		}
 	}
 }
 
@@ -1367,5 +1377,189 @@ func (h *AccountHandler) GetAllCurrencyBalances(c *gin.Context) {
 
 	traceID := middleware.GetRequestID(c)
 	resp := errors.NewSuccessResponse(summaries).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// Currency Conversion Management Handlers
+
+// CreateCurrencyConversion 创建货币转换
+func (h *AccountHandler) CreateCurrencyConversion(c *gin.Context) {
+	var input service.CreateCurrencyConversionInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	conversion, err := h.accountService.CreateCurrencyConversion(c.Request.Context(), &input)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建货币转换失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(conversion).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// GetCurrencyConversion 获取货币转换记录
+func (h *AccountHandler) GetCurrencyConversion(c *gin.Context) {
+	conversionNo := c.Param("conversionNo")
+
+	conversion, err := h.accountService.GetCurrencyConversion(c.Request.Context(), conversionNo)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "获取货币转换记录失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(conversion).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// ListCurrencyConversions 货币转换列表
+func (h *AccountHandler) ListCurrencyConversions(c *gin.Context) {
+	query := &repository.CurrencyConversionQuery{
+		Status:         c.Query("status"),
+		SourceCurrency: c.Query("source_currency"),
+		TargetCurrency: c.Query("target_currency"),
+	}
+
+	if merchantIDStr := c.Query("merchant_id"); merchantIDStr != "" {
+		merchantID, err := uuid.Parse(merchantIDStr)
+		if err != nil {
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的商户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
+			return
+		}
+		query.MerchantID = &merchantID
+	}
+
+	if sourceAccountIDStr := c.Query("source_account_id"); sourceAccountIDStr != "" {
+		sourceAccountID, err := uuid.Parse(sourceAccountIDStr)
+		if err != nil {
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的源账户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
+			return
+		}
+		query.SourceAccountID = &sourceAccountID
+	}
+
+	if targetAccountIDStr := c.Query("target_account_id"); targetAccountIDStr != "" {
+		targetAccountID, err := uuid.Parse(targetAccountIDStr)
+		if err != nil {
+			traceID := middleware.GetRequestID(c)
+			resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的目标账户ID", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusBadRequest, resp)
+			return
+		}
+		query.TargetAccountID = &targetAccountID
+	}
+
+	if startTimeStr := c.Query("start_time"); startTimeStr != "" {
+		startTime, err := time.Parse(time.RFC3339, startTimeStr)
+		if err == nil {
+			query.StartTime = &startTime
+		}
+	}
+	if endTimeStr := c.Query("end_time"); endTimeStr != "" {
+		endTime, err := time.Parse(time.RFC3339, endTimeStr)
+		if err == nil {
+			query.EndTime = &endTime
+		}
+	}
+
+	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	conversions, total, err := h.accountService.ListCurrencyConversions(c.Request.Context(), query)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询货币转换列表失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(PageResponse{
+		List:     conversions,
+		Total:    total,
+		Page:     query.Page,
+		PageSize: query.PageSize,
+	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// ProcessCurrencyConversion 处理货币转换
+func (h *AccountHandler) ProcessCurrencyConversion(c *gin.Context) {
+	conversionNo := c.Param("conversionNo")
+
+	if err := h.accountService.ProcessCurrencyConversion(c.Request.Context(), conversionNo); err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "处理货币转换失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// CancelCurrencyConversion 取消货币转换
+func (h *AccountHandler) CancelCurrencyConversion(c *gin.Context) {
+	conversionNo := c.Param("conversionNo")
+
+	var req struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	if err := h.accountService.CancelCurrencyConversion(c.Request.Context(), conversionNo, req.Reason); err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "取消货币转换失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(nil).WithTraceID(traceID)
 	c.JSON(http.StatusOK, resp)
 }

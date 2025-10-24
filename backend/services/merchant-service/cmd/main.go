@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"payment-platform/merchant-service/internal/client"
 	"payment-platform/merchant-service/internal/grpc"
 	"payment-platform/merchant-service/internal/handler"
 	"payment-platform/merchant-service/internal/model"
@@ -158,8 +159,29 @@ func main() {
 		merchantRepo,
 	)
 
+	// 初始化HTTP客户端（用于Dashboard聚合）
+	analyticsServiceURL := config.GetEnv("ANALYTICS_SERVICE_URL", "http://localhost:40009")
+	accountingServiceURL := config.GetEnv("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
+	riskServiceURL := config.GetEnv("RISK_SERVICE_URL", "http://localhost:40006")
+	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	paymentServiceURL := config.GetEnv("PAYMENT_SERVICE_URL", "http://localhost:40003")
+
+	analyticsClient := client.NewAnalyticsClient(analyticsServiceURL)
+	accountingClient := client.NewAccountingClient(accountingServiceURL)
+	riskClient := client.NewRiskClient(riskServiceURL)
+	notificationClient := client.NewNotificationClient(notificationServiceURL)
+	paymentClient := client.NewPaymentClient(paymentServiceURL)
+
+	logger.Info("HTTP客户端初始化完成")
+
 	// Dashboard聚合服务
-	dashboardService := service.NewDashboardService()
+	dashboardService := service.NewDashboardService(
+		analyticsClient,
+		accountingClient,
+		riskClient,
+		notificationClient,
+		paymentClient,
+	)
 
 	// 初始化gRPC Server（并行启动）
 	grpcPort := config.GetEnvInt("GRPC_PORT", 50002)

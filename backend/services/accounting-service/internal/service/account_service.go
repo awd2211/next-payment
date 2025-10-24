@@ -68,6 +68,13 @@ type AccountService interface {
 	GetBalanceByCurrency(ctx context.Context, merchantID uuid.UUID, currency string) (*CurrencyBalanceSummary, error)
 	GetBalanceByAccountType(ctx context.Context, merchantID uuid.UUID, accountType string) (*AccountTypeBalanceSummary, error)
 	GetAllCurrencyBalances(ctx context.Context, merchantID uuid.UUID) ([]*CurrencyBalanceSummary, error)
+
+	// 货币转换管理
+	CreateCurrencyConversion(ctx context.Context, input *CreateCurrencyConversionInput) (*model.CurrencyConversion, error)
+	GetCurrencyConversion(ctx context.Context, conversionNo string) (*model.CurrencyConversion, error)
+	ListCurrencyConversions(ctx context.Context, query *repository.CurrencyConversionQuery) ([]*model.CurrencyConversion, int64, error)
+	ProcessCurrencyConversion(ctx context.Context, conversionNo string) error
+	CancelCurrencyConversion(ctx context.Context, conversionNo string, reason string) error
 }
 
 type accountService struct {
@@ -165,6 +172,17 @@ type ReconciliationItemInput struct {
 	ExternalAmount int64  `json:"external_amount"`
 	Status         string `json:"status"`
 	Description    string `json:"description"`
+}
+
+// CreateCurrencyConversionInput 创建货币转换输入
+type CreateCurrencyConversionInput struct {
+	MerchantID     uuid.UUID `json:"merchant_id" binding:"required"`
+	SourceCurrency string    `json:"source_currency" binding:"required"` // 源货币（如 USD）
+	TargetCurrency string    `json:"target_currency" binding:"required"` // 目标货币（如 EUR）
+	SourceAmount   int64     `json:"source_amount" binding:"required"`   // 源货币金额（分）
+	Reason         string    `json:"reason"`                             // 转换原因
+	RequestedBy    uuid.UUID `json:"requested_by"`                       // 请求人ID
+	Notes          string    `json:"notes"`                              // 备注
 }
 
 // Balance Aggregation Response Structures
@@ -1523,4 +1541,254 @@ func (s *accountService) GetAllCurrencyBalances(ctx context.Context, merchantID 
 	}
 
 	return result, nil
+}
+
+// ==================== 货币转换管理 ====================
+
+// CreateCurrencyConversion 创建货币转换
+func (s *accountService) CreateCurrencyConversion(ctx context.Context, input *CreateCurrencyConversionInput) (*model.CurrencyConversion, error) {
+	// 1. 验证输入
+	if input.SourceCurrency == input.TargetCurrency {
+		return nil, fmt.Errorf("源货币和目标货币不能相同")
+	}
+
+	if input.SourceAmount <= 0 {
+		return nil, fmt.Errorf("转换金额必须大于0")
+	}
+
+	// 2. 查询或创建源货币账户
+	sourceAccount, err := s.accountRepo.GetAccountByMerchant(ctx, input.MerchantID, model.AccountTypeOperating, input.SourceCurrency)
+	if err != nil {
+		return nil, fmt.Errorf("查询源货币账户失败: %w", err)
+	}
+	if sourceAccount == nil {
+		return nil, fmt.Errorf("源货币账户不存在: %s", input.SourceCurrency)
+	}
+
+	// 3. 检查余额是否足够
+	if sourceAccount.Balance < input.SourceAmount {
+		return nil, fmt.Errorf("余额不足，可用余额: %d 分，需要: %d 分", sourceAccount.Balance, input.SourceAmount)
+	}
+
+	// 4. 查询或创建目标货币账户
+	targetAccount, err := s.accountRepo.GetAccountByMerchant(ctx, input.MerchantID, model.AccountTypeOperating, input.TargetCurrency)
+	if err != nil {
+		return nil, fmt.Errorf("查询目标货币账户失败: %w", err)
+	}
+
+	// 如果目标账户不存在，自动创建
+	if targetAccount == nil {
+		createInput := &CreateAccountInput{
+			MerchantID:  input.MerchantID,
+			AccountType: model.AccountTypeOperating,
+			Currency:    input.TargetCurrency,
+		}
+		targetAccount, err = s.CreateAccount(ctx, createInput)
+		if err != nil {
+			return nil, fmt.Errorf("创建目标货币账户失败: %w", err)
+		}
+	}
+
+	// 5. 获取实时汇率（TODO: 调用 channel-adapter 的汇率API）
+	// 临时使用固定汇率，生产环境需要调用汇率服务
+	exchangeRate := s.getExchangeRate(input.SourceCurrency, input.TargetCurrency)
+	if exchangeRate <= 0 {
+		return nil, fmt.Errorf("无法获取汇率: %s -> %s", input.SourceCurrency, input.TargetCurrency)
+	}
+
+	// 6. 计算目标货币金额
+	targetAmount := int64(float64(input.SourceAmount) * exchangeRate)
+
+	// 7. 计算手续费（0.5%）
+	feePercentage := 0.005
+	feeAmount := int64(float64(input.SourceAmount) * feePercentage)
+
+	// 8. 生成转换单号
+	conversionNo, err := s.generateConversionNo()
+	if err != nil {
+		return nil, fmt.Errorf("生成转换单号失败: %w", err)
+	}
+
+	// 9. 创建货币转换记录
+	conversion := &model.CurrencyConversion{
+		ConversionNo:    conversionNo,
+		MerchantID:      input.MerchantID,
+		SourceAccountID: sourceAccount.ID,
+		TargetAccountID: targetAccount.ID,
+		SourceCurrency:  input.SourceCurrency,
+		TargetCurrency:  input.TargetCurrency,
+		SourceAmount:    input.SourceAmount,
+		TargetAmount:    targetAmount,
+		ExchangeRate:    exchangeRate,
+		FeeAmount:       feeAmount,
+		FeePercentage:   feePercentage,
+		Status:          model.ConversionStatusPending,
+		RequestedBy:     input.RequestedBy,
+		Reason:          input.Reason,
+		Notes:           input.Notes,
+	}
+
+	if err := s.accountRepo.CreateCurrencyConversion(ctx, conversion); err != nil {
+		return nil, fmt.Errorf("创建货币转换记录失败: %w", err)
+	}
+
+	return conversion, nil
+}
+
+// ProcessCurrencyConversion 处理货币转换（执行实际的账户变动）
+func (s *accountService) ProcessCurrencyConversion(ctx context.Context, conversionNo string) error {
+	// 1. 查询转换记录
+	conversion, err := s.accountRepo.GetCurrencyConversionByNo(ctx, conversionNo)
+	if err != nil {
+		return fmt.Errorf("查询货币转换记录失败: %w", err)
+	}
+	if conversion == nil {
+		return fmt.Errorf("货币转换记录不存在: %s", conversionNo)
+	}
+
+	// 2. 检查状态
+	if conversion.Status != model.ConversionStatusPending {
+		return fmt.Errorf("货币转换状态不是待处理: %s", conversion.Status)
+	}
+
+	// 3. 使用事务执行转换
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 3.1 从源账户扣款（包含手续费）
+		totalDeduction := conversion.SourceAmount + conversion.FeeAmount
+		sourceTransactionInput := &CreateTransactionInput{
+			AccountID:       conversion.SourceAccountID,
+			TransactionType: model.TransactionTypeCurrencyConversionOut,
+			RelatedNo:       conversionNo,
+			Amount:          -totalDeduction, // 负数表示出账
+			Description:     fmt.Sprintf("货币转换出账: %s -> %s (含手续费)", conversion.SourceCurrency, conversion.TargetCurrency),
+		}
+
+		sourceTx, err := s.CreateTransaction(ctx, sourceTransactionInput)
+		if err != nil {
+			return fmt.Errorf("创建源账户交易失败: %w", err)
+		}
+
+		// 3.2 向目标账户入账
+		targetTransactionInput := &CreateTransactionInput{
+			AccountID:       conversion.TargetAccountID,
+			TransactionType: model.TransactionTypeCurrencyConversionIn,
+			RelatedNo:       conversionNo,
+			Amount:          conversion.TargetAmount, // 正数表示入账
+			Description:     fmt.Sprintf("货币转换入账: %s -> %s", conversion.SourceCurrency, conversion.TargetCurrency),
+		}
+
+		targetTx, err := s.CreateTransaction(ctx, targetTransactionInput)
+		if err != nil {
+			return fmt.Errorf("创建目标账户交易失败: %w", err)
+		}
+
+		// 3.3 更新转换记录状态
+		conversion.Status = model.ConversionStatusCompleted
+		conversion.SourceTransactionNo = sourceTx.TransactionNo
+		conversion.TargetTransactionNo = targetTx.TransactionNo
+		now := time.Now()
+		conversion.ProcessedAt = &now
+
+		if err := s.accountRepo.UpdateCurrencyConversion(ctx, conversion); err != nil {
+			return fmt.Errorf("更新货币转换记录失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		// 如果事务失败，标记转换为失败状态
+		conversion.Status = model.ConversionStatusFailed
+		s.accountRepo.UpdateCurrencyConversion(ctx, conversion)
+		return err
+	}
+
+	return nil
+}
+
+// GetCurrencyConversion 获取货币转换记录
+func (s *accountService) GetCurrencyConversion(ctx context.Context, conversionNo string) (*model.CurrencyConversion, error) {
+	conversion, err := s.accountRepo.GetCurrencyConversionByNo(ctx, conversionNo)
+	if err != nil {
+		return nil, fmt.Errorf("查询货币转换记录失败: %w", err)
+	}
+	return conversion, nil
+}
+
+// ListCurrencyConversions 查询货币转换记录列表
+func (s *accountService) ListCurrencyConversions(ctx context.Context, query *repository.CurrencyConversionQuery) ([]*model.CurrencyConversion, int64, error) {
+	conversions, total, err := s.accountRepo.ListCurrencyConversions(ctx, query)
+	if err != nil {
+		return nil, 0, fmt.Errorf("查询货币转换记录列表失败: %w", err)
+	}
+	return conversions, total, nil
+}
+
+// CancelCurrencyConversion 取消货币转换
+func (s *accountService) CancelCurrencyConversion(ctx context.Context, conversionNo string, reason string) error {
+	conversion, err := s.accountRepo.GetCurrencyConversionByNo(ctx, conversionNo)
+	if err != nil {
+		return fmt.Errorf("查询货币转换记录失败: %w", err)
+	}
+	if conversion == nil {
+		return fmt.Errorf("货币转换记录不存在: %s", conversionNo)
+	}
+
+	// 只有待处理状态才能取消
+	if conversion.Status != model.ConversionStatusPending {
+		return fmt.Errorf("只有待处理状态的转换才能取消，当前状态: %s", conversion.Status)
+	}
+
+	conversion.Status = model.ConversionStatusCancelled
+	conversion.Notes = fmt.Sprintf("%s\n取消原因: %s", conversion.Notes, reason)
+
+	if err := s.accountRepo.UpdateCurrencyConversion(ctx, conversion); err != nil {
+		return fmt.Errorf("更新货币转换记录失败: %w", err)
+	}
+
+	return nil
+}
+
+// getExchangeRate 获取汇率（临时实现，生产环境需调用 channel-adapter 的汇率API）
+func (s *accountService) getExchangeRate(fromCurrency, toCurrency string) float64 {
+	// 临时硬编码常用汇率
+	rates := map[string]map[string]float64{
+		"USD": {
+			"EUR": 0.92,
+			"GBP": 0.79,
+			"CNY": 7.24,
+			"JPY": 149.50,
+			"KRW": 1320.00,
+			"HKD": 7.82,
+			"SGD": 1.35,
+		},
+		"EUR": {
+			"USD": 1.09,
+			"GBP": 0.86,
+			"CNY": 7.87,
+		},
+		"CNY": {
+			"USD": 0.14,
+			"EUR": 0.13,
+		},
+	}
+
+	if from, ok := rates[fromCurrency]; ok {
+		if rate, ok := from[toCurrency]; ok {
+			return rate
+		}
+	}
+
+	// 如果没有找到汇率，返回0表示不支持
+	return 0
+}
+
+// generateConversionNo 生成货币转换单号
+func (s *accountService) generateConversionNo() (string, error) {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("CONV-%d-%s", time.Now().Unix(), base64.URLEncoding.EncodeToString(b)[:8]), nil
 }
