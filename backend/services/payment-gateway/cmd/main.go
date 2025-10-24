@@ -11,9 +11,11 @@ import (
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
 	"github.com/payment-platform/pkg/health"
+	"github.com/payment-platform/pkg/idempotency"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/saga"
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"payment-platform/payment-gateway/internal/client"
@@ -78,11 +80,13 @@ func main() {
 		&model.Refund{},
 		&model.PaymentCallback{},
 		&model.PaymentRoute{},
+		&saga.Saga{},
+		&saga.SagaStep{},
 	); err != nil {
 		logger.Fatal("数据库迁移失败")
 		log.Fatalf("Error: %v", err)
 	}
-	logger.Info("数据库迁移完成")
+	logger.Info("数据库迁移完成（包含 Saga 表）")
 
 	// 初始化Redis
 	redisConfig := db.RedisConfig{
@@ -154,6 +158,20 @@ func main() {
 	// 初始化MessageService
 	messageService := service.NewMessageService(kafkaBrokers)
 
+	// 初始化 Saga Orchestrator（分布式事务补偿）
+	sagaOrchestrator := saga.NewSagaOrchestrator(database, redisClient)
+	logger.Info("Saga Orchestrator 初始化完成")
+
+	// 初始化 Saga Payment Service（支付流程 Saga 编排）
+	// 注意：Saga 功能暂时可选，未来会集成到 paymentService 中使用
+	_ = service.NewSagaPaymentService(
+		sagaOrchestrator,
+		paymentRepo,
+		orderClient,
+		channelClient,
+	)
+	logger.Info("Saga Payment Service 初始化完成（功能已准备就绪）")
+
 	// 初始化Service
 	paymentService := service.NewPaymentService(
 		database, // 添加 db 参数，用于事务支持
@@ -169,12 +187,33 @@ func main() {
 	// 初始化Handler
 	paymentHandler := handler.NewPaymentHandler(paymentService)
 
+	// 初始化API Key仓储
+	apiKeyRepo := repository.NewAPIKeyRepository(database)
+
 	// 初始化签名验证中间件
-	signatureMiddleware := localMiddleware.NewSignatureMiddleware(func(apiKey string) (string, error) {
-		// TODO: 从数据库或缓存中获取API Secret
-		// 暂时返回测试密钥
-		return "test-secret-key", nil
-	})
+	signatureMiddleware := localMiddleware.NewSignatureMiddleware(
+		func(apiKey string) (*localMiddleware.APIKeyData, error) {
+			// 从数据库查询API Key
+			ctx := context.Background()
+			key, err := apiKeyRepo.GetByAPIKey(ctx, apiKey)
+			if err != nil {
+				return nil, err
+			}
+
+			// 转换为中间件需要的数据结构
+			return &localMiddleware.APIKeyData{
+				Secret:      key.APISecret,
+				MerchantID:  key.MerchantID,
+				IsActive:    key.IsActive,
+				ExpiresAt:   key.ExpiresAt,
+				Environment: key.Environment,
+			}, nil
+		},
+		redisClient,
+	)
+
+	// 设置API Key更新器（用于更新last_used_at）
+	signatureMiddleware.SetAPIKeyUpdater(apiKeyRepo)
 
 	// 初始化健康检查器
 	healthChecker := health.NewHealthChecker()
@@ -215,6 +254,10 @@ func main() {
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
+
+	// 幂等性中间件（针对创建操作）
+	idempotencyManager := idempotency.NewIdempotencyManager(redisClient, "payment-gateway", 24*time.Hour)
+	r.Use(middleware.IdempotencyMiddleware(idempotencyManager))
 
 	// Prometheus 指标端点
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
