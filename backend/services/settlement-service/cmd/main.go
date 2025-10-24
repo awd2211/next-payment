@@ -135,14 +135,14 @@ func main() {
 	_ = settlementSagaService // TODO: 集成到 settlementService 的结算执行流程
 	logger.Info("Settlement Saga Service 初始化完成")
 
-	// 6. 初始化Handler
+	// 7. 初始化Handler
 	settlementHandler := handler.NewSettlementHandler(settlementService)
 	settlementAccountHandler := handler.NewSettlementAccountHandler(settlementAccountService)
 
-	// 7. 注册Swagger UI
+	// 8. 注册Swagger UI
 	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// 8. 注册路由
+	// 9. 注册路由
 	settlementHandler.RegisterRoutes(application.Router)
 
 	// 注册结算账户路由
