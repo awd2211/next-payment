@@ -1,39 +1,46 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/httpclient"
 )
 
 // NotificationClient Notification Service HTTP客户端
 type NotificationClient struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL string
+	breaker *httpclient.BreakerClient
 }
 
-// NewNotificationClient 创建Notification客户端实例
+// NewNotificationClient 创建Notification客户端实例（带熔断器）
 func NewNotificationClient(baseURL string) *NotificationClient {
+	// 创建 httpclient 配置
+	config := &httpclient.Config{
+		Timeout:    30 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: time.Second,
+	}
+
+	// 创建熔断器配置
+	breakerConfig := httpclient.DefaultBreakerConfig("notification-service")
+
 	return &NotificationClient{
 		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		breaker: httpclient.NewBreakerClient(config, breakerConfig),
 	}
 }
 
 // SendNotificationRequest 发送通知请求
 type SendNotificationRequest struct {
 	MerchantID uuid.UUID              `json:"merchant_id"`
-	Type       string                 `json:"type"`        // approval_required, withdrawal_approved, withdrawal_rejected, withdrawal_completed
+	Type       string                 `json:"type"`     // approval_required, withdrawal_approved, withdrawal_rejected, withdrawal_completed
 	Title      string                 `json:"title"`
 	Content    string                 `json:"content"`
-	Priority   string                 `json:"priority"`    // low, medium, high
+	Priority   string                 `json:"priority"` // low, medium, high
 	Extra      map[string]interface{} `json:"extra,omitempty"`
 }
 
@@ -43,33 +50,30 @@ type SendNotificationResponse struct {
 	Message string `json:"message"`
 }
 
-// SendNotification 发送通知
-func (c *NotificationClient) SendNotification(ctx context.Context, req *SendNotificationRequest) error {
+// SendNotification 发送通知（使用熔断器）
+func (c *NotificationClient) SendNotification(ctx context.Context, notifyReq *SendNotificationRequest) error {
 	url := fmt.Sprintf("%s/api/v1/notifications/send", c.baseURL)
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("序列化请求失败: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "POST",
+		URL:    url,
+		Body:   notifyReq,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(body))
-	if err != nil {
-		return fmt.Errorf("创建请求失败: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(httpReq)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var result SendNotificationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return fmt.Errorf("解析响应失败: %w", err)
 	}
 
