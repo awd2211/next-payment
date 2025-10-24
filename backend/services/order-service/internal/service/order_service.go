@@ -12,6 +12,7 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"payment-platform/order-service/internal/client"
 	"payment-platform/order-service/internal/model"
 	"payment-platform/order-service/internal/repository"
 )
@@ -41,15 +42,17 @@ type OrderService interface {
 }
 
 type orderService struct {
-	db        *gorm.DB
-	orderRepo repository.OrderRepository
+	db                 *gorm.DB
+	orderRepo          repository.OrderRepository
+	notificationClient *client.NotificationClient
 }
 
 // NewOrderService 创建订单服务实例
-func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository) OrderService {
+func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository, notificationClient *client.NotificationClient) OrderService {
 	return &orderService{
-		db:        db,
-		orderRepo: orderRepo,
+		db:                 db,
+		orderRepo:          orderRepo,
+		notificationClient: notificationClient,
 	}
 }
 
@@ -472,6 +475,63 @@ func (s *orderService) UpdateOrderStatus(ctx context.Context, orderNo string, st
 		zap.String("order_no", orderNo),
 		zap.String("old_status", oldStatus),
 		zap.String("new_status", status))
+
+	// 发送订单状态变化通知（异步）
+	if s.notificationClient != nil && oldStatus != status {
+		go func(o *model.Order, oldSt, newSt string) {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			var notifType, title, content string
+			switch newSt {
+			case model.OrderStatusPaid:
+				notifType = "order_paid"
+				title = "订单已支付"
+				content = fmt.Sprintf("订单 %s 已成功支付，金额 %.2f 元", o.OrderNo, float64(o.TotalAmount)/100.0)
+			case model.OrderStatusCancelled:
+				notifType = "order_cancelled"
+				title = "订单已取消"
+				content = fmt.Sprintf("订单 %s 已取消", o.OrderNo)
+			case model.OrderStatusRefunded:
+				notifType = "order_refunded"
+				title = "订单已退款"
+				content = fmt.Sprintf("订单 %s 已退款", o.OrderNo)
+			case model.OrderStatusShipped:
+				notifType = "order_shipped"
+				title = "订单已发货"
+				content = fmt.Sprintf("订单 %s 已发货", o.OrderNo)
+			case model.OrderStatusCompleted:
+				notifType = "order_completed"
+				title = "订单已完成"
+				content = fmt.Sprintf("订单 %s 已完成", o.OrderNo)
+			default:
+				return // 其他状态不发送通知
+			}
+
+			err := s.notificationClient.SendOrderNotification(notifyCtx, &client.SendNotificationRequest{
+				MerchantID: o.MerchantID,
+				Type:       notifType,
+				Title:      title,
+				Content:    content,
+				Email:      o.CustomerEmail,
+				Priority:   "high",
+				Data: map[string]interface{}{
+					"order_no":     o.OrderNo,
+					"order_id":     o.ID.String(),
+					"total_amount": o.TotalAmount,
+					"currency":     o.Currency,
+					"old_status":   oldSt,
+					"new_status":   newSt,
+				},
+			})
+			if err != nil {
+				logger.Warn("发送订单状态通知失败（非致命）",
+					zap.Error(err),
+					zap.String("order_no", o.OrderNo),
+					zap.String("status", newSt))
+			}
+		}(order, oldStatus, status)
+	}
 
 	return nil
 }

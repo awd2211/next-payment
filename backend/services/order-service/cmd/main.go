@@ -10,6 +10,7 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"payment-platform/order-service/internal/client"
 	"payment-platform/order-service/internal/handler"
 	"payment-platform/order-service/internal/model"
 	"payment-platform/order-service/internal/repository"
@@ -44,8 +45,12 @@ func main() {
 
 	logger.Info("正在启动 Order Service...")
 
+	// 初始化 HTTP 客户端
+	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	notificationClient := client.NewNotificationClient(notificationServiceURL)
+
 	repo := repository.NewOrderRepository(application.DB)
-	svc := service.NewOrderService(application.DB, repo)
+	svc := service.NewOrderService(application.DB, repo, notificationClient)
 	handler := handler.NewOrderHandler(svc)
 
 	idempotencyManager := idempotency.NewIdempotencyManager(application.Redis, "order-service", 24*time.Hour)

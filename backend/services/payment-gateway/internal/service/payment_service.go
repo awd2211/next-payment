@@ -45,16 +45,18 @@ type PaymentService interface {
 }
 
 type paymentService struct {
-	db             *gorm.DB
-	paymentRepo    repository.PaymentRepository
-	apiKeyRepo     repository.APIKeyRepository
-	orderClient    *client.OrderClient
-	channelClient  *client.ChannelClient
-	riskClient     *client.RiskClient
-	redisClient    *redis.Client
-	paymentMetrics *metrics.PaymentMetrics
-	messageService MessageService
-	webhookBaseURL string // Webhook基础URL，用于构建回调地址
+	db                 *gorm.DB
+	paymentRepo        repository.PaymentRepository
+	apiKeyRepo         repository.APIKeyRepository
+	orderClient        *client.OrderClient
+	channelClient      *client.ChannelClient
+	riskClient         *client.RiskClient
+	notificationClient *client.NotificationClient
+	analyticsClient    *client.AnalyticsClient
+	redisClient        *redis.Client
+	paymentMetrics     *metrics.PaymentMetrics
+	messageService     MessageService
+	webhookBaseURL     string // Webhook基础URL，用于构建回调地址
 }
 
 // NewPaymentService 创建支付服务实例
@@ -65,22 +67,26 @@ func NewPaymentService(
 	orderClient *client.OrderClient,
 	channelClient *client.ChannelClient,
 	riskClient *client.RiskClient,
+	notificationClient *client.NotificationClient,
+	analyticsClient *client.AnalyticsClient,
 	redisClient *redis.Client,
 	paymentMetrics *metrics.PaymentMetrics,
 	messageService MessageService,
 	webhookBaseURL string,
 ) PaymentService {
 	return &paymentService{
-		db:             db,
-		paymentRepo:    paymentRepo,
-		apiKeyRepo:     apiKeyRepo,
-		orderClient:    orderClient,
-		channelClient:  channelClient,
-		riskClient:     riskClient,
-		redisClient:    redisClient,
-		paymentMetrics: paymentMetrics,
-		messageService: messageService,
-		webhookBaseURL: webhookBaseURL,
+		db:                 db,
+		paymentRepo:        paymentRepo,
+		apiKeyRepo:         apiKeyRepo,
+		orderClient:        orderClient,
+		channelClient:      channelClient,
+		riskClient:         riskClient,
+		notificationClient: notificationClient,
+		analyticsClient:    analyticsClient,
+		redisClient:        redisClient,
+		paymentMetrics:     paymentMetrics,
+		messageService:     messageService,
+		webhookBaseURL:     webhookBaseURL,
 	}
 }
 
@@ -586,6 +592,89 @@ func (s *paymentService) HandleCallback(ctx context.Context, channel string, dat
 			ErrorCode:      payment.ErrorCode,
 			ErrorMsg:       payment.ErrorMsg,
 		})
+	}
+
+	// 12.1 发送通知（支付成功/失败通知）
+	if s.notificationClient != nil && oldStatus != payment.Status {
+		go func(p *model.Payment) {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			var notifType, title, content string
+			switch p.Status {
+			case model.PaymentStatusSuccess:
+				notifType = "payment_success"
+				title = "支付成功"
+				content = fmt.Sprintf("支付单号 %s 已成功支付，金额 %.2f %s",
+					p.PaymentNo, float64(p.Amount)/100.0, p.Currency)
+			case model.PaymentStatusFailed:
+				notifType = "payment_failed"
+				title = "支付失败"
+				content = fmt.Sprintf("支付单号 %s 支付失败：%s", p.PaymentNo, p.ErrorMsg)
+			default:
+				return // 其他状态不发送通知
+			}
+
+			err := s.notificationClient.SendPaymentNotification(notifyCtx, &client.SendNotificationRequest{
+				MerchantID: p.MerchantID,
+				Type:       notifType,
+				Title:      title,
+				Content:    content,
+				Email:      p.CustomerEmail,
+				Priority:   "high",
+				Data: map[string]interface{}{
+					"payment_no":  p.PaymentNo,
+					"order_no":    p.OrderNo,
+					"amount":      p.Amount,
+					"currency":    p.Currency,
+					"status":      p.Status,
+				},
+			})
+			if err != nil {
+				logger.Warn("发送支付通知失败（非致命）",
+					zap.Error(err),
+					zap.String("payment_no", p.PaymentNo),
+					zap.String("status", p.Status))
+			}
+		}(payment)
+	}
+
+	// 12.2 推送Analytics事件（实时统计）
+	if s.analyticsClient != nil && oldStatus != payment.Status {
+		go func(p *model.Payment) {
+			analyticsCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			eventType := "payment_status_changed"
+			if p.Status == model.PaymentStatusSuccess {
+				eventType = "payment_success"
+			} else if p.Status == model.PaymentStatusFailed {
+				eventType = "payment_failed"
+			}
+
+			err := s.analyticsClient.PushPaymentEvent(analyticsCtx, &client.PaymentEventRequest{
+				EventType:  eventType,
+				MerchantID: p.MerchantID,
+				PaymentNo:  p.PaymentNo,
+				OrderNo:    p.OrderNo,
+				Amount:     p.Amount,
+				Currency:   p.Currency,
+				Channel:    p.Channel,
+				Status:     p.Status,
+				Timestamp:  time.Now(),
+				Metadata: map[string]interface{}{
+					"old_status": oldStatus,
+					"new_status": p.Status,
+					"callback_channel": channel,
+				},
+			})
+			if err != nil {
+				logger.Warn("推送Analytics事件失败（非致命）",
+					zap.Error(err),
+					zap.String("payment_no", p.PaymentNo),
+					zap.String("event_type", eventType))
+			}
+		}(payment)
 	}
 
 	// 13. 异步通知商户（放入队列）

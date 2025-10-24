@@ -92,14 +92,20 @@ func main() {
 	orderServiceURL := config.GetEnv("ORDER_SERVICE_URL", "http://localhost:40004")
 	channelServiceURL := config.GetEnv("CHANNEL_SERVICE_URL", "http://localhost:40005")
 	riskServiceURL := config.GetEnv("RISK_SERVICE_URL", "http://localhost:40006")
+	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	analyticsServiceURL := config.GetEnv("ANALYTICS_SERVICE_URL", "http://localhost:40009")
 
 	orderClient := client.NewOrderClient(orderServiceURL)
 	channelClient := client.NewChannelClient(channelServiceURL)
 	riskClient := client.NewRiskClient(riskServiceURL)
+	notificationClient := client.NewNotificationClient(notificationServiceURL)
+	analyticsClient := client.NewAnalyticsClient(analyticsServiceURL)
 
 	logger.Info(fmt.Sprintf("Order Service URL: %s", orderServiceURL))
 	logger.Info(fmt.Sprintf("Channel Service URL: %s", channelServiceURL))
 	logger.Info(fmt.Sprintf("Risk Service URL: %s", riskServiceURL))
+	logger.Info(fmt.Sprintf("Notification Service URL: %s", notificationServiceURL))
+	logger.Info(fmt.Sprintf("Analytics Service URL: %s", analyticsServiceURL))
 
 	// 5. 初始化Kafka Brokers（可选，如果未配置则为nil）
 	var kafkaBrokers []string
@@ -139,6 +145,8 @@ func main() {
 		orderClient,
 		channelClient,
 		riskClient,
+		notificationClient, // 通知服务客户端
+		analyticsClient,    // 分析服务客户端
 		application.Redis,
 		paymentMetrics, // 添加 Prometheus 指标
 		messageService, // 添加消息服务

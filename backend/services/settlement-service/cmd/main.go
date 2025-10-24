@@ -71,10 +71,12 @@ func main() {
 	accountingServiceURL := config.GetEnv("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
 	withdrawalServiceURL := config.GetEnv("WITHDRAWAL_SERVICE_URL", "http://localhost:40014")
 	merchantServiceURL := config.GetEnv("MERCHANT_SERVICE_URL", "http://localhost:40002")
+	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
 
 	accountingClient := client.NewAccountingClient(accountingServiceURL)
 	withdrawalClient := client.NewWithdrawalClient(withdrawalServiceURL)
 	merchantClient := client.NewMerchantClient(merchantServiceURL)
+	notificationClient := client.NewNotificationClient(notificationServiceURL)
 
 	logger.Info("HTTP客户端初始化完成")
 
@@ -85,6 +87,7 @@ func main() {
 		accountingClient,
 		withdrawalClient,
 		merchantClient,
+		notificationClient,
 	)
 	settlementAccountService := service.NewSettlementAccountService(settlementAccountRepo)
 

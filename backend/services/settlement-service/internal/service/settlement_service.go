@@ -25,11 +25,12 @@ type SettlementService interface {
 }
 
 type settlementService struct {
-	db               *gorm.DB
-	settlementRepo   repository.SettlementRepository
-	accountingClient *client.AccountingClient
-	withdrawalClient *client.WithdrawalClient
-	merchantClient   *client.MerchantClient
+	db                 *gorm.DB
+	settlementRepo     repository.SettlementRepository
+	accountingClient   *client.AccountingClient
+	withdrawalClient   *client.WithdrawalClient
+	merchantClient     *client.MerchantClient
+	notificationClient *client.NotificationClient
 }
 
 // NewSettlementService 创建结算服务
@@ -39,13 +40,15 @@ func NewSettlementService(
 	accountingClient *client.AccountingClient,
 	withdrawalClient *client.WithdrawalClient,
 	merchantClient *client.MerchantClient,
+	notificationClient *client.NotificationClient,
 ) SettlementService {
 	return &settlementService{
-		db:               db,
-		settlementRepo:   settlementRepo,
-		accountingClient: accountingClient,
-		withdrawalClient: withdrawalClient,
-		merchantClient:   merchantClient,
+		db:                 db,
+		settlementRepo:     settlementRepo,
+		accountingClient:   accountingClient,
+		withdrawalClient:   withdrawalClient,
+		merchantClient:     merchantClient,
+		notificationClient: notificationClient,
 	}
 }
 
@@ -339,7 +342,48 @@ func (s *settlementService) ExecuteSettlement(ctx context.Context, settlementID 
 	settlement.Status = model.SettlementStatusCompleted
 	settlement.CompletedAt = &now
 
-	return s.settlementRepo.Update(ctx, settlement)
+	if err := s.settlementRepo.Update(ctx, settlement); err != nil {
+		return err
+	}
+
+	// 发送结算完成通知
+	if s.notificationClient != nil {
+		go func(sett *model.Settlement) {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			notifType := "settlement_complete"
+			if sett.Status == model.SettlementStatusFailed {
+				notifType = "settlement_failed"
+			}
+
+			title := "结算完成"
+			content := fmt.Sprintf("结算单号 %s 已完成，结算金额 %.2f 元，已创建提现单 %s",
+				sett.SettlementNo, float64(sett.SettlementAmount)/100.0, sett.WithdrawalNo)
+
+			if sett.Status == model.SettlementStatusFailed {
+				title = "结算失败"
+				content = fmt.Sprintf("结算单号 %s 执行失败：%s", sett.SettlementNo, sett.ErrorMessage)
+			}
+
+			s.notificationClient.SendSettlementNotification(notifyCtx, &client.SendNotificationRequest{
+				MerchantID: sett.MerchantID,
+				Type:       notifType,
+				Title:      title,
+				Content:    content,
+				Priority:   "high",
+				Data: map[string]interface{}{
+					"settlement_no":    sett.SettlementNo,
+					"settlement_amount": sett.SettlementAmount,
+					"withdrawal_no":    sett.WithdrawalNo,
+					"cycle":            sett.Cycle,
+					"status":           sett.Status,
+				},
+			})
+		}(settlement)
+	}
+
+	return nil
 }
 
 // GenerateAutoSettlement 自动生成结算单
