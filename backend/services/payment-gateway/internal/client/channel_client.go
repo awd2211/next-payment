@@ -3,8 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
 )
 
 // ChannelClient Channel服务客户端
@@ -21,17 +19,17 @@ func NewChannelClient(baseURL string) *ChannelClient {
 
 // CreatePaymentRequest 创建支付请求
 type CreatePaymentRequest struct {
-	PaymentNo     string    `json:"payment_no"`
-	MerchantID    uuid.UUID `json:"merchant_id"`
-	Channel       string    `json:"channel"`
-	Amount        int64     `json:"amount"`
-	Currency      string    `json:"currency"`
-	PayMethod     string    `json:"pay_method"`
-	CustomerEmail string    `json:"customer_email"`
-	CustomerName  string    `json:"customer_name"`
-	Description   string    `json:"description"`
-	ReturnURL     string    `json:"return_url"`
-	NotifyURL     string    `json:"notify_url"`
+	PaymentNo     string                 `json:"payment_no"`
+	MerchantID    string                 `json:"merchant_id"` // 改为 string 类型
+	Channel       string                 `json:"channel"`
+	Amount        int64                  `json:"amount"`
+	Currency      string                 `json:"currency"`
+	PayMethod     string                 `json:"pay_method"`
+	CustomerEmail string                 `json:"customer_email"`
+	CustomerName  string                 `json:"customer_name"`
+	Description   string                 `json:"description"`
+	ReturnURL     string                 `json:"return_url"`
+	NotifyURL     string                 `json:"notify_url"`
 	Extra         map[string]interface{} `json:"extra"`
 }
 
@@ -44,11 +42,12 @@ type CreatePaymentResponse struct {
 
 // PaymentResult 支付结果
 type PaymentResult struct {
-	ChannelOrderNo string `json:"channel_order_no"` // 渠道订单号
-	PaymentURL     string `json:"payment_url"`      // 支付URL（跳转）
-	QRCodeURL      string `json:"qr_code_url"`      // 二维码URL
-	Status         string `json:"status"`           // 支付状态
-	Extra          map[string]interface{} `json:"extra"` // 扩展信息
+	ChannelTradeNo string                 `json:"channel_trade_no"` // 渠道交易号
+	ChannelOrderNo string                 `json:"channel_order_no"` // 渠道订单号（兼容旧字段）
+	PaymentURL     string                 `json:"payment_url"`      // 支付URL（跳转）
+	QRCodeURL      string                 `json:"qr_code_url"`      // 二维码URL
+	Status         string                 `json:"status"`           // 支付状态
+	Extra          map[string]interface{} `json:"extra"`            // 扩展信息
 }
 
 // RefundRequest 退款请求
@@ -137,4 +136,28 @@ func (c *ChannelClient) QueryPayment(ctx context.Context, req *QueryPaymentReque
 	}
 
 	return result.Data, nil
+}
+
+// CancelPayment 取消支付（用于 Saga 补偿）
+func (c *ChannelClient) CancelPayment(ctx context.Context, channelTradeNo string) error {
+	path := fmt.Sprintf("/api/v1/channel/payment/%s/cancel", channelTradeNo)
+
+	resp, err := c.http.Post(ctx, path, nil, nil)
+	if err != nil {
+		return fmt.Errorf("调用Channel服务失败: %w", err)
+	}
+
+	var result struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := resp.ParseResponse(&result); err != nil {
+		return err
+	}
+
+	if result.Code != 0 {
+		return fmt.Errorf("取消支付失败: %s", result.Message)
+	}
+
+	return nil
 }

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/payment-platform/pkg/logger"
 	"github.com/sony/gobreaker"
+	"go.uber.org/zap"
 )
 
 // BreakerConfig 熔断器配置
@@ -29,7 +31,10 @@ func DefaultBreakerConfig(name string) *BreakerConfig {
 			return counts.Requests >= 5 && failureRatio >= 0.6 // 5次请求中60%失败则熔断
 		},
 		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
-			fmt.Printf("[Breaker] %s: %s -> %s\n", name, from.String(), to.String())
+			logger.Warn("circuit breaker state changed",
+				zap.String("breaker_name", name),
+				zap.String("from", from.String()),
+				zap.String("to", to.String()))
 		},
 	}
 }

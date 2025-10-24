@@ -8,6 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/auth"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"payment-platform/merchant-service/internal/model"
 	"payment-platform/merchant-service/internal/repository"
 )
@@ -34,6 +37,7 @@ type MerchantService interface {
 }
 
 type merchantService struct {
+	db           *gorm.DB
 	merchantRepo repository.MerchantRepository
 	apiKeyRepo   repository.APIKeyRepository
 	jwtManager   *auth.JWTManager
@@ -41,11 +45,13 @@ type merchantService struct {
 
 // NewMerchantService 创建商户服务实例
 func NewMerchantService(
+	db *gorm.DB,
 	merchantRepo repository.MerchantRepository,
 	apiKeyRepo repository.APIKeyRepository,
 	jwtManager *auth.JWTManager,
 ) MerchantService {
 	return &merchantService{
+		db:           db,
 		merchantRepo: merchantRepo,
 		apiKeyRepo:   apiKeyRepo,
 		jwtManager:   jwtManager,
@@ -94,7 +100,7 @@ type LoginResponse struct {
 	TempToken      string          `json:"temp_token,omitempty"` // 临时token，用于2FA验证
 }
 
-// Create 创建商户
+// Create 创建商户（使用事务保证商户和API Key的原子性）
 func (s *merchantService) Create(ctx context.Context, input *CreateMerchantInput) (*model.Merchant, error) {
 	// 检查邮箱是否已存在
 	existing, err := s.merchantRepo.GetByEmail(ctx, input.Email)
@@ -111,7 +117,7 @@ func (s *merchantService) Create(ctx context.Context, input *CreateMerchantInput
 		return nil, fmt.Errorf("密码加密失败: %w", err)
 	}
 
-	// 创建商户
+	// 准备商户数据
 	merchant := &model.Merchant{
 		Name:         input.Name,
 		Email:        input.Email,
@@ -127,13 +133,48 @@ func (s *merchantService) Create(ctx context.Context, input *CreateMerchantInput
 		Metadata:     "{}",
 	}
 
-	if err := s.merchantRepo.Create(ctx, merchant); err != nil {
-		return nil, fmt.Errorf("创建商户失败: %w", err)
-	}
+	// 在事务中创建商户和默认API Keys
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 创建商户
+		if err := tx.Create(merchant).Error; err != nil {
+			return fmt.Errorf("创建商户失败: %w", err)
+		}
 
-	// 创建默认测试API Key
-	if err := s.createDefaultAPIKeys(ctx, merchant.ID); err != nil {
-		return nil, fmt.Errorf("创建默认API Key失败: %w", err)
+		// 2. 创建测试环境API Key
+		testAPIKey := &model.APIKey{
+			MerchantID:  merchant.ID,
+			APIKey:      s.generateAPIKey("pk_test"),
+			APISecret:   s.generateAPISecret(),
+			Name:        "Test API Key",
+			Environment: model.EnvironmentTest,
+			IsActive:    true,
+		}
+		if err := tx.Create(testAPIKey).Error; err != nil {
+			return fmt.Errorf("创建测试API Key失败: %w", err)
+		}
+
+		// 3. 创建生产环境API Key（默认不激活）
+		prodAPIKey := &model.APIKey{
+			MerchantID:  merchant.ID,
+			APIKey:      s.generateAPIKey("pk_live"),
+			APISecret:   s.generateAPISecret(),
+			Name:        "Production API Key",
+			Environment: model.EnvironmentProduction,
+			IsActive:    false, // 生产环境默认不激活
+		}
+		if err := tx.Create(prodAPIKey).Error; err != nil {
+			return fmt.Errorf("创建生产API Key失败: %w", err)
+		}
+
+		logger.Info("merchant and API keys created successfully",
+			zap.String("merchant_id", merchant.ID.String()),
+			zap.String("email", merchant.Email))
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	return merchant, nil
@@ -332,7 +373,7 @@ func (s *merchantService) Register(ctx context.Context, input *RegisterMerchantI
 		return nil, fmt.Errorf("密码加密失败: %w", err)
 	}
 
-	// 创建商户
+	// 准备商户数据
 	merchant := &model.Merchant{
 		Name:         input.Name,
 		Email:        input.Email,
@@ -343,18 +384,52 @@ func (s *merchantService) Register(ctx context.Context, input *RegisterMerchantI
 		Website:      input.Website,
 		Status:       model.MerchantStatusPending, // 待审核
 		KYCStatus:    model.KYCStatusPending,      // 待KYC验证
-		IsTestMode:   true,                         // 默认测试模式
-		Metadata:     "{}",                         // 空JSON对象
+		IsTestMode:   true,                        // 默认测试模式
+		Metadata:     "{}",                        // 空JSON对象
 	}
 
-	if err := s.merchantRepo.Create(ctx, merchant); err != nil {
-		return nil, fmt.Errorf("创建商户失败: %w", err)
-	}
+	// 在事务中创建商户和默认API Keys
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 创建商户
+		if err := tx.Create(merchant).Error; err != nil {
+			return fmt.Errorf("创建商户失败: %w", err)
+		}
 
-	// 创建默认测试API Keys
-	if err := s.createDefaultAPIKeys(ctx, merchant.ID); err != nil {
-		// 不影响注册流程，只记录错误
-		fmt.Printf("创建默认API Keys失败: %v\n", err)
+		// 2. 创建测试环境API Key
+		testAPIKey := &model.APIKey{
+			MerchantID:  merchant.ID,
+			APIKey:      s.generateAPIKey("pk_test"),
+			APISecret:   s.generateAPISecret(),
+			Name:        "Test API Key",
+			Environment: model.EnvironmentTest,
+			IsActive:    true,
+		}
+		if err := tx.Create(testAPIKey).Error; err != nil {
+			return fmt.Errorf("创建测试API Key失败: %w", err)
+		}
+
+		// 3. 创建生产环境API Key（默认不激活）
+		prodAPIKey := &model.APIKey{
+			MerchantID:  merchant.ID,
+			APIKey:      s.generateAPIKey("pk_live"),
+			APISecret:   s.generateAPISecret(),
+			Name:        "Production API Key",
+			Environment: model.EnvironmentProduction,
+			IsActive:    false,
+		}
+		if err := tx.Create(prodAPIKey).Error; err != nil {
+			return fmt.Errorf("创建生产API Key失败: %w", err)
+		}
+
+		logger.Info("merchant registered successfully",
+			zap.String("merchant_id", merchant.ID.String()),
+			zap.String("email", merchant.Email))
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	// 清除密码字段

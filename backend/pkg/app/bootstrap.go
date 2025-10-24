@@ -279,9 +279,9 @@ func (a *App) RunWithGracefulShutdown() error {
 
 	// 在 goroutine 中启动服务器
 	go func() {
-		logger.Info(fmt.Sprintf("%s 正在监听 %s", a.Config.ServiceName, addr))
+		logger.Info(fmt.Sprintf("%s HTTP服务器正在监听 %s", a.Config.ServiceName, addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("服务启动失败", zap.Error(err))
+			logger.Fatal("HTTP服务启动失败", zap.Error(err))
 		}
 	}()
 

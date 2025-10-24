@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"payment-platform/channel-adapter/internal/adapter"
 	"payment-platform/channel-adapter/internal/model"
 	"payment-platform/channel-adapter/internal/repository"
@@ -177,7 +179,10 @@ func (s *channelService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 
 	if err := s.repo.CreateTransaction(ctx, tx); err != nil {
 		// 记录日志，但不影响支付创建
-		fmt.Printf("保存交易记录失败: %v\n", err)
+		logger.Error("failed to save transaction record",
+			zap.Error(err),
+			zap.String("payment_no", req.PaymentNo),
+			zap.String("channel", req.Channel))
 	}
 
 	// 构造响应
@@ -322,7 +327,11 @@ func (s *channelService) CreateRefund(ctx context.Context, req *CreateRefundRequ
 	}
 
 	if err := s.repo.CreateTransaction(ctx, refundTx); err != nil {
-		fmt.Printf("保存退款交易记录失败: %v\n", err)
+		logger.Error("failed to save refund transaction record",
+			zap.Error(err),
+			zap.String("refund_no", req.RefundNo),
+			zap.String("payment_no", req.PaymentNo),
+			zap.String("channel", tx.Channel))
 	}
 
 	// 构造响应
@@ -418,7 +427,10 @@ func (s *channelService) HandleWebhook(ctx context.Context, channel string, sign
 	}
 
 	if err := s.repo.CreateWebhookLog(ctx, log); err != nil {
-		fmt.Printf("保存 Webhook 日志失败: %v\n", err)
+		logger.Error("failed to save webhook log",
+			zap.Error(err),
+			zap.String("channel", channel),
+			zap.String("event_id", event.EventID))
 	}
 
 	// 处理 Webhook 事件

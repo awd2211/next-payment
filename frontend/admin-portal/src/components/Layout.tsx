@@ -24,6 +24,7 @@ import {
   ShoppingOutlined,
   WarningOutlined,
   AccountBookOutlined,
+  CreditCardOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -91,6 +92,11 @@ const Layout = () => {
       key: '/settlements',
       icon: <AccountBookOutlined />,
       label: t('menu.settlements'),
+    },
+    hasPermission('config.view') && {
+      key: '/cashier',
+      icon: <CreditCardOutlined />,
+      label: t('menu.cashier') || '收银台管理',
     },
     hasPermission('audit.view') && {
       key: '/audit-logs',

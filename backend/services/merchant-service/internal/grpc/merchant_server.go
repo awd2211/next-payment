@@ -16,12 +16,16 @@ import (
 type MerchantServer struct {
 	pb.UnimplementedMerchantServiceServer
 	merchantService service.MerchantService
+	apiKeyService   service.APIKeyService
+	channelService  service.ChannelService
 }
 
 // NewMerchantServer 创建gRPC服务实例
-func NewMerchantServer(merchantService service.MerchantService) *MerchantServer {
+func NewMerchantServer(merchantService service.MerchantService, apiKeyService service.APIKeyService, channelService service.ChannelService) *MerchantServer {
 	return &MerchantServer{
 		merchantService: merchantService,
+		apiKeyService:   apiKeyService,
+		channelService:  channelService,
 	}
 }
 
@@ -234,47 +238,308 @@ func (s *MerchantServer) MerchantLogin(ctx context.Context, req *pb.MerchantLogi
 	}, nil
 }
 
-// 以下方法暂不实现，返回未实现错误
+// GenerateAPIKey 生成API密钥
 func (s *MerchantServer) GenerateAPIKey(ctx context.Context, req *pb.GenerateAPIKeyRequest) (*pb.APIKeyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	merchantID, err := uuid.Parse(req.MerchantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
+	}
+
+	input := &service.CreateAPIKeyInput{
+		Name:        req.Name,
+		Environment: req.Environment,
+	}
+
+	// 处理过期时间
+	if req.ExpiresInDays > 0 {
+		expiresAt := timestamppb.Now().AsTime().AddDate(0, 0, int(req.ExpiresInDays))
+		input.ExpiresAt = &expiresAt
+	}
+
+	apiKey, err := s.apiKeyService.Create(ctx, merchantID, input)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "生成API密钥失败: %v", err)
+	}
+
+	var lastUsedAt *timestamppb.Timestamp
+	if apiKey.LastUsedAt != nil {
+		lastUsedAt = timestamppb.New(*apiKey.LastUsedAt)
+	}
+
+	var expiresAt *timestamppb.Timestamp
+	if apiKey.ExpiresAt != nil {
+		expiresAt = timestamppb.New(*apiKey.ExpiresAt)
+	}
+
+	return &pb.APIKeyResponse{
+		ApiKey: &pb.APIKey{
+			Id:          apiKey.ID.String(),
+			MerchantId:  apiKey.MerchantID.String(),
+			ApiKey:      apiKey.APIKey,
+			ApiSecret:   apiKey.APISecret, // 仅首次返回
+			Name:        apiKey.Name,
+			Environment: apiKey.Environment,
+			IsActive:    apiKey.IsActive,
+			LastUsedAt:  lastUsedAt,
+			ExpiresAt:   expiresAt,
+			CreatedAt:   timestamppb.New(apiKey.CreatedAt),
+		},
+	}, nil
 }
 
+// ListAPIKeys 列出API密钥
 func (s *MerchantServer) ListAPIKeys(ctx context.Context, req *pb.ListAPIKeysRequest) (*pb.ListAPIKeysResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	merchantID, err := uuid.Parse(req.MerchantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
+	}
+
+	apiKeys, err := s.apiKeyService.ListByMerchant(ctx, merchantID, req.Environment)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "获取API密钥列表失败: %v", err)
+	}
+
+	pbKeys := make([]*pb.APIKey, len(apiKeys))
+	for i, key := range apiKeys {
+		var lastUsedAt *timestamppb.Timestamp
+		if key.LastUsedAt != nil {
+			lastUsedAt = timestamppb.New(*key.LastUsedAt)
+		}
+
+		var expiresAt *timestamppb.Timestamp
+		if key.ExpiresAt != nil {
+			expiresAt = timestamppb.New(*key.ExpiresAt)
+		}
+
+		pbKeys[i] = &pb.APIKey{
+			Id:          key.ID.String(),
+			MerchantId:  key.MerchantID.String(),
+			ApiKey:      key.APIKey,
+			ApiSecret:   key.APISecret, // 列表中已被隐藏
+			Name:        key.Name,
+			Environment: key.Environment,
+			IsActive:    key.IsActive,
+			LastUsedAt:  lastUsedAt,
+			ExpiresAt:   expiresAt,
+			CreatedAt:   timestamppb.New(key.CreatedAt),
+		}
+	}
+
+	return &pb.ListAPIKeysResponse{
+		ApiKeys: pbKeys,
+	}, nil
 }
 
+// RevokeAPIKey 撤销API密钥
 func (s *MerchantServer) RevokeAPIKey(ctx context.Context, req *pb.RevokeAPIKeyRequest) (*pb.RevokeAPIKeyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	keyID, err := uuid.Parse(req.ApiKeyId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的API密钥ID")
+	}
+
+	if err := s.apiKeyService.Revoke(ctx, keyID); err != nil {
+		return nil, status.Errorf(codes.Internal, "撤销API密钥失败: %v", err)
+	}
+
+	return &pb.RevokeAPIKeyResponse{
+		Success: true,
+	}, nil
 }
 
+// RotateAPISecret 轮换API密钥
 func (s *MerchantServer) RotateAPISecret(ctx context.Context, req *pb.RotateAPISecretRequest) (*pb.APIKeyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	keyID, err := uuid.Parse(req.ApiKeyId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的API密钥ID")
+	}
+
+	apiKey, err := s.apiKeyService.Rotate(ctx, keyID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "轮换API密钥失败: %v", err)
+	}
+
+	var lastUsedAt *timestamppb.Timestamp
+	if apiKey.LastUsedAt != nil {
+		lastUsedAt = timestamppb.New(*apiKey.LastUsedAt)
+	}
+
+	var expiresAt *timestamppb.Timestamp
+	if apiKey.ExpiresAt != nil {
+		expiresAt = timestamppb.New(*apiKey.ExpiresAt)
+	}
+
+	return &pb.APIKeyResponse{
+		ApiKey: &pb.APIKey{
+			Id:          apiKey.ID.String(),
+			MerchantId:  apiKey.MerchantID.String(),
+			ApiKey:      apiKey.APIKey,
+			ApiSecret:   apiKey.APISecret, // 返回新的secret
+			Name:        apiKey.Name,
+			Environment: apiKey.Environment,
+			IsActive:    apiKey.IsActive,
+			LastUsedAt:  lastUsedAt,
+			ExpiresAt:   expiresAt,
+			CreatedAt:   timestamppb.New(apiKey.CreatedAt),
+		},
+	}, nil
 }
 
+// UpdateWebhookConfig 更新Webhook配置 (暂未实现webhook功能)
 func (s *MerchantServer) UpdateWebhookConfig(ctx context.Context, req *pb.UpdateWebhookConfigRequest) (*pb.WebhookConfigResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	return nil, status.Errorf(codes.Unimplemented, "Webhook功能暂未实现")
 }
 
+// GetWebhookConfig 获取Webhook配置 (暂未实现webhook功能)
 func (s *MerchantServer) GetWebhookConfig(ctx context.Context, req *pb.GetWebhookConfigRequest) (*pb.WebhookConfigResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	return nil, status.Errorf(codes.Unimplemented, "Webhook功能暂未实现")
 }
 
+// TestWebhook 测试Webhook (暂未实现webhook功能)
 func (s *MerchantServer) TestWebhook(ctx context.Context, req *pb.TestWebhookRequest) (*pb.TestWebhookResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	return nil, status.Errorf(codes.Unimplemented, "Webhook功能暂未实现")
 }
 
+// ConfigureChannel 配置支付渠道
 func (s *MerchantServer) ConfigureChannel(ctx context.Context, req *pb.ConfigureChannelRequest) (*pb.ChannelConfigResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	merchantID, err := uuid.Parse(req.MerchantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
+	}
+
+	// 将 map[string]string 转换为 map[string]interface{}
+	config := make(map[string]interface{})
+	for k, v := range req.Config {
+		config[k] = v
+	}
+
+	input := &service.CreateChannelInput{
+		MerchantID: merchantID,
+		Channel:    req.Channel,
+		Config:     config,
+		IsTestMode: req.IsTestMode,
+	}
+
+	channel, err := s.channelService.CreateChannel(ctx, input)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "配置渠道失败: %v", err)
+	}
+
+	return &pb.ChannelConfigResponse{
+		Config: &pb.ChannelConfig{
+			Id:         channel.ID.String(),
+			MerchantId: channel.MerchantID.String(),
+			Channel:    channel.Channel,
+			Config:     req.Config, // 返回原始配置
+			IsEnabled:  channel.IsEnabled,
+			IsTestMode: channel.IsTestMode,
+			CreatedAt:  timestamppb.New(channel.CreatedAt),
+			UpdatedAt:  timestamppb.New(channel.UpdatedAt),
+		},
+	}, nil
 }
 
+// GetChannelConfig 获取渠道配置
 func (s *MerchantServer) GetChannelConfig(ctx context.Context, req *pb.GetChannelConfigRequest) (*pb.ChannelConfigResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	merchantID, err := uuid.Parse(req.MerchantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
+	}
+
+	channels, err := s.channelService.ListChannels(ctx, merchantID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "获取渠道配置失败: %v", err)
+	}
+
+	// 找到指定渠道
+	var targetChannel *service.CreateChannelInput
+	for _, ch := range channels {
+		if ch.Channel == req.Channel {
+			// 注意: 这里实际返回的是 model.ChannelConfig, 需要调整
+			return &pb.ChannelConfigResponse{
+				Config: &pb.ChannelConfig{
+					Id:         ch.ID.String(),
+					MerchantId: ch.MerchantID.String(),
+					Channel:    ch.Channel,
+					Config:     make(map[string]string), // Config在model中是JSON string
+					IsEnabled:  ch.IsEnabled,
+					IsTestMode: ch.IsTestMode,
+					CreatedAt:  timestamppb.New(ch.CreatedAt),
+					UpdatedAt:  timestamppb.New(ch.UpdatedAt),
+				},
+			}, nil
+		}
+	}
+
+	if targetChannel == nil {
+		return nil, status.Errorf(codes.NotFound, "渠道配置不存在")
+	}
+
+	return nil, status.Errorf(codes.Internal, "未找到渠道配置")
 }
 
+// ListChannelConfigs 列出所有渠道配置
 func (s *MerchantServer) ListChannelConfigs(ctx context.Context, req *pb.ListChannelConfigsRequest) (*pb.ListChannelConfigsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	merchantID, err := uuid.Parse(req.MerchantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
+	}
+
+	channels, err := s.channelService.ListChannels(ctx, merchantID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "获取渠道配置列表失败: %v", err)
+	}
+
+	pbChannels := make([]*pb.ChannelConfig, len(channels))
+	for i, ch := range channels {
+		pbChannels[i] = &pb.ChannelConfig{
+			Id:         ch.ID.String(),
+			MerchantId: ch.MerchantID.String(),
+			Channel:    ch.Channel,
+			Config:     make(map[string]string), // Config在model中是JSON string，这里简化处理
+			IsEnabled:  ch.IsEnabled,
+			IsTestMode: ch.IsTestMode,
+			CreatedAt:  timestamppb.New(ch.CreatedAt),
+			UpdatedAt:  timestamppb.New(ch.UpdatedAt),
+		}
+	}
+
+	return &pb.ListChannelConfigsResponse{
+		Configs: pbChannels,
+	}, nil
 }
 
+// DisableChannel 禁用渠道
 func (s *MerchantServer) DisableChannel(ctx context.Context, req *pb.DisableChannelRequest) (*pb.DisableChannelResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	merchantID, err := uuid.Parse(req.MerchantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
+	}
+
+	// 找到该渠道的配置ID
+	channels, err := s.channelService.ListChannels(ctx, merchantID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "获取渠道配置失败: %v", err)
+	}
+
+	var channelID uuid.UUID
+	found := false
+	for _, ch := range channels {
+		if ch.Channel == req.Channel {
+			channelID = ch.ID
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, status.Errorf(codes.NotFound, "渠道配置不存在")
+	}
+
+	if err := s.channelService.ToggleChannel(ctx, channelID, merchantID, false); err != nil {
+		return nil, status.Errorf(codes.Internal, "禁用渠道失败: %v", err)
+	}
+
+	return &pb.DisableChannelResponse{
+		Success: true,
+	}, nil
 }

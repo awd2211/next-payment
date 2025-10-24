@@ -7,16 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
-	"github.com/payment-platform/pkg/db"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
-	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
-	"github.com/payment-platform/pkg/tracing"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	pkggrpc "github.com/payment-platform/pkg/grpc"
+	pb "github.com/payment-platform/proto/notification"
 	"payment-platform/notification-service/internal/handler"
 	"payment-platform/notification-service/internal/model"
 	"payment-platform/notification-service/internal/provider"
@@ -24,8 +22,6 @@ import (
 	"payment-platform/notification-service/internal/service"
 	"payment-platform/notification-service/internal/worker"
 	grpcServer "payment-platform/notification-service/internal/grpc"
-	pb "github.com/payment-platform/proto/notification"
-	pkggrpc "github.com/payment-platform/pkg/grpc"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -46,83 +42,41 @@ import (
 //	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 初始化日志
-	env := config.GetEnv("ENV", "development")
-	if err := logger.InitLogger(env); err != nil {
-		log.Fatalf("初始化日志失败: %v", err)
+	// 1. 使用 Bootstrap 框架初始化应用
+	application, err := app.Bootstrap(app.ServiceConfig{
+		ServiceName: "notification-service",
+		DBName:      config.GetEnv("DB_NAME", "payment_notification"),
+		Port:        config.GetEnvInt("PORT", 40008),
+		GRPCPort:    config.GetEnvInt("GRPC_PORT", 50008),
+
+		// 自动迁移数据库模型
+		AutoMigrate: []any{
+			&model.Notification{},
+			&model.NotificationTemplate{},
+			&model.WebhookEndpoint{},
+			&model.WebhookDelivery{},
+			&model.NotificationPreference{},
+		},
+
+		// 启用所有企业级功能
+		EnableTracing:     true,
+		EnableMetrics:     true,
+		EnableRedis:       true,
+		EnableGRPC:        true, // 启用 gRPC 服务器
+		EnableHealthCheck: true,
+		EnableRateLimit:   true,
+
+		// 速率限制配置
+		RateLimitRequests: 100,
+		RateLimitWindow:   time.Minute,
+	})
+	if err != nil {
+		log.Fatalf("Bootstrap 失败: %v", err)
 	}
-	defer logger.Sync()
 
 	logger.Info("正在启动 Notification Service...")
 
-	// 初始化数据库
-	dbConfig := db.Config{
-		Host:     config.GetEnv("DB_HOST", "localhost"),
-		Port:     config.GetEnvInt("DB_PORT", 5432),
-		User:     config.GetEnv("DB_USER", "postgres"),
-		Password: config.GetEnv("DB_PASSWORD", "postgres"),
-		DBName:   config.GetEnv("DB_NAME", "payment_notification"),
-		SSLMode:  config.GetEnv("DB_SSL_MODE", "disable"),
-		TimeZone: config.GetEnv("DB_TIMEZONE", "UTC"),
-	}
-
-	database, err := db.NewPostgresDB(dbConfig)
-	if err != nil {
-		logger.Fatal("数据库连接失败")
-		log.Fatalf("Error: %v", err)
-	}
-	logger.Info("数据库连接成功")
-
-	// 自动迁移数据库表
-	if err := database.AutoMigrate(
-		&model.Notification{},
-		&model.NotificationTemplate{},
-		&model.WebhookEndpoint{},
-		&model.WebhookDelivery{},
-		&model.NotificationPreference{},
-	); err != nil {
-		logger.Fatal("数据库迁移失败")
-		log.Fatalf("Error: %v", err)
-	}
-	logger.Info("数据库迁移完成")
-
-	// 初始化Redis
-	redisConfig := db.RedisConfig{
-		Host:     config.GetEnv("REDIS_HOST", "localhost"),
-		Port:     config.GetEnvInt("REDIS_PORT", 6379),
-		Password: config.GetEnv("REDIS_PASSWORD", ""),
-		DB:       config.GetEnvInt("REDIS_DB", 0),
-	}
-
-	redisClient, err := db.NewRedisClient(redisConfig)
-	if err != nil {
-		logger.Fatal("Redis连接失败")
-		log.Fatalf("Error: %v", err)
-	}
-	logger.Info("Redis连接成功")
-
-	// 初始化 Prometheus 指标
-	httpMetrics := metrics.NewHTTPMetrics("notification_service")
-	logger.Info("Prometheus 指标初始化完成")
-
-	// 初始化 Jaeger 分布式追踪
-	jaegerEndpoint := config.GetEnv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
-	samplingRate := float64(config.GetEnvInt("JAEGER_SAMPLING_RATE", 100)) / 100.0
-	tracerShutdown, err := tracing.InitTracer(tracing.Config{
-		ServiceName:    "notification-service",
-		ServiceVersion: "1.0.0",
-		Environment:    env,
-		JaegerEndpoint: jaegerEndpoint,
-		SamplingRate:   samplingRate,
-	})
-	if err != nil {
-		logger.Error(fmt.Sprintf("Jaeger 初始化失败: %v", err))
-	} else {
-		logger.Info("Jaeger 追踪初始化完成")
-		defer tracerShutdown(context.Background())
-	}
-
-	// 创建邮件提供商工厂
+	// 2. 创建邮件提供商工厂
 	emailFactory := provider.NewEmailProviderFactory()
 
 	// 注册 SMTP 提供商
@@ -151,7 +105,7 @@ func main() {
 		logger.Info("Mailgun 邮件提供商已注册")
 	}
 
-	// 创建短信提供商工厂
+	// 3. 创建短信提供商工厂
 	smsFactory := provider.NewSMSProviderFactory()
 
 	// 注册 Twilio 提供商
@@ -171,13 +125,13 @@ func main() {
 	smsFactory.Register("mock", mockSMSProvider)
 	logger.Info("Mock 短信提供商已注册")
 
-	// 创建 Webhook 提供商
+	// 4. 创建 Webhook 提供商
 	webhookProvider := provider.NewWebhookProvider()
 
-	// 初始化Repository
-	notificationRepo := repository.NewNotificationRepository(database)
+	// 5. 初始化Repository
+	notificationRepo := repository.NewNotificationRepository(application.DB)
 
-	// 初始化Kafka（可选）
+	// 6. 初始化Kafka（可选）
 	var notificationService service.NotificationService
 	kafkaEnabled := config.GetEnv("KAFKA_ENABLE_ASYNC", "false") == "true"
 
@@ -252,75 +206,33 @@ func main() {
 		)
 	}
 
-	// 初始化Handler
+	// 7. 初始化Handler
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 
-	// 初始化Gin
-	if env == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-	r := gin.Default()
+	// 8. Swagger UI（公开接口）
+	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// 全局中间件
-	r.Use(middleware.CORS())
-	r.Use(middleware.RequestID())
-	r.Use(tracing.TracingMiddleware("notification-service"))
-	r.Use(middleware.Logger(logger.Log))
-	r.Use(metrics.PrometheusMiddleware(httpMetrics))
-
-	// 限流中间件
-	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
-	r.Use(rateLimiter.RateLimit())
-
-	// Prometheus 指标端点
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
-
-	// 健康检查（公开接口）
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":  "ok",
-			"service": "notification-service",
-			"time":    time.Now().Unix(),
-		})
-	})
-
-	// Swagger UI（公开接口）
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
-	// 初始化JWT管理器
+	// 9. 初始化JWT管理器
 	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 
 	// JWT认证中间件
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 
-	// 注册通知路由（带认证）
-	notificationHandler.RegisterRoutes(r, authMiddleware)
+	// 10. 注册通知路由（带认证）
+	notificationHandler.RegisterRoutes(application.Router, authMiddleware)
 
-	// 启动 gRPC 服务器（独立 goroutine）
-	grpcPort := config.GetEnvInt("GRPC_PORT", 50008)
-	gRPCServer := pkggrpc.NewSimpleServer()
+	// 11. 注册 gRPC 服务
 	notificationGrpcServer := grpcServer.NewNotificationServer(notificationService)
-	pb.RegisterNotificationServiceServer(gRPCServer, notificationGrpcServer)
+	pb.RegisterNotificationServiceServer(application.GRPCServer, notificationGrpcServer)
+	logger.Info(fmt.Sprintf("gRPC Server 已注册，将监听端口 %d", config.GetEnvInt("GRPC_PORT", 50008)))
 
-	go func() {
-		logger.Info(fmt.Sprintf("gRPC Server 正在监听端口 %d", grpcPort))
-		if err := pkggrpc.StartServer(gRPCServer, grpcPort); err != nil {
-			logger.Fatal(fmt.Sprintf("gRPC Server 启动失败: %v", err))
-		}
-	}()
-
-	// 启动后台任务
+	// 12. 启动后台任务
 	go startBackgroundWorkers(notificationService)
 
-	// 启动 HTTP 服务器
-	port := config.GetEnvInt("PORT", 40008)
-	addr := fmt.Sprintf(":%d", port)
-	logger.Info(fmt.Sprintf("Notification Service 正在监听 %s", addr))
-
-	if err := r.Run(addr); err != nil {
-		logger.Fatal("服务启动失败")
-		log.Fatalf("Error: %v", err)
+	// 13. 启动服务（HTTP + gRPC 双协议，优雅关闭）
+	if err := application.RunDualProtocol(); err != nil {
+		logger.Fatal(fmt.Sprintf("服务启动失败: %v", err))
 	}
 }
 
@@ -342,3 +254,32 @@ func startBackgroundWorkers(notificationService service.NotificationService) {
 		}
 	}
 }
+
+// 代码行数对比：
+// - 原始版本: 345行 (手动初始化所有组件)
+// - Bootstrap版本: 254行 (框架自动处理)
+// - 减少代码: 26%（保留了所有自定义业务逻辑：provider factories、Kafka workers、background tasks）
+//
+// 自动获得的功能：
+// ✅ 数据库连接和迁移
+// ✅ Redis 连接
+// ✅ Zap 日志系统
+// ✅ Gin 路由和中间件（CORS, RequestID, Panic Recovery）
+// ✅ gRPC 服务器（自动启动在独立端口）
+// ✅ Jaeger 分布式追踪
+// ✅ Prometheus 指标收集（/metrics 端点）
+// ✅ 健康检查端点 (/health, /health/live, /health/ready)
+// ✅ 速率限制
+// ✅ 优雅关闭（信号处理，HTTP + gRPC 双协议）
+// ✅ 请求 ID
+//
+// 保留的自定义能力：
+// ✅ 邮件提供商工厂（SMTP, Mailgun）
+// ✅ 短信提供商工厂（Twilio, Mock）
+// ✅ Kafka 异步消息队列（可选）
+// ✅ Kafka Workers（邮件、短信）
+// ✅ 后台任务（定时处理待发送通知和 Webhook）
+// ✅ Webhook 提供商
+// ✅ gRPC 服务注册
+// ✅ JWT 认证中间件
+// ✅ Swagger UI

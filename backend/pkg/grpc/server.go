@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 )
@@ -69,6 +71,7 @@ func StartServer(server *grpc.Server, port int) error {
 		return fmt.Errorf("监听端口失败 %d: %w", port, err)
 	}
 
-	fmt.Printf("gRPC服务器启动在端口 %d\n", port)
+	logger.Info("gRPC server started",
+		zap.Int("port", port))
 	return server.Serve(lis)
 }

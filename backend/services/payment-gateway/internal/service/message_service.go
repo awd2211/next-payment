@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
 	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 )
 
 // MessageService 消息服务接口
@@ -131,10 +133,14 @@ func (s *messageService) SendCompensationMessage(ctx context.Context, msg *Compe
 		}); err != nil {
 			return fmt.Errorf("发送补偿消息到Kafka失败: %w", err)
 		}
-		fmt.Printf("[MQ] 补偿消息已发送: Type=%s, PaymentNo=%s, MessageID=%s\n",
-			msg.Type, msg.PaymentNo, msg.MessageID)
+		logger.Info("compensation message sent to kafka",
+			zap.String("type", string(msg.Type)),
+			zap.String("payment_no", msg.PaymentNo),
+			zap.String("message_id", msg.MessageID))
 	} else {
-		fmt.Printf("[MQ] Kafka未配置，模拟发送补偿消息: %s\n", string(data))
+		logger.Warn("kafka not configured, compensation message skipped",
+			zap.String("type", string(msg.Type)),
+			zap.String("payment_no", msg.PaymentNo))
 	}
 
 	return nil
@@ -174,10 +180,14 @@ func (s *messageService) SendNotificationMessage(ctx context.Context, msg *Notif
 		}); err != nil {
 			return fmt.Errorf("发送通知消息到Kafka失败: %w", err)
 		}
-		fmt.Printf("[MQ] 通知消息已发送: PaymentNo=%s, MessageID=%s, RetryCount=%d\n",
-			msg.PaymentNo, msg.MessageID, msg.RetryCount)
+		logger.Info("notification message sent to kafka",
+			zap.String("payment_no", msg.PaymentNo),
+			zap.String("message_id", msg.MessageID),
+			zap.Int("retry_count", msg.RetryCount))
 	} else {
-		fmt.Printf("[MQ] Kafka未配置，模拟发送通知消息: %s\n", string(data))
+		logger.Warn("kafka not configured, notification message skipped",
+			zap.String("payment_no", msg.PaymentNo),
+			zap.String("notify_url", msg.NotifyURL))
 	}
 
 	return nil
@@ -217,10 +227,14 @@ func (s *messageService) SendRefundNotificationMessage(ctx context.Context, msg 
 		}); err != nil {
 			return fmt.Errorf("发送退款通知消息到Kafka失败: %w", err)
 		}
-		fmt.Printf("[MQ] 退款通知消息已发送: RefundNo=%s, MessageID=%s, RetryCount=%d\n",
-			msg.RefundNo, msg.MessageID, msg.RetryCount)
+		logger.Info("refund notification message sent to kafka",
+			zap.String("refund_no", msg.RefundNo),
+			zap.String("message_id", msg.MessageID),
+			zap.Int("retry_count", msg.RetryCount))
 	} else {
-		fmt.Printf("[MQ] Kafka未配置，模拟发送退款通知消息: %s\n", string(data))
+		logger.Warn("kafka not configured, refund notification message skipped",
+			zap.String("refund_no", msg.RefundNo),
+			zap.String("notify_url", msg.NotifyURL))
 	}
 
 	return nil

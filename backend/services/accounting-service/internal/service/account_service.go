@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/accounting-service/internal/model"
 	"payment-platform/accounting-service/internal/repository"
@@ -608,7 +610,10 @@ func (s *accountService) ProcessSettlement(ctx context.Context, settlementNo str
 		// 事务回滚后，尝试标记结算为失败状态（尽力而为）
 		settlement.Status = model.SettlementStatusFailed
 		if updateErr := s.accountRepo.UpdateSettlement(ctx, settlement); updateErr != nil {
-			fmt.Printf("警告：事务失败后无法更新结算状态: %v\n", updateErr)
+			logger.Error("failed to update settlement status after transaction failure",
+				zap.Error(updateErr),
+				zap.String("settlement_no", settlement.SettlementNo),
+				zap.String("merchant_id", settlement.MerchantID.String()))
 		}
 		return fmt.Errorf("结算处理失败: %w", err)
 	}

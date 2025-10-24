@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/payment-platform/pkg/logger"
 	"github.com/twilio/twilio-go"
 	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
+	"go.uber.org/zap"
 )
 
 // SMSProvider 短信提供商接口
@@ -88,7 +90,9 @@ func (p *MockSMSProvider) GetProviderName() string {
 
 // Send 发送短信（模拟）
 func (p *MockSMSProvider) Send(ctx context.Context, req *SMSRequest) (*SMSResponse, error) {
-	fmt.Printf("[Mock SMS] To: %s, Content: %s\n", req.To, req.Content)
+	logger.Info("mock sms sent",
+		zap.String("to", req.To),
+		zap.String("content", req.Content))
 	return &SMSResponse{
 		MessageID: "mock-" + req.To,
 		Status:    "sent",

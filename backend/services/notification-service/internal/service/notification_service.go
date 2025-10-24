@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/kafka"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"payment-platform/notification-service/internal/model"
 	"payment-platform/notification-service/internal/provider"
 	"payment-platform/notification-service/internal/repository"
@@ -157,7 +159,11 @@ func (s *notificationService) SendEmail(ctx context.Context, req *SendEmailReque
 		allowed, err := s.repo.CheckPreference(ctx, req.MerchantID, req.UserID, model.ChannelEmail, req.EventType)
 		if err != nil {
 			// 记录错误但不阻止发送
-			fmt.Printf("检查通知偏好失败: %v\n", err)
+			logger.Error("failed to check notification preference",
+				zap.Error(err),
+				zap.String("merchant_id", req.MerchantID.String()),
+				zap.String("user_id", req.UserID.String()),
+				zap.String("event_type", req.EventType))
 		} else if !allowed {
 			// 用户禁用了该类型通知
 			return fmt.Errorf("用户已禁用该类型的邮件通知")
@@ -249,7 +255,11 @@ func (s *notificationService) SendSMS(ctx context.Context, req *SendSMSRequest) 
 		allowed, err := s.repo.CheckPreference(ctx, req.MerchantID, req.UserID, model.ChannelSMS, req.EventType)
 		if err != nil {
 			// 记录错误但不阻止发送
-			fmt.Printf("检查通知偏好失败: %v\n", err)
+			logger.Error("failed to check notification preference for SMS",
+				zap.Error(err),
+				zap.String("merchant_id", req.MerchantID.String()),
+				zap.String("user_id", req.UserID.String()),
+				zap.String("event_type", req.EventType))
 		} else if !allowed {
 			// 用户禁用了该类型通知
 			return fmt.Errorf("用户已禁用该类型的短信通知")
@@ -376,7 +386,10 @@ func (s *notificationService) SendWebhook(ctx context.Context, req *SendWebhookR
 		delivery.Payload = string(payloadBytes)
 
 		if err := s.repo.CreateDelivery(ctx, delivery); err != nil {
-			fmt.Printf("创建投递记录失败: %v\n", err)
+			logger.Error("failed to create delivery record",
+				zap.Error(err),
+				zap.String("merchant_id", req.MerchantID.String()),
+				zap.String("event_type", req.EventType))
 			continue
 		}
 

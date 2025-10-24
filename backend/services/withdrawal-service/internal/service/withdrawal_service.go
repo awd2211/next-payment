@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/withdrawal-service/internal/client"
 	"payment-platform/withdrawal-service/internal/model"
@@ -136,7 +138,11 @@ func (s *withdrawalService) CreateWithdrawal(ctx context.Context, input *CreateW
 	if s.notificationClient != nil {
 		if err := s.notificationClient.SendApprovalNotification(ctx, input.MerchantID, withdrawalNo, input.Amount); err != nil {
 			// 通知发送失败不影响提现创建，仅记录日志
-			fmt.Printf("发送审批通知失败: %v\n", err)
+			logger.Error("failed to send approval notification",
+				zap.Error(err),
+				zap.String("merchant_id", input.MerchantID.String()),
+				zap.String("withdrawal_no", withdrawalNo),
+				zap.Int64("amount", input.Amount))
 		}
 	}
 
@@ -413,7 +419,11 @@ func (s *withdrawalService) ExecuteWithdrawal(ctx context.Context, withdrawalID 
 	// 发送完成通知
 	if s.notificationClient != nil {
 		if err := s.notificationClient.SendWithdrawalStatusNotification(ctx, withdrawal.MerchantID, withdrawal.WithdrawalNo, "completed", withdrawal.Amount); err != nil {
-			fmt.Printf("发送完成通知失败: %v\n", err)
+			logger.Error("failed to send completion notification",
+				zap.Error(err),
+				zap.String("merchant_id", withdrawal.MerchantID.String()),
+				zap.String("withdrawal_no", withdrawal.WithdrawalNo),
+				zap.Int64("amount", withdrawal.Amount))
 		}
 	}
 
@@ -519,19 +529,9 @@ type CreateBankAccountInput struct {
 	VerificationDoc string
 }
 
-// CreateBankAccount 创建银行账户
+// CreateBankAccount 创建银行账户（使用事务保证默认账户唯一性）
 func (s *withdrawalService) CreateBankAccount(ctx context.Context, input *CreateBankAccountInput) (*model.WithdrawalBankAccount, error) {
-	// 如果设置为默认账户，先取消其他默认账户
-	if input.IsDefault {
-		accounts, _ := s.withdrawalRepo.ListBankAccounts(ctx, input.MerchantID)
-		for _, acc := range accounts {
-			if acc.IsDefault {
-				acc.IsDefault = false
-				s.withdrawalRepo.UpdateBankAccount(ctx, acc)
-			}
-		}
-	}
-
+	// 准备账户数据
 	account := &model.WithdrawalBankAccount{
 		MerchantID:      input.MerchantID,
 		BankName:        input.BankName,
@@ -546,8 +546,28 @@ func (s *withdrawalService) CreateBankAccount(ctx context.Context, input *Create
 		Status:          "active",
 	}
 
-	if err := s.withdrawalRepo.CreateBankAccount(ctx, account); err != nil {
-		return nil, fmt.Errorf("创建银行账户失败: %w", err)
+	// 在事务中处理默认账户设置和创建
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 如果设置为默认账户，先取消其他默认账户
+		if input.IsDefault {
+			err := tx.Model(&model.WithdrawalBankAccount{}).
+				Where("merchant_id = ? AND is_default = true", input.MerchantID).
+				Update("is_default", false).Error
+			if err != nil {
+				return fmt.Errorf("取消其他默认账户失败: %w", err)
+			}
+		}
+
+		// 2. 创建新账户
+		if err := tx.Create(account).Error; err != nil {
+			return fmt.Errorf("创建银行账户失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	return account, nil

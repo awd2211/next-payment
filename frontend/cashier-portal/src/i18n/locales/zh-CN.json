@@ -1,0 +1,45 @@
+{
+  "common": {
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "cancel": "取消",
+    "confirm": "确认",
+    "back": "返回",
+    "pay_now": "立即支付",
+    "processing": "处理中..."
+  },
+  "cashier": {
+    "title": "安全支付",
+    "order_summary": "订单摘要",
+    "amount": "金额",
+    "order_no": "订单号",
+    "description": "描述",
+    "payment_method": "支付方式",
+    "select_payment_method": "选择支付方式",
+    "card_payment": "信用卡/借记卡",
+    "card_number": "卡号",
+    "cardholder_name": "持卡人姓名",
+    "expiry_date": "有效期",
+    "cvv": "CVV安全码",
+    "email": "邮箱地址",
+    "save_card": "保存卡片用于将来支付",
+    "payment_processing": "正在处理您的支付...",
+    "payment_success": "支付成功！",
+    "payment_failed": "支付失败",
+    "session_expired": "会话已过期",
+    "session_expired_message": "您的支付会话已过期，请重试。",
+    "invalid_session": "无效的会话",
+    "powered_by": "技术支持",
+    "secure_payment": "安全支付",
+    "ssl_encrypted": "256位SSL加密"
+  },
+  "errors": {
+    "invalid_card_number": "无效的卡号",
+    "invalid_expiry": "无效的有效期",
+    "invalid_cvv": "无效的CVV",
+    "required_field": "此字段为必填项",
+    "payment_error": "支付处理失败，请重试。",
+    "network_error": "网络错误，请检查您的连接。"
+  }
+}

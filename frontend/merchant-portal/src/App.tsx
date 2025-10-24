@@ -13,6 +13,7 @@ import CreatePayment from './pages/CreatePayment'
 import Refunds from './pages/Refunds'
 import Settlements from './pages/Settlements'
 import ApiKeys from './pages/ApiKeys'
+import CashierConfig from './pages/CashierConfig'
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
           <Route path="refunds" element={<Refunds />} />
           <Route path="settlements" element={<Settlements />} />
           <Route path="api-keys" element={<ApiKeys />} />
+          <Route path="cashier-config" element={<CashierConfig />} />
           <Route path="account" element={<Account />} />
         </Route>
       </Routes>

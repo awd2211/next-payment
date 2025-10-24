@@ -14,6 +14,7 @@ import Payments from './pages/Payments'
 import Orders from './pages/Orders'
 import RiskManagement from './pages/RiskManagement'
 import Settlements from './pages/Settlements'
+import CashierManagement from './pages/CashierManagement'
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
           <Route path="orders" element={<Orders />} />
           <Route path="risk" element={<RiskManagement />} />
           <Route path="settlements" element={<Settlements />} />
+          <Route path="cashier" element={<CashierManagement />} />
         </Route>
       </Routes>
       </BrowserRouter>

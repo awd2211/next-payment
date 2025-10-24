@@ -133,3 +133,30 @@ func (c *OrderClient) GetOrder(ctx context.Context, paymentNo string) (*Order, e
 
 	return result.Data, nil
 }
+
+// CancelOrder 取消订单（用于 Saga 补偿）
+func (c *OrderClient) CancelOrder(ctx context.Context, orderNo string, reason string) error {
+	path := fmt.Sprintf("/api/v1/orders/%s/cancel", orderNo)
+	req := map[string]string{
+		"reason": reason,
+	}
+
+	resp, err := c.http.Post(ctx, path, req, nil)
+	if err != nil {
+		return fmt.Errorf("调用Order服务失败: %w", err)
+	}
+
+	var result struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := resp.ParseResponse(&result); err != nil {
+		return err
+	}
+
+	if result.Code != 0 {
+		return fmt.Errorf("取消订单失败: %s", result.Message)
+	}
+
+	return nil
+}

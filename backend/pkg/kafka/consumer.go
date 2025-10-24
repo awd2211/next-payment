@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/payment-platform/pkg/logger"
 	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 )
 
 // Consumer Kafka消费者
@@ -65,7 +67,11 @@ func (c *Consumer) Consume(ctx context.Context, handler MessageHandler) error {
 			// 处理消息
 			if err := handler(ctx, msg.Value); err != nil {
 				// 处理失败，记录错误但继续消费
-				fmt.Printf("处理Kafka消息失败: %v\n", err)
+				logger.Error("failed to process kafka message",
+					zap.Error(err),
+					zap.String("topic", msg.Topic),
+					zap.Int("partition", msg.Partition),
+					zap.Int64("offset", msg.Offset))
 				// 这里可以选择是否提交offset
 				// 如果不提交，下次会重新消费
 				continue
@@ -73,7 +79,10 @@ func (c *Consumer) Consume(ctx context.Context, handler MessageHandler) error {
 
 			// 提交offset
 			if err := c.reader.CommitMessages(ctx, msg); err != nil {
-				fmt.Printf("提交Kafka offset失败: %v\n", err)
+				logger.Error("failed to commit kafka offset",
+					zap.Error(err),
+					zap.String("topic", msg.Topic),
+					zap.Int64("offset", msg.Offset))
 			}
 		}
 	}
@@ -99,7 +108,11 @@ func (c *Consumer) ConsumeWithRetry(ctx context.Context, handler MessageHandler,
 					// 指数退避
 					if i < maxRetries {
 						backoff := time.Duration(1<<uint(i)) * time.Second
-						fmt.Printf("处理失败，%d秒后重试 (尝试 %d/%d): %v\n", backoff/time.Second, i+1, maxRetries+1, err)
+						logger.Warn("kafka message processing failed, retrying",
+							zap.Error(err),
+							zap.Duration("retry_in", backoff),
+							zap.Int("attempt", i+1),
+							zap.Int("max_retries", maxRetries+1))
 						time.Sleep(backoff)
 						continue
 					}
@@ -112,13 +125,19 @@ func (c *Consumer) ConsumeWithRetry(ctx context.Context, handler MessageHandler,
 
 			if lastErr != nil {
 				// 所有重试都失败，记录错误
-				fmt.Printf("处理Kafka消息失败（已达最大重试次数）: %v\n", lastErr)
+				logger.Error("kafka message processing failed after all retries",
+					zap.Error(lastErr),
+					zap.String("topic", msg.Topic),
+					zap.Int("max_retries", maxRetries))
 				// 可以发送到死信队列
 			}
 
 			// 提交offset（即使处理失败，避免无限重试阻塞队列）
 			if err := c.reader.CommitMessages(ctx, msg); err != nil {
-				fmt.Printf("提交Kafka offset失败: %v\n", err)
+				logger.Error("failed to commit kafka offset after retry",
+					zap.Error(err),
+					zap.String("topic", msg.Topic),
+					zap.Int64("offset", msg.Offset))
 			}
 		}
 	}

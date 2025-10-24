@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	pb "github.com/payment-platform/proto/channel"
@@ -82,7 +83,18 @@ func (s *ChannelServer) QueryPayment(ctx context.Context, req *pb.QueryPaymentRe
 
 // CancelPayment 取消支付
 func (s *ChannelServer) CancelPayment(ctx context.Context, req *pb.CancelPaymentRequest) (*pb.CancelPaymentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	err := s.channelService.CancelPayment(ctx, req.PaymentNo)
+	if err != nil {
+		return &pb.CancelPaymentResponse{
+			Success: false,
+			Message: fmt.Sprintf("取消支付失败: %v", err),
+		}, nil
+	}
+
+	return &pb.CancelPaymentResponse{
+		Success: true,
+		Message: "取消支付成功",
+	}, nil
 }
 
 // CreateRefund 创建退款
@@ -110,15 +122,56 @@ func (s *ChannelServer) CreateRefund(ctx context.Context, req *pb.CreateRefundRe
 
 // QueryRefund 查询退款
 func (s *ChannelServer) QueryRefund(ctx context.Context, req *pb.QueryRefundRequest) (*pb.QueryRefundResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	resp, err := s.channelService.QueryRefund(ctx, req.RefundNo)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "查询退款失败: %v", err)
+	}
+
+	var refundedAt *timestamppb.Timestamp
+	if resp.RefundedAt != nil {
+		refundedAt = timestamppb.New(*resp.RefundedAt)
+	}
+
+	return &pb.QueryRefundResponse{
+		ChannelRefundNo: resp.ChannelRefundNo,
+		Status:          resp.Status,
+		Amount:          resp.Amount,
+		Currency:        resp.Currency,
+		RefundedAt:      refundedAt,
+	}, nil
 }
 
 // GetChannelConfig 获取渠道配置
 func (s *ChannelServer) GetChannelConfig(ctx context.Context, req *pb.GetChannelConfigRequest) (*pb.ChannelConfigResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	merchantID, err := uuid.Parse(req.MerchantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
+	}
+
+	config, err := s.channelService.GetChannelConfig(ctx, merchantID, req.Channel)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "获取渠道配置失败: %v", err)
+	}
+
+	if config == nil {
+		return nil, status.Errorf(codes.NotFound, "渠道配置不存在")
+	}
+
+	// 将config转换为proto message
+	pbConfig := &pb.ChannelConfig{
+		Channel:    config.Channel,
+		MerchantId: config.MerchantID.String(),
+		Enabled:    config.IsEnabled,
+		CreatedAt:  timestamppb.New(config.CreatedAt),
+		UpdatedAt:  timestamppb.New(config.UpdatedAt),
+	}
+
+	return &pb.ChannelConfigResponse{
+		Config: pbConfig,
+	}, nil
 }
 
 // UpdateChannelConfig 更新渠道配置
 func (s *ChannelServer) UpdateChannelConfig(ctx context.Context, req *pb.UpdateChannelConfigRequest) (*pb.ChannelConfigResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "方法未实现")
+	return nil, status.Errorf(codes.Unimplemented, "方法未实现: UpdateChannelConfig需要repository层支持")
 }

@@ -6,6 +6,7 @@ use (
 	./services/accounting-service
 	./services/admin-service
 	./services/analytics-service
+	./services/cashier-service
 	./services/channel-adapter
 	./services/config-service
 	./services/kyc-service

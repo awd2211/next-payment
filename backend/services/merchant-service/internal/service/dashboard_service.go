@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"payment-platform/merchant-service/internal/client"
 )
 
@@ -135,7 +137,9 @@ func (s *dashboardService) GetDashboard(ctx context.Context, merchantID uuid.UUI
 		stats, err := s.analyticsClient.GetStatistics(ctx, merchantID)
 		if err != nil {
 			// 统计数据获取失败不影响整体，记录日志继续
-			fmt.Printf("获取统计数据失败: %v\n", err)
+			logger.Error("failed to get analytics statistics",
+				zap.Error(err),
+				zap.String("merchant_id", merchantID.String()))
 		} else {
 			dashboard.TodayPayments = stats.TodayPayments
 			dashboard.TodayAmount = stats.TodayAmount
@@ -161,7 +165,9 @@ func (s *dashboardService) GetDashboard(ctx context.Context, merchantID uuid.UUI
 	if s.accountingClient != nil {
 		balance, err := s.accountingClient.GetBalanceSummary(ctx, merchantID)
 		if err != nil {
-			fmt.Printf("获取余额信息失败: %v\n", err)
+			logger.Error("failed to get balance summary",
+				zap.Error(err),
+				zap.String("merchant_id", merchantID.String()))
 		} else {
 			dashboard.AvailableBalance = balance.AvailableBalance
 			dashboard.FrozenBalance = balance.FrozenBalance
@@ -173,7 +179,9 @@ func (s *dashboardService) GetDashboard(ctx context.Context, merchantID uuid.UUI
 	if s.riskClient != nil {
 		risk, err := s.riskClient.GetRiskInfo(ctx, merchantID)
 		if err != nil {
-			fmt.Printf("获取风控信息失败: %v\n", err)
+			logger.Error("failed to get risk info",
+				zap.Error(err),
+				zap.String("merchant_id", merchantID.String()))
 		} else {
 			dashboard.RiskLevel = risk.RiskLevel
 			dashboard.PendingReviews = risk.PendingReviews
@@ -184,7 +192,9 @@ func (s *dashboardService) GetDashboard(ctx context.Context, merchantID uuid.UUI
 	if s.notificationClient != nil {
 		unread, err := s.notificationClient.GetUnreadCount(ctx, merchantID)
 		if err != nil {
-			fmt.Printf("获取未读通知数失败: %v\n", err)
+			logger.Error("failed to get unread notification count",
+				zap.Error(err),
+				zap.String("merchant_id", merchantID.String()))
 		} else {
 			dashboard.UnreadNotifications = unread.Total
 		}

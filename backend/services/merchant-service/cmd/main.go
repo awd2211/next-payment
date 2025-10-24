@@ -12,6 +12,7 @@ import (
 	"github.com/payment-platform/pkg/db"
 	pkggrpc "github.com/payment-platform/pkg/grpc"
 	"github.com/payment-platform/pkg/health"
+	"github.com/payment-platform/pkg/idempotency"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
@@ -144,7 +145,7 @@ func main() {
 	qualificationRepo := repository.NewBusinessQualificationRepository(database)
 
 	// 初始化Service
-	merchantService := service.NewMerchantService(merchantRepo, apiKeyRepo, jwtManager)
+	merchantService := service.NewMerchantService(database, merchantRepo, apiKeyRepo, jwtManager)
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, merchantRepo)
 	channelService := service.NewChannelService(channelRepo)
 
@@ -186,7 +187,7 @@ func main() {
 	// 初始化gRPC Server（并行启动）
 	grpcPort := config.GetEnvInt("GRPC_PORT", 50002)
 	grpcServer := pkggrpc.NewSimpleServer()
-	merchantGrpcServer := grpc.NewMerchantServer(merchantService)
+	merchantGrpcServer := grpc.NewMerchantServer(merchantService, apiKeyService, channelService)
 	pb.RegisterMerchantServiceServer(grpcServer, merchantGrpcServer)
 
 	// 在后台启动gRPC服务器
@@ -227,6 +228,10 @@ func main() {
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
+
+	// 幂等性中间件（针对创建操作）
+	idempotencyManager := idempotency.NewIdempotencyManager(redisClient, "merchant-service", 24*time.Hour)
+	r.Use(middleware.IdempotencyMiddleware(idempotencyManager))
 
 	// Prometheus 指标端点
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))

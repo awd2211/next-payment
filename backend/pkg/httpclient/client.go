@@ -8,6 +8,9 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // Client HTTP客户端
@@ -143,7 +146,11 @@ func (c *Client) doRequest(req *Request) (*Response, error) {
 
 	if err != nil {
 		if c.config.EnableLogging {
-			fmt.Printf("[HTTP] %s %s - Error: %v (Duration: %v)\n", req.Method, req.URL, err, duration)
+			logger.Error("HTTP request failed",
+				zap.String("method", req.Method),
+				zap.String("url", req.URL),
+				zap.Error(err),
+				zap.Duration("duration", duration))
 		}
 		return nil, fmt.Errorf("HTTP请求失败: %w", err)
 	}
@@ -164,8 +171,12 @@ func (c *Client) doRequest(req *Request) (*Response, error) {
 
 	// 日志
 	if c.config.EnableLogging {
-		fmt.Printf("[HTTP] %s %s - %d (Duration: %v, Size: %d bytes)\n",
-			req.Method, req.URL, httpResp.StatusCode, duration, len(respBody))
+		logger.Info("HTTP request completed",
+			zap.String("method", req.Method),
+			zap.String("url", req.URL),
+			zap.Int("status_code", httpResp.StatusCode),
+			zap.Duration("duration", duration),
+			zap.Int("response_size", len(respBody)))
 	}
 
 	// 检查HTTP状态码

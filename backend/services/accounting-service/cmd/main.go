@@ -169,7 +169,7 @@ func main() {
 	// 启动 gRPC 服务器（独立 goroutine）
 	grpcPort := config.GetEnvInt("GRPC_PORT", 50007)
 	gRPCServer := pkggrpc.NewSimpleServer()
-	accountingGrpcServer := grpcServer.NewAccountingServer()
+	accountingGrpcServer := grpcServer.NewAccountingServer(accountService)
 	pb.RegisterAccountingServiceServer(gRPCServer, accountingGrpcServer)
 
 	go func() {

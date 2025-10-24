@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/db"
+	"github.com/payment-platform/pkg/idempotency"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
@@ -119,8 +120,8 @@ func main() {
 	// 初始化Repository
 	orderRepo := repository.NewOrderRepository(database)
 
-	// 初始化Service
-	orderService := service.NewOrderService(orderRepo)
+	// 初始化Service（传递 db 用于事务管理）
+	orderService := service.NewOrderService(database, orderRepo)
 
 	// 初始化Handler
 	orderHandler := handler.NewOrderHandler(orderService)
@@ -141,6 +142,10 @@ func main() {
 	// 限流中间件
 	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute)
 	r.Use(rateLimiter.RateLimit())
+
+	// 幂等性中间件（针对创建操作）
+	idempotencyManager := idempotency.NewIdempotencyManager(redisClient, "order-service", 24*time.Hour)
+	r.Use(middleware.IdempotencyMiddleware(idempotencyManager))
 
 	// Prometheus 指标端点
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))

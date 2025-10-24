@@ -21,6 +21,7 @@ import {
   RollbackOutlined,
   BankOutlined,
   KeyOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -77,6 +78,11 @@ const Layout = () => {
       key: '/api-keys',
       icon: <KeyOutlined />,
       label: t('menu.apiKeys'),
+    },
+    {
+      key: '/cashier-config',
+      icon: <SettingOutlined />,
+      label: t('menu.cashierConfig') || '收银台配置',
     },
     {
       key: '/account',
