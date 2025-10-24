@@ -4,32 +4,40 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/httpclient"
 )
 
 // AccountingClient Accounting Service HTTP客户端
 type AccountingClient struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL string
+	breaker *httpclient.BreakerClient
 }
 
-// NewAccountingClient 创建Accounting客户端实例
+// NewAccountingClient 创建Accounting客户端实例（带熔断器）
 func NewAccountingClient(baseURL string) *AccountingClient {
+	// 创建 httpclient 配置
+	config := &httpclient.Config{
+		Timeout:    30 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: time.Second,
+	}
+
+	// 创建熔断器配置
+	breakerConfig := httpclient.DefaultBreakerConfig("accounting-service")
+
 	return &AccountingClient{
 		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		breaker: httpclient.NewBreakerClient(config, breakerConfig),
 	}
 }
 
 // TransactionListResponse 交易列表响应
 type TransactionListResponse struct {
-	Code    int               `json:"code"`
-	Message string            `json:"message"`
+	Code    int                  `json:"code"`
+	Message string               `json:"message"`
 	Data    *TransactionListData `json:"data"`
 }
 
@@ -51,31 +59,31 @@ type TransactionInfo struct {
 	TransactionAt string `json:"transaction_at"`
 }
 
-// GetTransactions 获取交易列表用于结算
+// GetTransactions 获取交易列表用于结算（使用熔断器）
 func (c *AccountingClient) GetTransactions(ctx context.Context, merchantID uuid.UUID, startDate, endDate time.Time) ([]TransactionInfo, error) {
+	// 构建URL
 	url := fmt.Sprintf("%s/api/v1/transactions?merchant_id=%s&start_date=%s&end_date=%s&status=success&page_size=10000",
 		c.baseURL,
 		merchantID.String(),
 		startDate.Format("2006-01-02"),
 		endDate.Format("2006-01-02"))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
 	}
 
-	resp, err := c.httpClient.Do(req)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var result TransactionListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 

@@ -1,29 +1,36 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/httpclient"
 )
 
 // WithdrawalClient Withdrawal Service HTTP客户端
 type WithdrawalClient struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL string
+	breaker *httpclient.BreakerClient
 }
 
-// NewWithdrawalClient 创建Withdrawal客户端实例
+// NewWithdrawalClient 创建Withdrawal客户端实例（带熔断器）
 func NewWithdrawalClient(baseURL string) *WithdrawalClient {
+	// 创建 httpclient 配置
+	config := &httpclient.Config{
+		Timeout:    30 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: time.Second,
+	}
+
+	// 创建熔断器配置
+	breakerConfig := httpclient.DefaultBreakerConfig("withdrawal-service")
+
 	return &WithdrawalClient{
 		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		breaker: httpclient.NewBreakerClient(config, breakerConfig),
 	}
 }
 
@@ -31,7 +38,7 @@ func NewWithdrawalClient(baseURL string) *WithdrawalClient {
 type CreateWithdrawalRequest struct {
 	MerchantID    uuid.UUID `json:"merchant_id"`
 	Amount        int64     `json:"amount"`
-	Type          string    `json:"type"`           // settlement_auto, settlement_manual
+	Type          string    `json:"type"` // settlement_auto, settlement_manual
 	BankAccountID uuid.UUID `json:"bank_account_id"`
 	Remarks       string    `json:"remarks"`
 	CreatedBy     uuid.UUID `json:"created_by"`
@@ -39,9 +46,9 @@ type CreateWithdrawalRequest struct {
 
 // CreateWithdrawalResponse 创建提现响应
 type CreateWithdrawalResponse struct {
-	Code    int              `json:"code"`
-	Message string           `json:"message"`
-	Data    *WithdrawalData  `json:"data"`
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    *WithdrawalData `json:"data"`
 }
 
 // WithdrawalData 提现数据
@@ -51,33 +58,30 @@ type WithdrawalData struct {
 	Status       string `json:"status"`
 }
 
-// CreateWithdrawalForSettlement 为结算创建提现
-func (c *WithdrawalClient) CreateWithdrawalForSettlement(ctx context.Context, req *CreateWithdrawalRequest) (string, error) {
+// CreateWithdrawalForSettlement 为结算创建提现（使用熔断器）
+func (c *WithdrawalClient) CreateWithdrawalForSettlement(ctx context.Context, withdrawalReq *CreateWithdrawalRequest) (string, error) {
 	url := fmt.Sprintf("%s/api/v1/withdrawals", c.baseURL)
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return "", fmt.Errorf("序列化请求失败: %w", err)
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "POST",
+		URL:    url,
+		Body:   withdrawalReq,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(body))
-	if err != nil {
-		return "", fmt.Errorf("创建请求失败: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(httpReq)
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("请求失败，状态码: %d", resp.StatusCode)
-	}
-
+	// 解析响应
 	var result CreateWithdrawalResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return "", fmt.Errorf("解析响应失败: %w", err)
 	}
 

@@ -29,6 +29,7 @@ type settlementService struct {
 	settlementRepo   repository.SettlementRepository
 	accountingClient *client.AccountingClient
 	withdrawalClient *client.WithdrawalClient
+	merchantClient   *client.MerchantClient
 }
 
 // NewSettlementService 创建结算服务
@@ -37,12 +38,14 @@ func NewSettlementService(
 	settlementRepo repository.SettlementRepository,
 	accountingClient *client.AccountingClient,
 	withdrawalClient *client.WithdrawalClient,
+	merchantClient *client.MerchantClient,
 ) SettlementService {
 	return &settlementService{
 		db:               db,
 		settlementRepo:   settlementRepo,
 		accountingClient: accountingClient,
 		withdrawalClient: withdrawalClient,
+		merchantClient:   merchantClient,
 	}
 }
 
@@ -302,16 +305,21 @@ func (s *settlementService) ExecuteSettlement(ctx context.Context, settlementID 
 	}
 
 	// 实际转账逻辑：调用 withdrawal-service 创建提现
-	if s.withdrawalClient != nil {
-		// 获取商户的默认银行账户ID（这里简化处理，实际应该查询商户信息）
-		// TODO: 从merchant-service获取商户默认银行账户
-		defaultBankAccountID := uuid.New() // 临时使用新UUID，生产环境需要实际查询
+	if s.withdrawalClient != nil && s.merchantClient != nil {
+		// 从merchant-service获取商户默认银行账户
+		defaultAccount, err := s.merchantClient.GetDefaultSettlementAccount(ctx, settlement.MerchantID)
+		if err != nil {
+			settlement.Status = model.SettlementStatusFailed
+			settlement.ErrorMessage = fmt.Sprintf("获取默认结算账户失败: %v", err)
+			s.settlementRepo.Update(ctx, settlement)
+			return fmt.Errorf("获取默认结算账户失败: %w", err)
+		}
 
 		withdrawalReq := &client.CreateWithdrawalRequest{
 			MerchantID:    settlement.MerchantID,
 			Amount:        settlement.SettlementAmount,
 			Type:          "settlement_auto",
-			BankAccountID: defaultBankAccountID,
+			BankAccountID: defaultAccount.ID,
 			Remarks:       fmt.Sprintf("自动结算: %s, 周期: %s", settlement.SettlementNo, settlement.Cycle),
 			CreatedBy:     uuid.MustParse("00000000-0000-0000-0000-000000000000"), // 系统自动
 		}
