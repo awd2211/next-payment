@@ -195,7 +195,7 @@ func main() {
 	// 启动 gRPC 服务器（独立 goroutine）
 	grpcPort := config.GetEnvInt("GRPC_PORT", 50011)
 	gRPCServer := pkggrpc.NewSimpleServer()
-	authGrpcServer := grpcServer.NewMerchantAuthServer(authService)
+	authGrpcServer := grpcServer.NewMerchantAuthServer(securityService)
 	pb.RegisterMerchantAuthServiceServer(gRPCServer, authGrpcServer)
 
 	go func() {

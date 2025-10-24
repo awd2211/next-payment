@@ -10,7 +10,7 @@ require (
 	github.com/payment-platform/pkg v0.0.0-00010101000000-000000000000
 	github.com/payment-platform/proto v0.0.0-00010101000000-000000000000
 	github.com/prometheus/client_golang v1.19.1
-	github.com/redis/go-redis/v9 v9.14.1
+	github.com/redis/go-redis/v9 v9.16.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.6
@@ -88,7 +88,7 @@ require (
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
 )
 

@@ -12,11 +12,11 @@ import (
 // KYCServer implements the KYCService gRPC service
 type KYCServer struct {
 	pb.UnimplementedKYCServiceServer
-	kycService *service.KYCService
+	kycService service.KYCService
 }
 
 // NewKYCServer creates a new KYC gRPC server
-func NewKYCServer(kycService *service.KYCService) *KYCServer {
+func NewKYCServer(kycService service.KYCService) *KYCServer {
 	return &KYCServer{
 		kycService: kycService,
 	}

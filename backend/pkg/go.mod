@@ -11,14 +11,14 @@ require (
 	github.com/mailgun/mailgun-go/v4 v4.12.0
 	github.com/pquerna/otp v1.4.0
 	github.com/prometheus/client_golang v1.19.1
-	github.com/redis/go-redis/v9 v9.14.1
+	github.com/redis/go-redis/v9 v9.16.0
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/sony/gobreaker v0.5.0
 	go.opentelemetry.io/otel v1.37.0
 	go.opentelemetry.io/otel/exporters/jaeger v1.17.0
 	go.opentelemetry.io/otel/sdk v1.37.0
 	go.opentelemetry.io/otel/trace v1.37.0
-	go.uber.org/zap v1.26.0
+	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.43.0
 	google.golang.org/grpc v1.76.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
@@ -82,7 +82,7 @@ require (
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 )

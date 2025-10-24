@@ -8,6 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
 	github.com/payment-platform/pkg v0.0.0-00010101000000-000000000000
+	github.com/payment-platform/proto v0.0.0-00010101000000-000000000000
 	github.com/prometheus/client_golang v1.19.1
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
@@ -66,7 +67,7 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.55.0 // indirect
-	github.com/redis/go-redis/v9 v9.14.1 // indirect
+	github.com/redis/go-redis/v9 v9.16.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
@@ -77,7 +78,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.26.0 // indirect
+	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
@@ -87,11 +88,10 @@ require (
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
 )
 
-replace github.com/payment-platform/pkg => ../../pkg
-
 replace github.com/payment-platform/proto => ../../proto
+
 replace github.com/payment-platform/pkg => ../../pkg

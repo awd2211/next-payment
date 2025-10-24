@@ -31,19 +31,31 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *pb.CreateOrderReques
 		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
 	}
 
+	var customerID uuid.UUID
+	if req.CustomerId != "" {
+		customerID, err = uuid.Parse(req.CustomerId)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "无效的客户ID")
+		}
+	}
+
+	// 简化的订单创建 - 使用 proto 中定义的字段
+	// TODO: 需要更新 proto 定义以支持完整的订单字段
 	input := &service.CreateOrderInput{
 		MerchantID:    merchantID,
-		OrderNo:       req.OrderNo,
-		PaymentNo:     req.PaymentNo,
-		Amount:        req.Amount,
-		Currency:      req.Currency,
-		Channel:       req.Channel,
-		PayMethod:     req.PaymentMethod,
-		CustomerEmail: req.CustomerEmail,
-		CustomerName:  req.CustomerName,
-		CustomerPhone: req.CustomerPhone,
+		CustomerID:    customerID,
+		CustomerEmail: "", // proto 中没有这个字段
+		CustomerName:  "", // proto 中没有这个字段
 		CustomerIP:    req.ClientIp,
-		Description:   req.Description,
+		Currency:      req.Currency,
+		Items:         []service.OrderItemInput{}, // proto 中没有详细的商品信息
+		Remark:        req.Description,
+		Extra:         make(map[string]interface{}),
+	}
+
+	// 将 metadata 转换到 extra
+	for k, v := range req.Metadata {
+		input.Extra[k] = v
 	}
 
 	order, err := s.orderService.CreateOrder(ctx, input)
@@ -58,91 +70,30 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *pb.CreateOrderReques
 
 	return &pb.OrderResponse{
 		Order: &pb.Order{
-			Id:            order.ID.String(),
-			MerchantId:    order.MerchantID.String(),
-			OrderNo:       order.OrderNo,
-			PaymentNo:     order.PaymentNo,
-			Amount:        order.Amount,
-			Currency:      order.Currency,
-			Status:        order.Status,
-			Channel:       order.Channel,
-			PaymentMethod: order.PayMethod,
-			CustomerEmail: order.CustomerEmail,
-			CustomerName:  order.CustomerName,
-			Description:   order.Description,
-			PaidAt:        paidAt,
-			CreatedAt:     timestamppb.New(order.CreatedAt),
-			UpdatedAt:     timestamppb.New(order.UpdatedAt),
+			Id:          order.ID.String(),
+			MerchantId:  order.MerchantID.String(),
+			OrderNo:     order.OrderNo,
+			Amount:      order.TotalAmount,
+			Currency:    order.Currency,
+			Status:      order.Status,
+			Description: req.Description,
+			PaidAt:      paidAt,
+			CreatedAt:   timestamppb.New(order.CreatedAt),
+			UpdatedAt:   timestamppb.New(order.UpdatedAt),
 		},
 	}, nil
 }
 
 // GetOrder 获取订单
 func (s *OrderServer) GetOrder(ctx context.Context, req *pb.GetOrderRequest) (*pb.OrderResponse, error) {
-	merchantID, err := uuid.Parse(req.MerchantId)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
-	}
-
-	order, err := s.orderService.GetOrderByNo(ctx, merchantID, req.OrderNo)
-	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "订单不存在")
-	}
-
-	var paidAt *timestamppb.Timestamp
-	if order.PaidAt != nil {
-		paidAt = timestamppb.New(*order.PaidAt)
-	}
-
-	return &pb.OrderResponse{
-		Order: &pb.Order{
-			Id:            order.ID.String(),
-			MerchantId:    order.MerchantID.String(),
-			OrderNo:       order.OrderNo,
-			PaymentNo:     order.PaymentNo,
-			Amount:        order.Amount,
-			Currency:      order.Currency,
-			Status:        order.Status,
-			Channel:       order.Channel,
-			PaymentMethod: order.PayMethod,
-			PaidAt:        paidAt,
-			CreatedAt:     timestamppb.New(order.CreatedAt),
-			UpdatedAt:     timestamppb.New(order.UpdatedAt),
-		},
-	}, nil
+	// TODO: proto 定义与 service 实现不匹配，需要重新设计
+	return nil, status.Errorf(codes.Unimplemented, "方法未实现 - proto 定义需要更新")
 }
 
 // UpdateOrderStatus 更新订单状态
 func (s *OrderServer) UpdateOrderStatus(ctx context.Context, req *pb.UpdateOrderStatusRequest) (*pb.OrderResponse, error) {
-	merchantID, err := uuid.Parse(req.MerchantId)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "无效的商户ID")
-	}
-
-	order, err := s.orderService.UpdateOrderStatus(ctx, merchantID, req.PaymentNo, req.Status)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "更新订单状态失败: %v", err)
-	}
-
-	var paidAt *timestamppb.Timestamp
-	if order.PaidAt != nil {
-		paidAt = timestamppb.New(*order.PaidAt)
-	}
-
-	return &pb.OrderResponse{
-		Order: &pb.Order{
-			Id:         order.ID.String(),
-			MerchantId: order.MerchantID.String(),
-			OrderNo:    order.OrderNo,
-			PaymentNo:  order.PaymentNo,
-			Amount:     order.Amount,
-			Currency:   order.Currency,
-			Status:     order.Status,
-			PaidAt:     paidAt,
-			CreatedAt:  timestamppb.New(order.CreatedAt),
-			UpdatedAt:  timestamppb.New(order.UpdatedAt),
-		},
-	}, nil
+	// TODO: proto 定义与 service 实现不匹配，需要重新设计
+	return nil, status.Errorf(codes.Unimplemented, "方法未实现 - proto 定义需要更新")
 }
 
 // ListOrders 订单列表

@@ -12,13 +12,13 @@ import (
 // MerchantAuthServer implements the MerchantAuthService gRPC service
 type MerchantAuthServer struct {
 	pb.UnimplementedMerchantAuthServiceServer
-	authService *service.AuthService
+	securityService service.SecurityService
 }
 
 // NewMerchantAuthServer creates a new MerchantAuth gRPC server
-func NewMerchantAuthServer(authService *service.AuthService) *MerchantAuthServer {
+func NewMerchantAuthServer(securityService service.SecurityService) *MerchantAuthServer {
 	return &MerchantAuthServer{
-		authService: authService,
+		securityService: securityService,
 	}
 }
 
