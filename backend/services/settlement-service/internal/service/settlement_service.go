@@ -6,6 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/events"
+	"github.com/payment-platform/pkg/kafka"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/settlement-service/internal/client"
 	"payment-platform/settlement-service/internal/model"
@@ -30,7 +34,8 @@ type settlementService struct {
 	accountingClient   *client.AccountingClient
 	withdrawalClient   *client.WithdrawalClient
 	merchantClient     *client.MerchantClient
-	notificationClient *client.NotificationClient
+	notificationClient *client.NotificationClient // 保留作为降级方案
+	eventPublisher     *kafka.EventPublisher // 新增: 统一事件发布器
 }
 
 // NewSettlementService 创建结算服务
@@ -41,6 +46,7 @@ func NewSettlementService(
 	withdrawalClient *client.WithdrawalClient,
 	merchantClient *client.MerchantClient,
 	notificationClient *client.NotificationClient,
+	eventPublisher *kafka.EventPublisher,
 ) SettlementService {
 	return &settlementService{
 		db:                 db,
@@ -49,6 +55,7 @@ func NewSettlementService(
 		withdrawalClient:   withdrawalClient,
 		merchantClient:     merchantClient,
 		notificationClient: notificationClient,
+		eventPublisher:     eventPublisher,
 	}
 }
 
@@ -133,6 +140,9 @@ func (s *settlementService) CreateSettlement(ctx context.Context, input *CreateS
 	if err != nil {
 		return nil, err
 	}
+
+	// 发布结算创建事件 (异步, 不阻塞主流程)
+	s.publishSettlementEvent(ctx, events.SettlementCreated, settlement)
 
 	return settlement, nil
 }
@@ -239,7 +249,7 @@ func (s *settlementService) ApproveSettlement(ctx context.Context, settlementID,
 	}
 
 	// 使用事务
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		if err := s.settlementRepo.Update(ctx, settlement); err != nil {
 			return fmt.Errorf("更新结算单失败: %w", err)
 		}
@@ -248,6 +258,13 @@ func (s *settlementService) ApproveSettlement(ctx context.Context, settlementID,
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// 发布结算审批通过事件
+	s.publishSettlementEvent(ctx, events.SettlementApproved, settlement)
+	return nil
 }
 
 // RejectSettlement 拒绝结算单
@@ -346,7 +363,10 @@ func (s *settlementService) ExecuteSettlement(ctx context.Context, settlementID 
 		return err
 	}
 
-	// 发送结算完成通知
+	// 发布结算完成事件
+	s.publishSettlementEvent(ctx, events.SettlementCompleted, settlement)
+
+	// 发送结算完成通知 (降级方案保留)
 	if s.notificationClient != nil {
 		go func(sett *model.Settlement) {
 			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -504,4 +524,55 @@ func (s *settlementService) GetSettlementReport(ctx context.Context, merchantID 
 	}
 
 	return report, nil
+}
+
+// ========== 事件发布器 (Producer) ==========
+
+// publishSettlementEvent 发布结算事件到Kafka
+func (s *settlementService) publishSettlementEvent(
+	ctx context.Context,
+	eventType string,
+	settlement *model.Settlement,
+) {
+	if s.eventPublisher == nil {
+		logger.Warn("Settlement: eventPublisher is nil, skipping event publishing")
+		return
+	}
+
+	// 构造结算事件载荷
+	payload := events.SettlementEventPayload{
+		SettlementNo:     settlement.SettlementNo,
+		MerchantID:       settlement.MerchantID.String(),
+		Cycle:            string(settlement.Cycle),
+		TotalAmount:      settlement.TotalAmount,
+		FeeAmount:        settlement.FeeAmount,
+		SettlementAmount: settlement.SettlementAmount,
+		TotalCount:       settlement.TotalCount,
+		Currency:         "CNY", // 默认人民币，实际应该从配置或商户信息获取
+		Status:           string(settlement.Status),
+		StartDate:        settlement.StartDate,
+		EndDate:          settlement.EndDate,
+		ApprovedAt:       settlement.ApprovedAt,
+		CompletedAt:      settlement.CompletedAt,
+		Extra: map[string]interface{}{
+			"withdrawal_no": settlement.WithdrawalNo,
+			"error_message": settlement.ErrorMessage,
+		},
+	}
+
+	// 设置 ApprovedBy
+	if settlement.ApprovedBy != nil {
+		payload.ApprovedBy = settlement.ApprovedBy.String()
+	}
+
+	// 创建事件
+	event := events.NewSettlementEvent(eventType, payload)
+
+	// 异步发布事件 (不阻塞主流程)
+	s.eventPublisher.PublishAsync(ctx, "settlement.events", event)
+
+	logger.Info("Settlement: 结算事件已发布",
+		zap.String("event_type", eventType),
+		zap.String("settlement_no", settlement.SettlementNo),
+		zap.String("status", string(settlement.Status)))
 }

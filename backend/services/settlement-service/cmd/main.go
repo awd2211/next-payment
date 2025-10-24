@@ -2,10 +2,12 @@ package main
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/settlement-service/internal/client"
@@ -80,7 +82,18 @@ func main() {
 
 	logger.Info("HTTP客户端初始化完成")
 
-	// 4. 初始化Service
+	// 4. 初始化Kafka EventPublisher (新增: 事件驱动架构)
+	var eventPublisher *kafka.EventPublisher
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	if kafkaBrokersStr != "" {
+		kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
+		eventPublisher = kafka.NewEventPublisher(kafkaBrokers)
+		logger.Info("Settlement: EventPublisher初始化完成 (事件驱动架构)")
+	} else {
+		logger.Info("Settlement: 未配置Kafka Brokers, 事件发布器未启动 (HTTP降级模式)")
+	}
+
+	// 5. 初始化Service
 	settlementService := service.NewSettlementService(
 		application.DB,
 		settlementRepo,
@@ -88,17 +101,18 @@ func main() {
 		withdrawalClient,
 		merchantClient,
 		notificationClient,
+		eventPublisher,
 	)
 	settlementAccountService := service.NewSettlementAccountService(settlementAccountRepo)
 
-	// 5. 初始化Handler
+	// 6. 初始化Handler
 	settlementHandler := handler.NewSettlementHandler(settlementService)
 	settlementAccountHandler := handler.NewSettlementAccountHandler(settlementAccountService)
 
-	// 6. 注册Swagger UI
+	// 7. 注册Swagger UI
 	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// 7. 注册路由
+	// 8. 注册路由
 	settlementHandler.RegisterRoutes(application.Router)
 
 	// 注册结算账户路由
@@ -108,7 +122,7 @@ func main() {
 		middleware.AuthMiddleware(nil),
 	)
 
-	// 8. 启动HTTP服务（gRPC已禁用）
+	// 9. 启动HTTP服务（gRPC已禁用）
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal("服务启动失败: " + err.Error())
 	}

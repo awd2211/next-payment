@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -45,12 +47,26 @@ func main() {
 
 	logger.Info("正在启动 Order Service...")
 
-	// 初始化 HTTP 客户端
+	// 初始化 Kafka Brokers
+	var kafkaBrokers []string
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	if kafkaBrokersStr != "" {
+		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
+		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
+	} else {
+		logger.Info("未配置Kafka，将使用降级模式")
+	}
+
+	// 初始化 EventPublisher
+	eventPublisher := kafka.NewEventPublisher(kafkaBrokers)
+	logger.Info("EventPublisher 初始化完成")
+
+	// 初始化 HTTP 客户端 (保留作为降级方案)
 	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
 	notificationClient := client.NewNotificationClient(notificationServiceURL)
 
 	repo := repository.NewOrderRepository(application.DB)
-	svc := service.NewOrderService(application.DB, repo, notificationClient)
+	svc := service.NewOrderService(application.DB, repo, notificationClient, eventPublisher)
 	handler := handler.NewOrderHandler(svc)
 
 	idempotencyManager := idempotency.NewIdempotencyManager(application.Redis, "order-service", 24*time.Hour)

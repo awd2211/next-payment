@@ -61,58 +61,40 @@ create_topic() {
 
 echo ""
 echo "========================================="
-echo "创建支付相关 Topics"
+echo "创建聚合事件 Topics (Event-Driven Architecture)"
 echo "========================================="
 
-# 支付事件
-create_topic "payment.created"
-create_topic "payment.success"
-create_topic "payment.failed"
-create_topic "payment.refund.created"
-create_topic "payment.refund.success"
-create_topic "payment.refund.failed"
+# 核心业务事件Topics (聚合模式 - 一个领域一个Topic)
+create_topic "payment.events" 6               # 支付事件(高吞吐)
+create_topic "payment.refund.events" 3        # 退款事件
+create_topic "order.events" 3                 # 订单事件
+create_topic "accounting.events" 3            # 财务事件
+create_topic "settlement.events" 1            # 结算事件(低频)
+create_topic "withdrawal.events" 1            # 提现事件(低频)
+create_topic "merchant.events" 1              # 商户事件(低频)
+create_topic "kyc.events" 1                   # KYC事件(低频)
 
-# 订单事件
-create_topic "order.created"
-create_topic "order.updated"
-create_topic "order.cancelled"
-create_topic "order.completed"
+echo ""
+echo "========================================="
+echo "创建内部通知 Topics"
+echo "========================================="
 
-# 账务事件
-create_topic "accounting.transaction.created"
-create_topic "accounting.balance.updated"
-create_topic "accounting.settlement.created"
-create_topic "accounting.settlement.completed"
+# 通知服务内部Topics
+create_topic "notifications.email" 3
+create_topic "notifications.sms" 3
+create_topic "notifications.webhook" 3
 
-# 风控事件
-create_topic "risk.check.started"
-create_topic "risk.check.completed"
-create_topic "risk.alert.high"
-create_topic "risk.alert.critical"
-
-# 通知事件
-create_topic "notification.email"
-create_topic "notification.sms"
-create_topic "notification.webhook"
-
-# 商户事件
-create_topic "merchant.created"
-create_topic "merchant.updated"
-create_topic "merchant.approved"
-create_topic "merchant.frozen"
-
-# 提现事件
-create_topic "withdrawal.created"
-create_topic "withdrawal.approved"
-create_topic "withdrawal.rejected"
-create_topic "withdrawal.completed"
+echo ""
+echo "========================================="
+echo "创建系统 Topics"
+echo "========================================="
 
 # Saga 分布式事务
 create_topic "saga.payment.start"
 create_topic "saga.payment.compensate"
 
 # 分析事件
-create_topic "analytics.events"
+create_topic "analytics.events" 6
 
 # 审计日志
 create_topic "audit.logs" 6
@@ -120,6 +102,17 @@ create_topic "audit.logs" 6
 # 死信队列
 create_topic "dlq.payment" 1
 create_topic "dlq.notification" 1
+
+echo ""
+echo "========================================="
+echo "创建旧版单事件 Topics (向后兼容,可选)"
+echo "========================================="
+
+# 旧版单事件Topics (如果需要向后兼容)
+# create_topic "payment.created"
+# create_topic "payment.success"
+# create_topic "payment.failed"
+# 等等...
 
 echo ""
 echo "========================================="

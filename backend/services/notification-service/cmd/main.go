@@ -134,11 +134,21 @@ func main() {
 	var notificationService service.NotificationService
 	kafkaEnabled := config.GetEnv("KAFKA_ENABLE_ASYNC", "false") == "true"
 
+	// Kafka Brokers配置 (用于事件消费)
+	var kafkaBrokers []string
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	if kafkaBrokersStr != "" {
+		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
+		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
+	}
+
 	if kafkaEnabled {
 		logger.Info("Kafka异步模式已启用")
 
 		// 获取Kafka配置
-		kafkaBrokers := strings.Split(config.GetEnv("KAFKA_BROKERS", "localhost:9092"), ",")
+		if len(kafkaBrokers) == 0 {
+			kafkaBrokers = strings.Split(config.GetEnv("KAFKA_BROKERS", "localhost:9092"), ",")
+		}
 
 		// 创建邮件生产者
 		emailProducer := kafka.NewProducer(kafka.ProducerConfig{
@@ -226,10 +236,48 @@ func main() {
 	// pb.RegisterNotificationServiceServer(application.GRPCServer, notificationGrpcServer)
 	// logger.Info(fmt.Sprintf("gRPC Server 已注册，将监听端口 %d", config.GetEnvInt("GRPC_PORT", 50008)))
 
-	// 12. 启动后台任务
+	// 12. 启动事件消费Workers (消费payment.events和order.events)
+	if len(kafkaBrokers) > 0 {
+		logger.Info("启动事件消费Workers...")
+
+		// 创建EventWorker
+		eventWorker := worker.NewEventWorker(
+			notificationRepo,
+			emailFactory,
+			smsFactory,
+		)
+
+		// 启动支付事件消费Worker
+		paymentEventConsumer := kafka.NewConsumer(kafka.ConsumerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "payment.events",
+			GroupID: "notification-payment-event-worker",
+		})
+		go func() {
+			ctx := context.Background()
+			eventWorker.StartPaymentEventWorker(ctx, paymentEventConsumer)
+		}()
+		logger.Info("支付事件Worker已启动 (topic: payment.events)")
+
+		// 启动订单事件消费Worker
+		orderEventConsumer := kafka.NewConsumer(kafka.ConsumerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "order.events",
+			GroupID: "notification-order-event-worker",
+		})
+		go func() {
+			ctx := context.Background()
+			eventWorker.StartOrderEventWorker(ctx, orderEventConsumer)
+		}()
+		logger.Info("订单事件Worker已启动 (topic: order.events)")
+	} else {
+		logger.Info("未配置Kafka Brokers，事件消费Workers未启动")
+	}
+
+	// 13. 启动后台任务
 	go startBackgroundWorkers(notificationService)
 
-	// 13. 启动服务（仅 HTTP，优雅关闭）
+	// 14. 启动服务（仅 HTTP，优雅关闭）
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal(fmt.Sprintf("服务启动失败: %v", err))
 	}

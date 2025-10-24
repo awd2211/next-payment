@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -15,6 +18,7 @@ import (
 	"payment-platform/accounting-service/internal/model"
 	"payment-platform/accounting-service/internal/repository"
 	"payment-platform/accounting-service/internal/service"
+	"payment-platform/accounting-service/internal/worker"
 	// grpcServer "payment-platform/accounting-service/internal/grpc"
 	// pb "github.com/payment-platform/proto/accounting"
 )
@@ -84,7 +88,39 @@ func main() {
 	// 7. 注册账户路由
 	accountHandler.RegisterRoutes(application.Router)
 
-	// 8. 启动服务（优雅关闭）
+	// 8. 初始化Kafka (事件驱动架构)
+	var kafkaBrokers []string
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	if kafkaBrokersStr != "" {
+		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
+		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
+
+		// 初始化EventPublisher (Producer)
+		eventPublisher := kafka.NewEventPublisher(kafkaBrokers)
+		logger.Info("Accounting: EventPublisher初始化完成")
+
+		// 创建EventWorker (Producer + Consumer)
+		eventWorker := worker.NewEventWorker(accountService, eventPublisher)
+
+		// 启动支付事件消费Worker (Consumer: payment.events → 自动记账)
+		paymentEventConsumer := kafka.NewConsumer(kafka.ConsumerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "payment.events",
+			GroupID: "accounting-payment-event-worker",
+		})
+		go func() {
+			ctx := context.Background()
+			eventWorker.StartPaymentEventWorker(ctx, paymentEventConsumer)
+		}()
+		logger.Info("Accounting: 支付事件Worker已启动 (自动记账) - topic: payment.events")
+
+		// 未来可以添加退款事件消费者
+		// - payment.refund.events (已在payment.events中包含)
+	} else {
+		logger.Info("未配置Kafka Brokers，事件消费Workers未启动 (手动记账模式)")
+	}
+
+	// 9. 启动服务（优雅关闭）
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal(fmt.Sprintf("服务启动失败: %v", err))
 	}

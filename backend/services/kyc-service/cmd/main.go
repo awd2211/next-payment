@@ -9,6 +9,7 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"payment-platform/kyc-service/internal/client"
 	"payment-platform/kyc-service/internal/handler"
 	"payment-platform/kyc-service/internal/model"
 	"payment-platform/kyc-service/internal/repository"
@@ -67,13 +68,17 @@ func main() {
 
 	logger.Info("正在启动 KYC Service...")
 
-	// 2. 初始化 Repository
+	// 2. 初始化 HTTP 客户端
+	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	notificationClient := client.NewNotificationClient(notificationServiceURL)
+
+	// 3. 初始化 Repository
 	kycRepo := repository.NewKYCRepository(application.DB)
 
-	// 3. 初始化 Service
-	kycService := service.NewKYCService(application.DB, kycRepo)
+	// 4. 初始化 Service
+	kycService := service.NewKYCService(application.DB, kycRepo, notificationClient)
 
-	// 4. 初始化 Handler
+	// 5. 初始化 Handler
 	kycHandler := handler.NewKYCHandler(kycService)
 
 	// 5. Swagger UI

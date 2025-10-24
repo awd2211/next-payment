@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/events"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/tracing"
@@ -51,12 +53,13 @@ type paymentService struct {
 	orderClient        *client.OrderClient
 	channelClient      *client.ChannelClient
 	riskClient         *client.RiskClient
-	notificationClient *client.NotificationClient
-	analyticsClient    *client.AnalyticsClient
+	notificationClient *client.NotificationClient // 保留作为降级方案
+	analyticsClient    *client.AnalyticsClient    // 保留作为降级方案
 	redisClient        *redis.Client
 	paymentMetrics     *metrics.PaymentMetrics
 	messageService     MessageService
-	webhookBaseURL     string // Webhook基础URL，用于构建回调地址
+	eventPublisher     *kafka.EventPublisher // 新增: 统一事件发布器
+	webhookBaseURL     string                // Webhook基础URL，用于构建回调地址
 }
 
 // NewPaymentService 创建支付服务实例
@@ -72,6 +75,7 @@ func NewPaymentService(
 	redisClient *redis.Client,
 	paymentMetrics *metrics.PaymentMetrics,
 	messageService MessageService,
+	eventPublisher *kafka.EventPublisher, // 新增参数
 	webhookBaseURL string,
 ) PaymentService {
 	return &paymentService{
@@ -86,6 +90,7 @@ func NewPaymentService(
 		redisClient:        redisClient,
 		paymentMetrics:     paymentMetrics,
 		messageService:     messageService,
+		eventPublisher:     eventPublisher, // 新增字段
 		webhookBaseURL:     webhookBaseURL,
 	}
 }
@@ -594,87 +599,10 @@ func (s *paymentService) HandleCallback(ctx context.Context, channel string, dat
 		})
 	}
 
-	// 12.1 发送通知（支付成功/失败通知）
-	if s.notificationClient != nil && oldStatus != payment.Status {
-		go func(p *model.Payment) {
-			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			var notifType, title, content string
-			switch p.Status {
-			case model.PaymentStatusSuccess:
-				notifType = "payment_success"
-				title = "支付成功"
-				content = fmt.Sprintf("支付单号 %s 已成功支付，金额 %.2f %s",
-					p.PaymentNo, float64(p.Amount)/100.0, p.Currency)
-			case model.PaymentStatusFailed:
-				notifType = "payment_failed"
-				title = "支付失败"
-				content = fmt.Sprintf("支付单号 %s 支付失败：%s", p.PaymentNo, p.ErrorMsg)
-			default:
-				return // 其他状态不发送通知
-			}
-
-			err := s.notificationClient.SendPaymentNotification(notifyCtx, &client.SendNotificationRequest{
-				MerchantID: p.MerchantID,
-				Type:       notifType,
-				Title:      title,
-				Content:    content,
-				Email:      p.CustomerEmail,
-				Priority:   "high",
-				Data: map[string]interface{}{
-					"payment_no":  p.PaymentNo,
-					"order_no":    p.OrderNo,
-					"amount":      p.Amount,
-					"currency":    p.Currency,
-					"status":      p.Status,
-				},
-			})
-			if err != nil {
-				logger.Warn("发送支付通知失败（非致命）",
-					zap.Error(err),
-					zap.String("payment_no", p.PaymentNo),
-					zap.String("status", p.Status))
-			}
-		}(payment)
-	}
-
-	// 12.2 推送Analytics事件（实时统计）
-	if s.analyticsClient != nil && oldStatus != payment.Status {
-		go func(p *model.Payment) {
-			analyticsCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			eventType := "payment_status_changed"
-			if p.Status == model.PaymentStatusSuccess {
-				eventType = "payment_success"
-			} else if p.Status == model.PaymentStatusFailed {
-				eventType = "payment_failed"
-			}
-
-			err := s.analyticsClient.PushPaymentEvent(analyticsCtx, &client.PaymentEventRequest{
-				EventType:  eventType,
-				MerchantID: p.MerchantID,
-				PaymentNo:  p.PaymentNo,
-				OrderNo:    p.OrderNo,
-				Amount:     p.Amount,
-				Currency:   p.Currency,
-				Channel:    p.Channel,
-				Status:     p.Status,
-				Timestamp:  time.Now(),
-				Metadata: map[string]interface{}{
-					"old_status": oldStatus,
-					"new_status": p.Status,
-					"callback_channel": channel,
-				},
-			})
-			if err != nil {
-				logger.Warn("推送Analytics事件失败（非致命）",
-					zap.Error(err),
-					zap.String("payment_no", p.PaymentNo),
-					zap.String("event_type", eventType))
-			}
-		}(payment)
+	// 12. 发布支付事件到Kafka (异步,事件驱动架构)
+	// 替代原来的HTTP同步调用,解耦下游服务依赖
+	if oldStatus != payment.Status {
+		s.publishPaymentStatusEvent(payment, oldStatus, channel)
 	}
 
 	// 13. 异步通知商户（放入队列）
@@ -1276,4 +1204,165 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// publishPaymentStatusEvent 发布支付状态变更事件到Kafka
+// 替代原来的HTTP同步调用 (notificationClient, analyticsClient)
+func (s *paymentService) publishPaymentStatusEvent(payment *model.Payment, oldStatus, channel string) {
+	// 只在有EventPublisher时才发布事件
+	if s.eventPublisher == nil {
+		logger.Warn("EventPublisher not initialized, fallback to HTTP clients")
+		// 降级: 使用原有的HTTP调用 (保持向后兼容)
+		s.fallbackToHTTPClients(payment, oldStatus, channel)
+		return
+	}
+
+	// 确定事件类型
+	var eventType string
+	switch payment.Status {
+	case model.PaymentStatusSuccess:
+		eventType = events.PaymentSuccess
+	case model.PaymentStatusFailed:
+		eventType = events.PaymentFailed
+	case model.PaymentStatusCancelled:
+		eventType = events.PaymentCancelled
+	default:
+		// 其他状态不发布事件
+		return
+	}
+
+	// 构造事件载荷
+	payload := events.PaymentEventPayload{
+		PaymentNo:     payment.PaymentNo,
+		MerchantID:    payment.MerchantID.String(),
+		OrderNo:       payment.OrderNo,
+		Amount:        payment.Amount,
+		Currency:      payment.Currency,
+		Channel:       payment.Channel,
+		Status:        payment.Status,
+		CustomerEmail: payment.CustomerEmail,
+		PaidAt:        payment.PaidAt,
+		Extra: map[string]interface{}{
+			"old_status":       oldStatus,
+			"callback_channel": channel,
+			"error_code":       payment.ErrorCode,
+			"error_msg":        payment.ErrorMsg,
+		},
+	}
+
+	// 创建事件
+	event := events.NewPaymentEvent(eventType, payload)
+
+	// 添加追踪元数据
+	event.AddMetadata("service", "payment-gateway")
+	event.AddMetadata("old_status", oldStatus)
+	event.AddMetadata("callback_channel", channel)
+
+	// 异步发布事件 (不阻塞主流程)
+	go func() {
+		publishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := s.eventPublisher.Publish(publishCtx, events.TopicPaymentEvents, event); err != nil {
+			logger.Error("failed to publish payment event to kafka",
+				zap.String("payment_no", payment.PaymentNo),
+				zap.String("event_type", eventType),
+				zap.Error(err))
+
+			// 失败降级: 使用HTTP调用
+			logger.Info("fallback to HTTP clients due to kafka publish failure")
+			s.fallbackToHTTPClients(payment, oldStatus, channel)
+		} else {
+			logger.Info("payment event published successfully",
+				zap.String("payment_no", payment.PaymentNo),
+				zap.String("event_type", eventType),
+				zap.String("topic", events.TopicPaymentEvents))
+		}
+	}()
+}
+
+// fallbackToHTTPClients 降级到HTTP客户端调用 (保持向后兼容)
+func (s *paymentService) fallbackToHTTPClients(payment *model.Payment, oldStatus, channel string) {
+	// 12.1 发送通知（支付成功/失败通知）
+	if s.notificationClient != nil {
+		go func(p *model.Payment) {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			var notifType, title, content string
+			switch p.Status {
+			case model.PaymentStatusSuccess:
+				notifType = "payment_success"
+				title = "支付成功"
+				content = fmt.Sprintf("支付单号 %s 已成功支付，金额 %.2f %s",
+					p.PaymentNo, float64(p.Amount)/100.0, p.Currency)
+			case model.PaymentStatusFailed:
+				notifType = "payment_failed"
+				title = "支付失败"
+				content = fmt.Sprintf("支付单号 %s 支付失败：%s", p.PaymentNo, p.ErrorMsg)
+			default:
+				return // 其他状态不发送通知
+			}
+
+			err := s.notificationClient.SendPaymentNotification(notifyCtx, &client.SendNotificationRequest{
+				MerchantID: p.MerchantID,
+				Type:       notifType,
+				Title:      title,
+				Content:    content,
+				Email:      p.CustomerEmail,
+				Priority:   "high",
+				Data: map[string]interface{}{
+					"payment_no": p.PaymentNo,
+					"order_no":   p.OrderNo,
+					"amount":     p.Amount,
+					"currency":   p.Currency,
+					"status":     p.Status,
+				},
+			})
+			if err != nil {
+				logger.Warn("发送支付通知失败（非致命,降级模式）",
+					zap.Error(err),
+					zap.String("payment_no", p.PaymentNo),
+					zap.String("status", p.Status))
+			}
+		}(payment)
+	}
+
+	// 12.2 推送Analytics事件（实时统计）
+	if s.analyticsClient != nil {
+		go func(p *model.Payment) {
+			analyticsCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			eventType := "payment_status_changed"
+			if p.Status == model.PaymentStatusSuccess {
+				eventType = "payment_success"
+			} else if p.Status == model.PaymentStatusFailed {
+				eventType = "payment_failed"
+			}
+
+			err := s.analyticsClient.PushPaymentEvent(analyticsCtx, &client.PaymentEventRequest{
+				EventType:  eventType,
+				MerchantID: p.MerchantID,
+				PaymentNo:  p.PaymentNo,
+				OrderNo:    p.OrderNo,
+				Amount:     p.Amount,
+				Currency:   p.Currency,
+				Channel:    p.Channel,
+				Status:     p.Status,
+				Timestamp:  time.Now(),
+				Metadata: map[string]interface{}{
+					"old_status":       oldStatus,
+					"new_status":       p.Status,
+					"callback_channel": channel,
+				},
+			})
+			if err != nil {
+				logger.Warn("推送Analytics事件失败（非致命,降级模式）",
+					zap.Error(err),
+					zap.String("payment_no", p.PaymentNo),
+					zap.String("event_type", eventType))
+			}
+		}(payment)
+	}
 }

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/events"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -44,15 +46,17 @@ type OrderService interface {
 type orderService struct {
 	db                 *gorm.DB
 	orderRepo          repository.OrderRepository
-	notificationClient *client.NotificationClient
+	notificationClient *client.NotificationClient // 保留作为降级方案
+	eventPublisher     *kafka.EventPublisher      // 事件发布器
 }
 
 // NewOrderService 创建订单服务实例
-func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository, notificationClient *client.NotificationClient) OrderService {
+func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository, notificationClient *client.NotificationClient, eventPublisher *kafka.EventPublisher) OrderService {
 	return &orderService{
 		db:                 db,
 		orderRepo:          orderRepo,
 		notificationClient: notificationClient,
+		eventPublisher:     eventPublisher,
 	}
 }
 
@@ -287,6 +291,9 @@ func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput)
 		zap.Int64("total_amount", totalAmount),
 		zap.Int64("pay_amount", payAmount),
 		zap.String("currency", input.Currency))
+
+	// 发布订单创建事件 (异步,不阻塞主流程)
+	s.publishOrderEvent(ctx, events.OrderCreated, order)
 
 	return order, nil
 }
@@ -582,7 +589,18 @@ func (s *orderService) PayOrder(ctx context.Context, orderNo string, paymentNo s
 		return nil
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// 发布订单支付成功事件 (异步)
+	order.Status = model.OrderStatusPaid
+	order.PayStatus = model.PayStatusPaid
+	order.PaidAt = &paidAt
+	order.PaymentNo = paymentNo
+	s.publishOrderEvent(ctx, events.OrderPaid, order)
+
+	return nil
 }
 
 // RefundOrder 退款订单（使用事务保证退款状态更新的原子性）
@@ -820,4 +838,42 @@ func (s *orderService) generateOrderNo() string {
 	rand.Read(randomBytes)
 	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:10]
 	return fmt.Sprintf("OD%s%s", timestamp, randomStr)
+}
+
+// publishOrderEvent 发布订单事件到Kafka
+func (s *orderService) publishOrderEvent(ctx context.Context, eventType string, order *model.Order) {
+	if s.eventPublisher == nil {
+		logger.Warn("eventPublisher is nil, skipping event publishing",
+			zap.String("event_type", eventType),
+			zap.String("order_no", order.OrderNo))
+		return
+	}
+
+	// 构造订单事件载荷
+	payload := events.OrderEventPayload{
+		OrderNo:       order.OrderNo,
+		MerchantID:    order.MerchantID.String(),
+		PaymentNo:     order.PaymentNo,
+		TotalAmount:   order.TotalAmount,
+		Currency:      order.Currency,
+		Status:        order.Status,
+		CustomerEmail: order.CustomerEmail,
+		PaidAt:        order.PaidAt,
+		Extra: map[string]interface{}{
+			"pay_amount":      order.PayAmount,
+			"discount_amount": order.DiscountAmount,
+			"shipping_fee":    order.ShippingFee,
+		},
+	}
+
+	// 创建事件
+	event := events.NewOrderEvent(eventType, payload)
+
+	// 异步发布事件 (不阻塞主流程)
+	s.eventPublisher.PublishOrderEventAsync(ctx, event)
+
+	logger.Info("order event published",
+		zap.String("event_type", eventType),
+		zap.String("order_no", order.OrderNo),
+		zap.String("status", order.Status))
 }

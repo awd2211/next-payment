@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -14,6 +17,7 @@ import (
 	"payment-platform/analytics-service/internal/model"
 	"payment-platform/analytics-service/internal/repository"
 	"payment-platform/analytics-service/internal/service"
+	"payment-platform/analytics-service/internal/worker"
 )
 
 //	@title						Analytics Service API
@@ -56,11 +60,58 @@ func main() {
 	}
 
 	logger.Info("正在启动 Analytics Service...")
+
+	// 初始化Repository和Service
 	analyticsRepo := repository.NewAnalyticsRepository(application.DB)
 	analyticsService := service.NewAnalyticsService(analyticsRepo)
 	analyticsHandler := handler.NewAnalyticsHandler(analyticsService)
+
+	// 注册HTTP路由
 	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	analyticsHandler.RegisterRoutes(application.Router)
+
+	// 启动事件消费Workers (消费所有业务事件进行统计分析)
+	var kafkaBrokers []string
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	if kafkaBrokersStr != "" {
+		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
+		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
+
+		// 创建EventWorker
+		eventWorker := worker.NewEventWorker(application.DB, analyticsRepo)
+
+		// 启动支付事件消费Worker
+		paymentEventConsumer := kafka.NewConsumer(kafka.ConsumerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "payment.events",
+			GroupID: "analytics-payment-event-worker",
+		})
+		go func() {
+			ctx := context.Background()
+			eventWorker.StartPaymentEventWorker(ctx, paymentEventConsumer)
+		}()
+		logger.Info("Analytics: 支付事件Worker已启动 (topic: payment.events)")
+
+		// 启动订单事件消费Worker
+		orderEventConsumer := kafka.NewConsumer(kafka.ConsumerConfig{
+			Brokers: kafkaBrokers,
+			Topic:   "order.events",
+			GroupID: "analytics-order-event-worker",
+		})
+		go func() {
+			ctx := context.Background()
+			eventWorker.StartOrderEventWorker(ctx, orderEventConsumer)
+		}()
+		logger.Info("Analytics: 订单事件Worker已启动 (topic: order.events)")
+
+		// 未来可以添加更多事件消费者
+		// - accounting.events
+		// - settlement.events
+		// - merchant.events
+		// 等等
+	} else {
+		logger.Info("未配置Kafka Brokers，事件消费Workers未启动")
+	}
 
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal(fmt.Sprintf("服务启动失败: %v", err))

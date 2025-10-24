@@ -12,6 +12,7 @@ import (
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/health"
 	"github.com/payment-platform/pkg/idempotency"
+	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
@@ -117,8 +118,12 @@ func main() {
 		logger.Info("未配置Kafka，将使用降级模式（打印日志）")
 	}
 
-	// 初始化MessageService
+	// 初始化MessageService (保留,用于商户回调通知)
 	messageService := service.NewMessageService(kafkaBrokers)
+
+	// 初始化EventPublisher (新增,用于事件驱动架构)
+	eventPublisher := kafka.NewEventPublisher(kafkaBrokers)
+	logger.Info("EventPublisher 初始化完成 (事件驱动架构)")
 
 	// 6. 初始化 Saga Orchestrator（分布式事务补偿）
 	sagaOrchestrator := saga.NewSagaOrchestrator(application.DB, application.Redis)
@@ -145,12 +150,13 @@ func main() {
 		orderClient,
 		channelClient,
 		riskClient,
-		notificationClient, // 通知服务客户端
-		analyticsClient,    // 分析服务客户端
+		notificationClient, // 通知服务客户端(降级方案)
+		analyticsClient,    // 分析服务客户端(降级方案)
 		application.Redis,
-		paymentMetrics, // 添加 Prometheus 指标
-		messageService, // 添加消息服务
-		webhookBaseURL, // Webhook基础URL
+		paymentMetrics,  // 添加 Prometheus 指标
+		messageService,  // 添加消息服务(商户回调通知)
+		eventPublisher,  // 事件发布器(事件驱动架构)
+		webhookBaseURL,  // Webhook基础URL
 	)
 
 	// 8. 初始化Handler

@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"payment-platform/kyc-service/internal/client"
 	"payment-platform/kyc-service/internal/model"
 	"payment-platform/kyc-service/internal/repository"
 )
@@ -42,15 +45,17 @@ type KYCService interface {
 }
 
 type kycService struct {
-	db      *gorm.DB
-	kycRepo repository.KYCRepository
+	db                 *gorm.DB
+	kycRepo            repository.KYCRepository
+	notificationClient *client.NotificationClient
 }
 
 // NewKYCService 创建KYC服务
-func NewKYCService(db *gorm.DB, kycRepo repository.KYCRepository) KYCService {
+func NewKYCService(db *gorm.DB, kycRepo repository.KYCRepository, notificationClient *client.NotificationClient) KYCService {
 	return &kycService{
-		db:      db,
-		kycRepo: kycRepo,
+		db:                 db,
+		kycRepo:            kycRepo,
+		notificationClient: notificationClient,
 	}
 }
 
@@ -186,6 +191,34 @@ func (s *kycService) ApproveDocument(ctx context.Context, documentID, reviewerID
 			return fmt.Errorf("更新商户KYC级别失败: %w", err)
 		}
 
+		// 发送KYC审核通过通知（异步）
+		if s.notificationClient != nil {
+			go func(doc *model.KYCDocument) {
+				notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				err := s.notificationClient.SendKYCNotification(notifyCtx, &client.SendNotificationRequest{
+					MerchantID: doc.MerchantID,
+					Type:       "kyc_approved",
+					Title:      "KYC 认证通过",
+					Content:    fmt.Sprintf("您的 %s 已审核通过", doc.DocumentType),
+					Priority:   "high",
+					Data: map[string]interface{}{
+						"document_id":   doc.ID.String(),
+						"document_type": doc.DocumentType,
+						"reviewer_name": reviewerName,
+						"comments":      comments,
+					},
+				})
+				if err != nil {
+					logger.Warn("发送KYC通过通知失败（非致命）",
+						zap.Error(err),
+						zap.String("merchant_id", doc.MerchantID.String()),
+						zap.String("document_id", doc.ID.String()))
+				}
+			}(document)
+		}
+
 		return nil
 	})
 }
@@ -220,7 +253,7 @@ func (s *kycService) RejectDocument(ctx context.Context, documentID, reviewerID 
 	}
 
 	// 使用事务
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		if err := s.kycRepo.UpdateDocument(ctx, document); err != nil {
 			return fmt.Errorf("更新文档失败: %w", err)
 		}
@@ -229,6 +262,40 @@ func (s *kycService) RejectDocument(ctx context.Context, documentID, reviewerID 
 		}
 		return nil
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// 发送KYC审核拒绝通知（异步）
+	if s.notificationClient != nil {
+		go func(doc *model.KYCDocument) {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			err := s.notificationClient.SendKYCNotification(notifyCtx, &client.SendNotificationRequest{
+				MerchantID: doc.MerchantID,
+				Type:       "kyc_rejected",
+				Title:      "KYC 认证未通过",
+				Content:    fmt.Sprintf("您的 %s 审核未通过：%s", doc.DocumentType, reason),
+				Priority:   "high",
+				Data: map[string]interface{}{
+					"document_id":      doc.ID.String(),
+					"document_type":    doc.DocumentType,
+					"reviewer_name":    reviewerName,
+					"rejection_reason": reason,
+				},
+			})
+			if err != nil {
+				logger.Warn("发送KYC拒绝通知失败（非致命）",
+					zap.Error(err),
+					zap.String("merchant_id", doc.MerchantID.String()),
+					zap.String("document_id", doc.ID.String()))
+			}
+		}(document)
+	}
+
+	return nil
 }
 
 // Business Qualification operations
