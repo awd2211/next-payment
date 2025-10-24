@@ -1,0 +1,206 @@
+================================================================================
+                    MERCHANT SERVICE 重构 - Phase 1 完成总结
+================================================================================
+
+任务: 将 APIKey 从 merchant-service 迁移到 merchant-auth-service
+状态: ✅ 代码完成，待数据迁移和测试
+时间: 2025-10-24
+
+================================================================================
+                                已完成的工作
+================================================================================
+
+1. merchant-auth-service 新增功能 ✅
+   - internal/model/api_key.go                  (APIKey 数据模型)
+   - internal/repository/api_key_repository.go  (数据访问层)
+   - internal/service/api_key_service.go        (业务逻辑层)
+   - internal/handler/api_key_handler.go        (HTTP API)
+   - cmd/main.go                                (路由注册)
+
+   ✅ 编译通过：60MB 可执行文件
+
+2. payment-gateway 适配层 ✅
+   - internal/client/merchant_auth_client.go    (认证服务客户端)
+   - internal/middleware/signature_v2.go        (简化签名中间件)
+   - cmd/main.go                                (渐进式迁移逻辑)
+
+   ✅ 编译通过：64MB 可执行文件
+
+3. 数据迁移工具 ✅
+   - scripts/migrate_api_keys_to_auth_service.sh  (自动迁移脚本)
+   - scripts/test_api_key_migration.sh            (集成测试脚本)
+
+4. 文档完善 ✅
+   - MERCHANT_SERVICE_REFACTORING_PLAN.md              (完整计划)
+   - MERCHANT_SERVICE_REFACTORING_PHASE1_IMPLEMENTATION.md  (实施指南)
+   - PHASE1_MIGRATION_COMPLETE.md                      (完成报告)
+
+================================================================================
+                              渐进式迁移设计
+================================================================================
+
+通过环境变量实现零停机迁移：
+
+方案 A（旧方案 - 默认）：
+  export USE_AUTH_SERVICE=false
+  → payment-gateway 本地查询 api_keys 表
+
+方案 B（新方案）：
+  export USE_AUTH_SERVICE=true
+  export MERCHANT_AUTH_SERVICE_URL=http://localhost:40011
+  → payment-gateway 调用 merchant-auth-service
+
+优点：
+  ✅ 零停机迁移
+  ✅ 可快速回滚
+  ✅ 便于灰度发布
+  ✅ A/B 测试性能
+
+================================================================================
+                              下一步操作
+================================================================================
+
+步骤 1: 启动 merchant-auth-service
+  cd services/merchant-auth-service
+  export DB_HOST=localhost DB_PORT=40432 DB_USER=postgres \
+         DB_PASSWORD=postgres DB_NAME=payment_merchant_auth \
+         REDIS_HOST=localhost REDIS_PORT=40379 PORT=40011
+  go run cmd/main.go
+
+步骤 2: 执行数据迁移
+  cd /home/eric/payment/backend
+  ./scripts/migrate_api_keys_to_auth_service.sh
+
+步骤 3: 运行集成测试
+  ./scripts/test_api_key_migration.sh
+
+步骤 4: 启动 payment-gateway（新方案）
+  cd services/payment-gateway
+  export USE_AUTH_SERVICE=true
+  export MERCHANT_AUTH_SERVICE_URL=http://localhost:40011
+  go run cmd/main.go
+
+步骤 5: 验证功能
+  - 测试支付接口
+  - 对比日志输出
+  - 监控性能指标
+
+================================================================================
+                              关键文件清单
+================================================================================
+
+新增文件 (10 个):
+  services/merchant-auth-service/internal/model/api_key.go
+  services/merchant-auth-service/internal/repository/api_key_repository.go
+  services/merchant-auth-service/internal/service/api_key_service.go
+  services/merchant-auth-service/internal/handler/api_key_handler.go
+  services/payment-gateway/internal/client/merchant_auth_client.go
+  services/payment-gateway/internal/middleware/signature_v2.go
+  scripts/migrate_api_keys_to_auth_service.sh
+  scripts/test_api_key_migration.sh
+  MERCHANT_SERVICE_REFACTORING_PLAN.md
+  MERCHANT_SERVICE_REFACTORING_PHASE1_IMPLEMENTATION.md
+  PHASE1_MIGRATION_COMPLETE.md
+  MIGRATION_SUMMARY.txt
+
+修改文件 (2 个):
+  services/merchant-auth-service/cmd/main.go (新增 APIKey 路由)
+  services/payment-gateway/cmd/main.go (新增渐进式迁移逻辑)
+
+================================================================================
+                              API 端点
+================================================================================
+
+merchant-auth-service:
+  POST   /api/v1/auth/validate-signature  # 验证签名（公开）
+  POST   /api/v1/api-keys                 # 创建 API Key（需认证）
+  GET    /api/v1/api-keys                 # 列出 API Keys（需认证）
+  DELETE /api/v1/api-keys/:id             # 删除 API Key（需认证）
+
+================================================================================
+                              回滚方案
+================================================================================
+
+如果迁移失败：
+
+1. 切换回旧方案
+   export USE_AUTH_SERVICE=false
+   重启 payment-gateway
+
+2. 恢复数据（如需要）
+   docker exec -i payment-postgres psql -U postgres -d payment_gateway \
+     < /tmp/api_keys_backup_YYYYMMDD_HHMMSS.sql
+
+================================================================================
+                              未来 Phases
+================================================================================
+
+Phase 2: 创建 kyc-service (P1)
+  - 迁移 KYCDocument 模型
+  - 迁移 BusinessQualification 模型
+  - 实现 KYC 审核流程
+
+Phase 3: 迁移 SettlementAccount (P1)
+  - 修改 settlement-service
+  - 实现账户验证逻辑
+
+Phase 4: 创建 merchant-config-service (P2)
+  - 迁移 MerchantFeeConfig
+  - 迁移 MerchantTransactionLimit
+  - 迁移 ChannelConfig
+
+Phase 5: 评估 merchant-team-service (P3)
+  - 迁移 MerchantUser
+  - 实现团队权限管理
+
+Phase 6: 评估 contract-service (P3)
+  - 迁移 MerchantContract
+  - 实现合同管理
+
+================================================================================
+                              成功指标
+================================================================================
+
+✅ merchant-auth-service 编译成功
+✅ payment-gateway 编译成功
+⏳ 数据迁移行数一致
+⏳ 签名验证 API 测试通过
+⏳ 支付接口测试通过
+⏳ P95 延迟 < 100ms
+⏳ 错误率 < 0.1%
+⏳ 运行 7 天无故障
+
+================================================================================
+                              预期收益
+================================================================================
+
+架构层面:
+  ✅ 单一职责原则 - 每个服务职责清晰
+  ✅ 高内聚低耦合 - 认证逻辑独立
+  ✅ 易于维护 - 代码量减少 ~70%
+  ✅ 可扩展性 - 认证服务独立扩展
+
+业务层面:
+  ✅ 统一认证 - 多个服务共享认证逻辑
+  ✅ 安全增强 - 认证服务专门优化
+  ✅ 独立发布 - 认证功能独立迭代
+
+================================================================================
+                              技术亮点
+================================================================================
+
+1. 渐进式迁移 - 零停机，可回滚
+2. 完整备份 - 数据安全有保障
+3. 自动化测试 - 集成测试脚本完善
+4. 清晰文档 - 实施指南详细
+5. 性能对比 - 支持 A/B 测试
+
+================================================================================
+
+Created: 2025-10-24
+Author: Claude Code Assistant
+Status: Phase 1 代码完成 ✅
+
+下一步: 执行数据迁移和集成测试
+
+================================================================================
