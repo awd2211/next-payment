@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"payment-platform/order-service/internal/model"
 	"payment-platform/order-service/internal/repository"
 )
@@ -38,12 +41,14 @@ type OrderService interface {
 }
 
 type orderService struct {
+	db        *gorm.DB
 	orderRepo repository.OrderRepository
 }
 
 // NewOrderService 创建订单服务实例
-func NewOrderService(orderRepo repository.OrderRepository) OrderService {
+func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository) OrderService {
 	return &orderService{
+		db:        db,
 		orderRepo: orderRepo,
 	}
 }
@@ -81,8 +86,14 @@ type OrderItemInput struct {
 	Extra        map[string]interface{} `json:"extra"`
 }
 
-// CreateOrder 创建订单
+// CreateOrder 创建订单（使用事务保护订单和订单项的完整性）
 func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput) (*model.Order, error) {
+	logger.Info("creating order",
+		zap.String("merchant_id", input.MerchantID.String()),
+		zap.String("customer_email", input.CustomerEmail),
+		zap.String("currency", input.Currency),
+		zap.Int("item_count", len(input.Items)))
+
 	// 生成订单号
 	orderNo := s.generateOrderNo()
 
@@ -105,18 +116,36 @@ func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput)
 	var shippingAddressJSON string
 	var billingAddressJSON string
 	if input.ShippingAddress != nil {
-		addrBytes, _ := json.Marshal(input.ShippingAddress)
+		addrBytes, err := json.Marshal(input.ShippingAddress)
+		if err != nil {
+			logger.Error("failed to marshal shipping address",
+				zap.Error(err),
+				zap.String("merchant_id", input.MerchantID.String()))
+			return nil, fmt.Errorf("序列化收货地址失败: %w", err)
+		}
 		shippingAddressJSON = string(addrBytes)
 	}
 	if input.BillingAddress != nil {
-		addrBytes, _ := json.Marshal(input.BillingAddress)
+		addrBytes, err := json.Marshal(input.BillingAddress)
+		if err != nil {
+			logger.Error("failed to marshal billing address",
+				zap.Error(err),
+				zap.String("merchant_id", input.MerchantID.String()))
+			return nil, fmt.Errorf("序列化账单地址失败: %w", err)
+		}
 		billingAddressJSON = string(addrBytes)
 	}
 
 	// 序列化扩展信息
 	var extraJSON string
 	if input.Extra != nil {
-		extraBytes, _ := json.Marshal(input.Extra)
+		extraBytes, err := json.Marshal(input.Extra)
+		if err != nil {
+			logger.Error("failed to marshal extra data",
+				zap.Error(err),
+				zap.String("merchant_id", input.MerchantID.String()))
+			return nil, fmt.Errorf("序列化扩展信息失败: %w", err)
+		}
 		extraJSON = string(extraBytes)
 	}
 
@@ -127,7 +156,7 @@ func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput)
 		expiredAt = &t
 	}
 
-	// 创建订单
+	// 准备订单数据
 	order := &model.Order{
 		MerchantID:      input.MerchantID,
 		OrderNo:         orderNo,
@@ -153,29 +182,37 @@ func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput)
 		ExpiredAt:       expiredAt,
 	}
 
-	if err := s.orderRepo.Create(ctx, order); err != nil {
-		return nil, fmt.Errorf("创建订单失败: %w", err)
-	}
-
-	// 创建订单项
+	// 准备订单项数据
 	var items []*model.OrderItem
 	for _, itemInput := range input.Items {
 		totalPrice := itemInput.UnitPrice * int64(itemInput.Quantity)
 
 		var attributesJSON string
 		if itemInput.Attributes != nil {
-			attrBytes, _ := json.Marshal(itemInput.Attributes)
+			attrBytes, err := json.Marshal(itemInput.Attributes)
+			if err != nil {
+				logger.Error("failed to marshal item attributes",
+					zap.Error(err),
+					zap.String("product_id", itemInput.ProductID))
+				return nil, fmt.Errorf("序列化商品属性失败: %w", err)
+			}
 			attributesJSON = string(attrBytes)
 		}
 
 		var itemExtraJSON string
 		if itemInput.Extra != nil {
-			extraBytes, _ := json.Marshal(itemInput.Extra)
+			extraBytes, err := json.Marshal(itemInput.Extra)
+			if err != nil {
+				logger.Error("failed to marshal item extra data",
+					zap.Error(err),
+					zap.String("product_id", itemInput.ProductID))
+				return nil, fmt.Errorf("序列化商品扩展信息失败: %w", err)
+			}
 			itemExtraJSON = string(extraBytes)
 		}
 
 		item := &model.OrderItem{
-			OrderID:      order.ID,
+			// OrderID 将在事务中设置
 			ProductID:    itemInput.ProductID,
 			ProductName:  itemInput.ProductName,
 			ProductSKU:   itemInput.ProductSKU,
@@ -189,15 +226,64 @@ func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput)
 		items = append(items, item)
 	}
 
-	if err := s.orderRepo.CreateItems(ctx, items); err != nil {
-		return nil, fmt.Errorf("创建订单项失败: %w", err)
+	// 在事务中创建订单、订单项和日志，确保原子性
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 创建订单
+		if err := tx.Create(order).Error; err != nil {
+			logger.Error("failed to create order in database",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("创建订单失败: %w", err)
+		}
+
+		// 2. 设置订单项的 OrderID 并创建
+		for _, item := range items {
+			item.OrderID = order.ID
+			if err := tx.Create(item).Error; err != nil {
+				logger.Error("failed to create order item",
+					zap.Error(err),
+					zap.String("order_no", orderNo),
+					zap.String("product_id", item.ProductID))
+				return fmt.Errorf("创建订单项失败: %w", err)
+			}
+		}
+
+		// 3. 创建订单日志
+		log := &model.OrderLog{
+			OrderID:      order.ID,
+			Action:       model.OrderActionCreate,
+			OldStatus:    "",
+			NewStatus:    model.OrderStatusPending,
+			OperatorID:   uuid.Nil,
+			OperatorType: model.OperatorTypeSystem,
+			Remark:       "订单创建",
+		}
+		if err := tx.Create(log).Error; err != nil {
+			logger.Error("failed to create order log",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("创建订单日志失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("order creation transaction failed",
+			zap.Error(err),
+			zap.String("merchant_id", input.MerchantID.String()),
+			zap.String("order_no", orderNo))
+		return nil, err
 	}
 
-	// 记录订单日志
-	s.createOrderLog(ctx, order.ID, model.OrderActionCreate, "", model.OrderStatusPending, uuid.Nil, model.OperatorTypeSystem, "订单创建")
-
-	// 加载订单项
+	// 加载订单项到订单对象
 	order.Items = items
+
+	logger.Info("order created successfully",
+		zap.String("order_no", orderNo),
+		zap.Int64("total_amount", totalAmount),
+		zap.Int64("pay_amount", payAmount),
+		zap.String("currency", input.Currency))
 
 	return order, nil
 }
@@ -250,53 +336,147 @@ func (s *orderService) QueryOrders(ctx context.Context, query *repository.OrderQ
 	return s.orderRepo.List(ctx, query)
 }
 
-// CancelOrder 取消订单
+// CancelOrder 取消订单（使用事务保证状态更新和日志记录的原子性）
 func (s *orderService) CancelOrder(ctx context.Context, orderNo string, reason string, operatorID uuid.UUID, operatorType string) error {
+	logger.Info("cancelling order",
+		zap.String("order_no", orderNo),
+		zap.String("operator_id", operatorID.String()),
+		zap.String("operator_type", operatorType))
+
 	order, err := s.GetOrder(ctx, orderNo)
 	if err != nil {
+		logger.Error("failed to get order for cancellation",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
 		return err
 	}
 
 	// 只有待支付或已支付的订单可以取消
 	if order.Status != model.OrderStatusPending && order.Status != model.OrderStatusPaid {
+		logger.Warn("order status does not allow cancellation",
+			zap.String("order_no", orderNo),
+			zap.String("status", order.Status))
 		return fmt.Errorf("当前状态不允许取消: %s", order.Status)
 	}
 
 	// 如果已支付，需要先退款
 	if order.PayStatus == model.PayStatusPaid {
+		logger.Warn("paid order requires refund before cancellation",
+			zap.String("order_no", orderNo))
 		return fmt.Errorf("已支付订单需要先申请退款")
 	}
 
 	oldStatus := order.Status
-	if err := s.orderRepo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled); err != nil {
-		return fmt.Errorf("取消订单失败: %w", err)
+
+	// 使用事务保证状态更新和日志记录的原子性
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 更新订单状态
+		if err := tx.Model(&model.Order{}).Where("id = ?", order.ID).
+			Update("status", model.OrderStatusCancelled).Error; err != nil {
+			logger.Error("failed to update order status",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("更新订单状态失败: %w", err)
+		}
+
+		// 2. 记录日志
+		log := &model.OrderLog{
+			OrderID:      order.ID,
+			Action:       model.OrderActionCancel,
+			OldStatus:    oldStatus,
+			NewStatus:    model.OrderStatusCancelled,
+			OperatorID:   operatorID,
+			OperatorType: operatorType,
+			Remark:       reason,
+		}
+		if err := tx.Create(log).Error; err != nil {
+			logger.Error("failed to create cancellation log",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("创建日志失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("order cancellation transaction failed",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
+		return err
 	}
 
-	// 记录日志
-	s.createOrderLog(ctx, order.ID, model.OrderActionCancel, oldStatus, model.OrderStatusCancelled, operatorID, operatorType, reason)
+	logger.Info("order cancelled successfully",
+		zap.String("order_no", orderNo),
+		zap.String("old_status", oldStatus))
 
 	return nil
 }
 
-// UpdateOrderStatus 更新订单状态
+// UpdateOrderStatus 更新订单状态（使用事务保证一致性）
 func (s *orderService) UpdateOrderStatus(ctx context.Context, orderNo string, status string, operatorID uuid.UUID, operatorType string) error {
+	logger.Info("updating order status",
+		zap.String("order_no", orderNo),
+		zap.String("new_status", status),
+		zap.String("operator_id", operatorID.String()))
+
 	order, err := s.GetOrder(ctx, orderNo)
 	if err != nil {
+		logger.Error("failed to get order for status update",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
 		return err
 	}
 
 	oldStatus := order.Status
-	if err := s.orderRepo.UpdateStatus(ctx, order.ID, status); err != nil {
-		return fmt.Errorf("更新订单状态失败: %w", err)
+
+	// 使用事务保证状态更新和日志记录的原子性
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 更新状态
+		if err := tx.Model(&model.Order{}).Where("id = ?", order.ID).
+			Update("status", status).Error; err != nil {
+			logger.Error("failed to update order status",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("更新订单状态失败: %w", err)
+		}
+
+		// 2. 记录日志
+		log := &model.OrderLog{
+			OrderID:      order.ID,
+			Action:       model.OrderActionUpdateStatus,
+			OldStatus:    oldStatus,
+			NewStatus:    status,
+			OperatorID:   operatorID,
+			OperatorType: operatorType,
+			Remark:       fmt.Sprintf("状态从 %s 更新为 %s", oldStatus, status),
+		}
+		if err := tx.Create(log).Error; err != nil {
+			logger.Error("failed to create status update log",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("创建日志失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("order status update transaction failed",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
+		return err
 	}
 
-	// 记录日志
-	s.createOrderLog(ctx, order.ID, model.OrderActionUpdateStatus, oldStatus, status, operatorID, operatorType, fmt.Sprintf("状态从 %s 更新为 %s", oldStatus, status))
+	logger.Info("order status updated successfully",
+		zap.String("order_no", orderNo),
+		zap.String("old_status", oldStatus),
+		zap.String("new_status", status))
 
 	return nil
 }
 
-// PayOrder 支付订单
+// PayOrder 支付订单（使用事务保护状态更新的原子性）
 func (s *orderService) PayOrder(ctx context.Context, orderNo string, paymentNo string) error {
 	order, err := s.GetOrder(ctx, orderNo)
 	if err != nil {
@@ -308,83 +488,218 @@ func (s *orderService) PayOrder(ctx context.Context, orderNo string, paymentNo s
 	}
 
 	paidAt := time.Now()
-	order.PaymentNo = paymentNo
 
-	if err := s.orderRepo.UpdatePayStatus(ctx, order.ID, model.PayStatusPaid, &paidAt); err != nil {
-		return fmt.Errorf("更新支付状态失败: %w", err)
-	}
+	// 在事务中更新支付状态、订单状态、支付流水号和日志
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 一次性更新所有订单字段（避免多次UPDATE）
+		err := tx.Model(&model.Order{}).
+			Where("id = ?", order.ID).
+			Updates(map[string]interface{}{
+				"pay_status":  model.PayStatusPaid,
+				"paid_at":     &paidAt,
+				"payment_no":  paymentNo,
+				"status":      model.OrderStatusPaid,
+				"updated_at":  time.Now(),
+			}).Error
+		if err != nil {
+			return fmt.Errorf("更新订单状态失败: %w", err)
+		}
 
-	// 更新订单
-	order.PaymentNo = paymentNo
-	if err := s.orderRepo.Update(ctx, order); err != nil {
-		return fmt.Errorf("更新订单失败: %w", err)
-	}
+		// 2. 创建订单日志
+		log := &model.OrderLog{
+			OrderID:      order.ID,
+			Action:       model.OrderActionPay,
+			OldStatus:    model.OrderStatusPending,
+			NewStatus:    model.OrderStatusPaid,
+			OperatorID:   uuid.Nil,
+			OperatorType: model.OperatorTypeSystem,
+			Remark:       fmt.Sprintf("支付成功，支付流水号: %s", paymentNo),
+		}
+		if err := tx.Create(log).Error; err != nil {
+			return fmt.Errorf("创建订单日志失败: %w", err)
+		}
 
-	// 记录日志
-	s.createOrderLog(ctx, order.ID, model.OrderActionPay, model.OrderStatusPending, model.OrderStatusPaid, uuid.Nil, model.OperatorTypeSystem, fmt.Sprintf("支付成功，支付流水号: %s", paymentNo))
+		return nil
+	})
 
-	return nil
+	return err
 }
 
-// RefundOrder 退款订单
+// RefundOrder 退款订单（使用事务保证退款状态更新的原子性）
 func (s *orderService) RefundOrder(ctx context.Context, orderNo string, amount int64, reason string) error {
+	logger.Info("refunding order",
+		zap.String("order_no", orderNo),
+		zap.Int64("amount", amount),
+		zap.String("reason", reason))
+
 	order, err := s.GetOrder(ctx, orderNo)
 	if err != nil {
+		logger.Error("failed to get order for refund",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
 		return err
 	}
 
 	if order.PayStatus != model.PayStatusPaid {
+		logger.Warn("order not paid, cannot refund",
+			zap.String("order_no", orderNo),
+			zap.String("pay_status", order.PayStatus))
 		return fmt.Errorf("订单未支付，无法退款")
 	}
 
 	// 部分退款还是全额退款
 	var newPayStatus string
+	var newOrderStatus string
 	if amount >= order.PayAmount {
 		newPayStatus = model.PayStatusRefunded
-		order.Status = model.OrderStatusRefunded
+		newOrderStatus = model.OrderStatusRefunded
 	} else {
 		newPayStatus = model.PayStatusPartialRefunded
+		newOrderStatus = order.Status // 部分退款不改变订单状态
 	}
 
-	if err := s.orderRepo.UpdatePayStatus(ctx, order.ID, newPayStatus, nil); err != nil {
-		return fmt.Errorf("更新支付状态失败: %w", err)
+	oldStatus := order.Status
+
+	// 使用事务保证退款状态更新的原子性
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 更新支付状态
+		updates := map[string]interface{}{
+			"pay_status": newPayStatus,
+			"updated_at": time.Now(),
+		}
+		if newPayStatus == model.PayStatusRefunded {
+			updates["status"] = newOrderStatus
+		}
+
+		if err := tx.Model(&model.Order{}).Where("id = ?", order.ID).
+			Updates(updates).Error; err != nil {
+			logger.Error("failed to update order refund status",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("更新退款状态失败: %w", err)
+		}
+
+		// 2. 记录日志
+		log := &model.OrderLog{
+			OrderID:      order.ID,
+			Action:       model.OrderActionRefund,
+			OldStatus:    oldStatus,
+			NewStatus:    newOrderStatus,
+			OperatorID:   uuid.Nil,
+			OperatorType: model.OperatorTypeSystem,
+			Remark:       fmt.Sprintf("退款金额: %d, 原因: %s", amount, reason),
+		}
+		if err := tx.Create(log).Error; err != nil {
+			logger.Error("failed to create refund log",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("创建退款日志失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("order refund transaction failed",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
+		return err
 	}
 
-	if newPayStatus == model.PayStatusRefunded {
-		s.orderRepo.UpdateStatus(ctx, order.ID, model.OrderStatusRefunded)
-	}
-
-	// 记录日志
-	s.createOrderLog(ctx, order.ID, model.OrderActionRefund, order.Status, order.Status, uuid.Nil, model.OperatorTypeSystem, fmt.Sprintf("退款金额: %d, 原因: %s", amount, reason))
+	logger.Info("order refunded successfully",
+		zap.String("order_no", orderNo),
+		zap.Int64("refund_amount", amount),
+		zap.String("pay_status", newPayStatus))
 
 	return nil
 }
 
-// ShipOrder 发货
+// ShipOrder 发货（使用事务保证发货状态更新的原子性）
 func (s *orderService) ShipOrder(ctx context.Context, orderNo string, shippingInfo map[string]interface{}) error {
+	logger.Info("shipping order",
+		zap.String("order_no", orderNo))
+
 	order, err := s.GetOrder(ctx, orderNo)
 	if err != nil {
+		logger.Error("failed to get order for shipping",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
 		return err
 	}
 
 	if order.Status != model.OrderStatusPaid {
+		logger.Warn("order not paid, cannot ship",
+			zap.String("order_no", orderNo),
+			zap.String("status", order.Status))
 		return fmt.Errorf("订单未支付，无法发货")
 	}
 
-	if err := s.orderRepo.UpdateStatus(ctx, order.ID, model.OrderStatusShipped); err != nil {
-		return fmt.Errorf("更新订单状态失败: %w", err)
+	// 序列化物流信息
+	var shippingInfoJSON string
+	if shippingInfo != nil {
+		infoBytes, err := json.Marshal(shippingInfo)
+		if err != nil {
+			logger.Error("failed to marshal shipping info",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("序列化物流信息失败: %w", err)
+		}
+		shippingInfoJSON = string(infoBytes)
 	}
 
-	if err := s.orderRepo.UpdateShippingStatus(ctx, order.ID, model.ShippingStatusShipped); err != nil {
-		return fmt.Errorf("更新配送状态失败: %w", err)
+	oldStatus := order.Status
+
+	// 使用事务保证发货状态更新的原子性
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 更新订单状态和物流状态
+		updates := map[string]interface{}{
+			"status":          model.OrderStatusShipped,
+			"shipping_status": model.ShippingStatusShipped,
+			"shipping_info":   shippingInfoJSON,
+			"updated_at":      time.Now(),
+		}
+
+		if err := tx.Model(&model.Order{}).Where("id = ?", order.ID).
+			Updates(updates).Error; err != nil {
+			logger.Error("failed to update order shipping status",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("更新订单状态失败: %w", err)
+		}
+
+		// 2. 记录日志
+		log := &model.OrderLog{
+			OrderID:      order.ID,
+			Action:       model.OrderActionShip,
+			OldStatus:    oldStatus,
+			NewStatus:    model.OrderStatusShipped,
+			OperatorID:   uuid.Nil,
+			OperatorType: model.OperatorTypeSystem,
+			Remark:       "订单已发货",
+		}
+		if err := tx.Create(log).Error; err != nil {
+			logger.Error("failed to create shipping log",
+				zap.Error(err),
+				zap.String("order_no", orderNo))
+			return fmt.Errorf("创建发货日志失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("order shipping transaction failed",
+			zap.Error(err),
+			zap.String("order_no", orderNo))
+		return err
 	}
 
-	// 记录日志
-	infoJSON, _ := json.Marshal(shippingInfo)
-	s.createOrderLog(ctx, order.ID, model.OrderActionShip, model.OrderStatusPaid, model.OrderStatusShipped, uuid.Nil, model.OperatorTypeSystem, fmt.Sprintf("订单已发货: %s", string(infoJSON)))
+	logger.Info("order shipped successfully",
+		zap.String("order_no", orderNo))
 
 	return nil
 }
+
 
 // CompleteOrder 完成订单
 func (s *orderService) CompleteOrder(ctx context.Context, orderNo string) error {

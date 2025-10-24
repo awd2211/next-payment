@@ -10,12 +10,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"payment-platform/payment-gateway/internal/client"
 	"payment-platform/payment-gateway/internal/model"
 	"payment-platform/payment-gateway/internal/repository"
@@ -130,18 +133,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		return nil, fmt.Errorf("不支持的货币类型: %s", input.Currency)
 	}
 
-	// 2. 检查订单号是否已存在（防重复）
-	existing, err := s.paymentRepo.GetByOrderNo(ctx, input.MerchantID, input.OrderNo)
-	if err != nil {
-		finalStatus = "failed"
-		return nil, fmt.Errorf("检查订单号失败: %w", err)
-	}
-	if existing != nil {
-		finalStatus = "duplicate"
-		return nil, fmt.Errorf("订单号已存在: %s", input.OrderNo)
-	}
-
-	// 3. 风控检查
+	// 2. 风控检查（在事务外执行，减少事务持有时间）
 	if s.riskClient != nil {
 		// 创建 span 追踪风控检查
 		ctx, riskSpan := tracing.StartSpan(ctx, "payment-gateway", "RiskCheck")
@@ -167,7 +159,11 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			// 风控服务失败不阻塞支付，只记录日志
 			riskSpan.SetStatus(codes.Error, err.Error())
 			riskSpan.RecordError(err)
-			fmt.Printf("风控检查失败: %v\n", err)
+			logger.Error("risk check failed",
+				zap.Error(err),
+				zap.String("merchant_id", input.MerchantID.String()),
+				zap.Int64("amount", input.Amount),
+				zap.String("currency", input.Currency))
 		} else if riskResult != nil {
 			riskSpan.SetAttributes(
 				attribute.String("risk.decision", riskResult.Decision),
@@ -183,34 +179,44 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			// 如果需要人工审核，标记支付状态
 			if riskResult.Decision == "review" {
 				riskSpan.AddEvent("Manual review required")
-				fmt.Printf("风控需要审核: score=%d, reasons=%v\n", riskResult.Score, riskResult.Reasons)
+				logger.Warn("risk manual review required",
+					zap.Int("score", riskResult.Score),
+					zap.Strings("reasons", riskResult.Reasons),
+					zap.String("merchant_id", input.MerchantID.String()),
+					zap.String("order_no", input.OrderNo))
 			}
 			riskSpan.SetStatus(codes.Ok, "")
 		}
 		riskSpan.End()
 	}
 
-	// 4. 生成支付流水号
+	// 3. 生成支付流水号
 	paymentNo := s.generatePaymentNo()
 
-	// 5. 计算过期时间
+	// 4. 计算过期时间
 	expireMinutes := input.ExpireMinutes
 	if expireMinutes <= 0 {
 		expireMinutes = 30 // 默认30分钟
 	}
 	expiredAt := time.Now().Add(time.Duration(expireMinutes) * time.Minute)
 
-	// 6. 扩展信息
+	// 5. 扩展信息
 	var extraJSON string
 	if input.Extra != nil {
 		input.Extra["language"] = input.Language
-		extraBytes, _ := json.Marshal(input.Extra)
+		extraBytes, err := json.Marshal(input.Extra)
+		if err != nil {
+			logger.Error("failed to marshal extra data",
+				zap.Error(err),
+				zap.String("merchant_id", input.MerchantID.String()))
+			return nil, fmt.Errorf("序列化扩展信息失败: %w", err)
+		}
 		extraJSON = string(extraBytes)
 	} else if input.Language != "" {
 		extraJSON = fmt.Sprintf(`{"language":"%s"}`, input.Language)
 	}
 
-	// 7. 创建支付记录
+	// 6. 准备支付记录数据
 	payment := &model.Payment{
 		MerchantID:    input.MerchantID,
 		OrderNo:       input.OrderNo,
@@ -232,7 +238,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		NotifyTimes:   0,
 	}
 
-	// 8. 选择支付渠道
+	// 7. 选择支付渠道
 	if input.Channel != "" {
 		payment.Channel = input.Channel
 	} else {
@@ -247,11 +253,34 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 	// 记录最终选择的渠道
 	finalChannel = payment.Channel
 
-	// 9. 在事务中创建支付记录
-	// 注意：这里只保存支付记录，外部服务调用放在事务外
-	if err := s.paymentRepo.Create(ctx, payment); err != nil {
-		finalStatus = "failed"
-		return nil, fmt.Errorf("创建支付记录失败: %w", err)
+	// 8. 在事务中检查订单号唯一性并创建支付记录
+	// 使用 SELECT FOR UPDATE 防止并发创建相同订单号
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 8.1 在事务中使用行级锁检查订单号是否已存在
+		var count int64
+		if err := tx.Model(&model.Payment{}).
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("merchant_id = ? AND order_no = ?", input.MerchantID, input.OrderNo).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("检查订单号失败: %w", err)
+		}
+		if count > 0 {
+			finalStatus = "duplicate"
+			return fmt.Errorf("订单号已存在: %s", input.OrderNo)
+		}
+
+		// 8.2 创建支付记录
+		if err := tx.Create(payment).Error; err != nil {
+			return fmt.Errorf("创建支付记录失败: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		if finalStatus == "" {
+			finalStatus = "failed"
+		}
+		return nil, err
 	}
 
 	// 10. 调用Order-Service创建订单（事务外，使用补偿机制）
@@ -288,7 +317,10 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			payment.Status = model.PaymentStatusFailed
 			payment.ErrorMsg = fmt.Sprintf("创建订单失败: %v", err)
 			if updateErr := s.paymentRepo.Update(ctx, payment); updateErr != nil {
-				fmt.Printf("更新支付状态失败: %v\n", updateErr)
+				logger.Error("failed to update payment status after order creation failed",
+					zap.Error(updateErr),
+					zap.String("payment_no", payment.PaymentNo),
+					zap.String("merchant_id", payment.MerchantID.String()))
 			}
 			finalStatus = "failed"
 			return nil, fmt.Errorf("创建订单失败: %w", err)
@@ -307,7 +339,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 
 		channelResult, err := s.channelClient.CreatePayment(ctx, &client.CreatePaymentRequest{
 			PaymentNo:     payment.PaymentNo,
-			MerchantID:    payment.MerchantID,
+			MerchantID:    payment.MerchantID.String(),
 			Channel:       payment.Channel,
 			Amount:        payment.Amount,
 			Currency:      payment.Currency,
@@ -324,7 +356,10 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 			payment.Status = model.PaymentStatusFailed
 			payment.ErrorMsg = fmt.Sprintf("发起支付失败: %v", err)
 			if updateErr := s.paymentRepo.Update(ctx, payment); updateErr != nil {
-				fmt.Printf("更新支付状态失败: %v\n", updateErr)
+				logger.Error("failed to update payment status after channel payment failed",
+					zap.Error(updateErr),
+					zap.String("payment_no", payment.PaymentNo),
+					zap.String("channel", payment.Channel))
 			}
 
 			// 如果订单已创建，发送补偿消息到消息队列
@@ -341,7 +376,10 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 					},
 				}
 				if msgErr := s.messageService.SendCompensationMessage(ctx, compensationMsg); msgErr != nil {
-					fmt.Printf("发送补偿消息失败: %v\n", msgErr)
+					logger.Error("failed to send compensation message for order cancellation",
+						zap.Error(msgErr),
+						zap.String("payment_no", payment.PaymentNo),
+						zap.String("order_no", payment.OrderNo))
 				}
 			}
 
@@ -353,7 +391,10 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		payment.ChannelOrderNo = channelResult.ChannelOrderNo
 		payment.Status = model.PaymentStatusProcessing
 		if err := s.paymentRepo.Update(ctx, payment); err != nil {
-			fmt.Printf("更新支付记录失败: %v\n", err)
+			logger.Error("failed to update payment record after channel success",
+				zap.Error(err),
+				zap.String("payment_no", payment.PaymentNo),
+				zap.String("channel_order_no", channelResult.ChannelOrderNo))
 			// 注意：这里不返回错误，因为支付已经发起成功
 		}
 
@@ -363,8 +404,15 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 		}
 		extraMap["payment_url"] = channelResult.PaymentURL
 		extraMap["qr_code_url"] = channelResult.QRCodeURL
-		extraBytes, _ := json.Marshal(extraMap)
-		payment.Extra = string(extraBytes)
+		extraBytes, err := json.Marshal(extraMap)
+		if err != nil {
+			logger.Error("failed to marshal extra data with payment URL",
+				zap.Error(err),
+				zap.String("payment_no", payment.PaymentNo))
+			// 这里不返回错误，因为支付已经发起成功，只是额外信息序列化失败
+		} else {
+			payment.Extra = string(extraBytes)
+		}
 	}
 
 	// 支付创建成功
@@ -418,7 +466,13 @@ func (s *paymentService) CancelPayment(ctx context.Context, paymentNo string, re
 // HandleCallback 处理支付回调（完整流程）
 func (s *paymentService) HandleCallback(ctx context.Context, channel string, data map[string]interface{}) error {
 	// 1. 记录原始回调数据
-	rawData, _ := json.Marshal(data)
+	rawData, err := json.Marshal(data)
+	if err != nil {
+		logger.Error("failed to marshal callback data",
+			zap.Error(err),
+			zap.String("channel", channel))
+		return fmt.Errorf("序列化回调数据失败: %w", err)
+	}
 
 	// 2. 提取支付流水号
 	paymentNo, ok := data["payment_no"].(string)
@@ -558,13 +612,20 @@ func (s *paymentService) notifyMerchant(ctx context.Context, payment *model.Paym
 		}
 
 		if err := s.messageService.SendNotificationMessage(ctx, notifyMsg); err != nil {
-			fmt.Printf("发送通知消息到队列失败: %v\n", err)
+			logger.Error("failed to send notification message to queue",
+				zap.Error(err),
+				zap.String("payment_no", payment.PaymentNo),
+				zap.String("notify_url", payment.NotifyURL))
 		} else {
-			fmt.Printf("通知消息已发送到队列: url=%s, payment_no=%s\n", payment.NotifyURL, payment.PaymentNo)
+			logger.Info("notification message sent to queue",
+				zap.String("payment_no", payment.PaymentNo),
+				zap.String("notify_url", payment.NotifyURL))
 		}
 	} else {
 		// 降级处理：直接打印（开发环境）
-		fmt.Printf("通知商户: url=%s, data=%+v\n", payment.NotifyURL, notifyData)
+		logger.Warn("message service not configured, notification skipped",
+			zap.String("payment_no", payment.PaymentNo),
+			zap.String("notify_url", payment.NotifyURL))
 	}
 }
 
@@ -598,7 +659,7 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 		return nil, fmt.Errorf("只有成功的支付才能退款，当前状态: %s", payment.Status)
 	}
 
-	// 3. 验证退款金额
+	// 3. 验证退款金额（基本检查）
 	if input.Amount <= 0 {
 		finalStatus = "invalid_amount"
 		return nil, fmt.Errorf("退款金额必须大于0")
@@ -608,49 +669,64 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 		return nil, fmt.Errorf("退款金额不能大于支付金额: 退款=%d, 支付=%d", input.Amount, payment.Amount)
 	}
 
-	// 4. 检查已退款总额（防止重复退款）
-	existingRefunds, _, err := s.paymentRepo.ListRefunds(ctx, &repository.RefundQuery{
-		PaymentID: &payment.ID,
-		Status:    model.RefundStatusSuccess,
-		Page:      1,
-		PageSize:  100,
-	})
-	if err != nil {
-		finalStatus = "failed"
-		return nil, fmt.Errorf("查询已退款总额失败: %w", err)
-	}
-
-	var refundedAmount int64
-	for _, r := range existingRefunds {
-		refundedAmount += r.Amount
-	}
-
-	if refundedAmount+input.Amount > payment.Amount {
-		finalStatus = "amount_exceeded"
-		return nil, fmt.Errorf("退款总额超过支付金额: 已退款=%d, 本次退款=%d, 支付金额=%d",
-			refundedAmount, input.Amount, payment.Amount)
-	}
-
-	// 5. 生成退款单号
+	// 4. 生成退款单号
 	refundNo := s.generateRefundNo()
 
-	// 6. 创建退款记录（初始状态为 pending）
-	refund := &model.Refund{
-		PaymentID:    payment.ID,
-		MerchantID:   payment.MerchantID,
-		RefundNo:     refundNo,
-		Amount:       input.Amount,
-		Currency:     payment.Currency,
-		Status:       model.RefundStatusPending,
-		Reason:       input.Reason,
-		Description:  input.Description,
-		OperatorID:   input.OperatorID,
-		OperatorType: input.OperatorType,
-	}
+	// 5. 在事务中检查已退款总额并创建退款记录
+	// 使用行级锁防止并发退款导致总额超限
+	var refund *model.Refund
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 5.1 锁定支付记录，防止并发退款
+		var lockedPayment model.Payment
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", payment.ID).
+			First(&lockedPayment).Error
+		if err != nil {
+			return fmt.Errorf("锁定支付记录失败: %w", err)
+		}
 
-	if err := s.paymentRepo.CreateRefund(ctx, refund); err != nil {
-		finalStatus = "failed"
-		return nil, fmt.Errorf("创建退款记录失败: %w", err)
+		// 5.2 在事务中查询已成功退款总额（使用 SUM 聚合查询，避免N+1问题）
+		var refundedAmount int64
+		err = tx.Model(&model.Refund{}).
+			Where("payment_id = ? AND status = ?", payment.ID, model.RefundStatusSuccess).
+			Select("COALESCE(SUM(amount), 0)").
+			Scan(&refundedAmount).Error
+		if err != nil {
+			return fmt.Errorf("查询已退款总额失败: %w", err)
+		}
+
+		// 5.3 校验退款总额（在事务内，确保数据一致性）
+		if refundedAmount+input.Amount > lockedPayment.Amount {
+			finalStatus = "amount_exceeded"
+			return fmt.Errorf("退款总额超过支付金额: 已退款=%d, 本次退款=%d, 支付金额=%d",
+				refundedAmount, input.Amount, lockedPayment.Amount)
+		}
+
+		// 5.4 创建退款记录（初始状态为 pending）
+		refund = &model.Refund{
+			PaymentID:    payment.ID,
+			MerchantID:   payment.MerchantID,
+			RefundNo:     refundNo,
+			Amount:       input.Amount,
+			Currency:     payment.Currency,
+			Status:       model.RefundStatusPending,
+			Reason:       input.Reason,
+			Description:  input.Description,
+			OperatorID:   input.OperatorID,
+			OperatorType: input.OperatorType,
+		}
+
+		if err := tx.Create(refund).Error; err != nil {
+			return fmt.Errorf("创建退款记录失败: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		if finalStatus == "" {
+			finalStatus = "failed"
+		}
+		return nil, err
 	}
 
 	// 7. 调用 Channel-Adapter 执行渠道退款（事务外，使用 Saga 模式）
@@ -669,7 +745,10 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 			refund.Status = model.RefundStatusFailed
 			refund.ErrorMsg = fmt.Sprintf("渠道退款失败: %v", err)
 			if updateErr := s.paymentRepo.UpdateRefund(ctx, refund); updateErr != nil {
-				fmt.Printf("更新退款失败状态时出错: %v\n", updateErr)
+				logger.Error("failed to update refund status after channel refund failed",
+					zap.Error(updateErr),
+					zap.String("refund_no", refund.RefundNo),
+					zap.String("payment_no", payment.PaymentNo))
 			}
 			finalStatus = "failed"
 			return nil, fmt.Errorf("渠道退款失败: %w", err)
@@ -685,8 +764,11 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 		// 更新退款记录为成功状态
 		if err := s.paymentRepo.UpdateRefund(ctx, refund); err != nil {
 			// 警告：渠道已退款成功，但本地状态更新失败
-			fmt.Printf("警告：渠道退款成功但本地状态更新失败，RefundNo=%s, ChannelRefundNo=%s, Error=%v\n",
-				refund.RefundNo, refund.ChannelRefundNo, err)
+			logger.Error("channel refund succeeded but local status update failed",
+				zap.Error(err),
+				zap.String("refund_no", refund.RefundNo),
+				zap.String("channel_refund_no", refund.ChannelRefundNo),
+				zap.String("payment_no", payment.PaymentNo))
 
 			// 发送补偿消息到消息队列，由后台任务重试更新
 			if s.messageService != nil {
@@ -703,7 +785,10 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 					},
 				}
 				if msgErr := s.messageService.SendCompensationMessage(ctx, compensationMsg); msgErr != nil {
-					fmt.Printf("发送补偿消息失败: %v\n", msgErr)
+					logger.Error("failed to send compensation message for refund status update",
+						zap.Error(msgErr),
+						zap.String("refund_no", refund.RefundNo),
+						zap.String("payment_no", payment.PaymentNo))
 				}
 			}
 
@@ -712,7 +797,9 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 		}
 	} else {
 		// 没有配置渠道客户端（测试环境）
-		fmt.Printf("警告：未配置渠道客户端，退款记录已创建但未实际退款: RefundNo=%s\n", refund.RefundNo)
+		logger.Warn("channel client not configured, refund record created but not processed",
+			zap.String("refund_no", refund.RefundNo),
+			zap.String("payment_no", payment.PaymentNo))
 	}
 
 	// 8. 只有成功后才通知商户
@@ -731,22 +818,14 @@ func (s *paymentService) notifyMerchantRefund(ctx context.Context, payment *mode
 		return
 	}
 
-	// 构建通知数据
-	notifyData := map[string]interface{}{
-		"event":             "refund",
-		"refund_no":         refund.RefundNo,
-		"payment_no":        payment.PaymentNo,
-		"order_no":          payment.OrderNo,
-		"merchant_id":       payment.MerchantID,
-		"amount":            refund.Amount,
-		"currency":          refund.Currency,
-		"status":            refund.Status,
-		"channel_refund_no": refund.ChannelRefundNo,
-		"refunded_at":       refund.RefundedAt,
-		"reason":            refund.Reason,
-	}
-
-	fmt.Printf("通知商户退款: url=%s, data=%+v\n", payment.NotifyURL, notifyData)
+	// 构建通知数据并记录日志
+	logger.Info("notifying merchant about refund",
+		zap.String("refund_no", refund.RefundNo),
+		zap.String("payment_no", payment.PaymentNo),
+		zap.String("notify_url", payment.NotifyURL),
+		zap.String("status", refund.Status),
+		zap.Int64("amount", refund.Amount),
+		zap.String("currency", refund.Currency))
 }
 
 // GetRefund 获取退款信息
