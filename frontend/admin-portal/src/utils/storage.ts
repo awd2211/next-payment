@@ -95,3 +95,4 @@ export const sessionStorage = new Storage(window.sessionStorage)
 // 默认导出localStorage
 export default localStorage
 
+
