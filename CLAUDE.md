@@ -144,11 +144,68 @@ service-name/
 │   ├── service/          # Business logic
 │   ├── handler/          # HTTP handlers (Gin)
 │   ├── client/           # HTTP clients for other services (if needed)
+│   ├── grpc/             # gRPC server implementation (optional)
 │   └── middleware/       # Service-specific middleware (if needed)
 └── go.mod
 ```
 
-**Key Pattern**: `main.go` imports shared functionality from `pkg/` and wires dependencies:
+**Two Initialization Patterns**:
+
+**Pattern A: Bootstrap Framework (Recommended - 66.7% Complete ✅)**
+**Current Status**: 10/15 services migrated (66.7% - Core Business 100% ✅)
+- ✅ notification-service (26% reduction)
+- ✅ admin-service (36% reduction)
+- ✅ merchant-service (24% reduction)
+- ✅ config-service (46% reduction)
+- ✅ **payment-gateway** (28% reduction) - Saga + Kafka + Signature
+- ✅ order-service (37% reduction)
+- ✅ **channel-adapter** (32% reduction) - 4 Payment Channels
+- ✅ risk-service (48% reduction) - GeoIP + Rules
+- ✅ **accounting-service** (58% reduction) - Double-Entry Accounting
+- ✅ **analytics-service** (80% reduction) 🏆 **Highest Ever!**
+- ⏳ 5 services pending (merchant-auth, settlement, withdrawal, kyc, cashier)
+
+**System scale**: 16 microservice directories (15 implemented, 1 not: merchant-config-service)
+**Average code reduction**: 38.7% ⬆️ | **Total code saved**: 938 lines ⬆️
+**Compilation success rate**: 100% (10/10 services passed)
+**Payment Core Flow**: 100% migrated ✅ (Gateway → Order → Channel → Risk → Accounting → Analytics)
+
+See [BOOTSTRAP_MIGRATION_FINAL_100PERCENT.md](backend/BOOTSTRAP_MIGRATION_FINAL_100PERCENT.md) ⭐ for complete report.
+```go
+// Use pkg/app Bootstrap for automatic setup
+application, err := app.Bootstrap(app.ServiceConfig{
+    ServiceName: "notification-service",
+    DBName:      "payment_notification",
+    Port:        40008,
+    AutoMigrate: []any{&model.Notification{}},
+
+    // Feature flags (all optional, sensible defaults)
+    EnableTracing:     true,   // Jaeger tracing
+    EnableMetrics:     true,   // Prometheus metrics
+    EnableRedis:       true,   // Redis connection
+    EnableGRPC:        false,  // gRPC 默认关闭,系统使用 HTTP/REST 通信
+    EnableHealthCheck: true,   // Enhanced health checks
+    EnableRateLimit:   true,   // Rate limiting (requires Redis)
+
+    RateLimitRequests: 100,
+    RateLimitWindow:   time.Minute,
+})
+
+// Register HTTP routes (主要通信方式)
+handler.RegisterRoutes(application.Router, authMiddleware)
+
+// Start HTTP server with graceful shutdown
+application.RunWithGracefulShutdown()
+
+// 如需启用 gRPC (可选):
+// 1. 设置 EnableGRPC: true, GRPCPort: 50008
+// 2. 注册 gRPC 服务: pb.RegisterXxxServer(application.GRPCServer, grpcImpl)
+// 3. 使用 application.RunDualProtocol() 启动双协议
+```
+
+**Pattern B: Manual Initialization (Used by most existing services)**
+```go
+// Manual setup: logger, database, Redis, HTTP server, optional gRPC
 1. Initialize logger, database, Redis
 2. Create repositories
 3. Create service clients (if needed)
@@ -156,12 +213,35 @@ service-name/
 5. Create handlers
 6. Register routes with middleware
 7. Start HTTP server
+8. (Optional) Start gRPC server in goroutine
+```
+
+**Bootstrap Framework Benefits**:
+- ✅ Auto-configures: DB, Redis, Logger, Gin router, Middleware stack
+- ✅ Auto-enables: Tracing, Metrics, Health checks, Rate limiting
+- ✅ HTTP-first: 默认使用 HTTP/REST,符合当前架构
+- ✅ gRPC support: 可选的双协议支持(默认关闭)
+- ✅ Graceful shutdown: Handles SIGINT/SIGTERM, closes all resources
+- ✅ Reduces boilerplate: 26% less code vs manual initialization
+- ✅ Consistent configuration: All services use same setup pattern
+
+**When to use Bootstrap**:
+- ✅ New services that need standard features
+- ✅ Services that want automatic observability setup
+- ✅ Services that prefer declarative configuration
+- ⚠️ Services that need gRPC (需手动启用 EnableGRPC: true)
+- ❌ Services with highly custom initialization needs
+
+**Communication Protocol**:
+- **Default**: HTTP/REST (所有服务间通信)
+- **Optional**: gRPC (预留能力,默认关闭)
 
 ### Shared Libraries (pkg/)
 
 The `backend/pkg/` directory contains 20 reusable packages:
 
 **Core Infrastructure**:
+- **app/** - Bootstrap framework for unified service initialization (HTTP + optional gRPC)
 - **auth/** - JWT token generation/validation, Claims struct, password hashing
 - **cache/** - Cache interface with Redis and in-memory implementations
 - **config/** - Environment variable loading (`GetEnv`, `GetEnvInt`)
@@ -173,7 +253,7 @@ The `backend/pkg/` directory contains 20 reusable packages:
 - **email/** - SMTP and Mailgun email sending
 - **httpclient/** - HTTP client with retry logic and circuit breaker
 - **kafka/** - Kafka producer/consumer
-- **grpc/** - gRPC client/server utilities (not actively used - services use HTTP)
+- **grpc/** - gRPC client/server utilities (optional, services primarily use HTTP/REST)
 
 **Observability** (Phase 2 - NEW):
 - **metrics/** - Prometheus metrics collection (HTTP, payment, refund metrics)
