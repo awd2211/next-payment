@@ -1,0 +1,229 @@
+.contact-page {
+  padding-top: 72px;
+  min-height: 100vh;
+}
+
+/* Hero Section */
+.contact-hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  padding: 100px 24px 80px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.contact-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.contact-hero-content {
+  max-width: 800px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+/* Contact Info Section */
+.contact-info-section {
+  padding: 80px 24px;
+  background: #fff;
+  margin-top: -40px;
+  position: relative;
+  z-index: 1;
+}
+
+.contact-info-card {
+  text-align: center;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
+  height: 100%;
+  padding: 32px 24px;
+}
+
+.contact-info-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.contact-icon-wrapper {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.contact-info-card:hover .contact-icon-wrapper {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.contact-icon {
+  font-size: 32px;
+  color: #fff;
+}
+
+.contact-info-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: #262626;
+}
+
+.contact-info-content {
+  font-size: 15px;
+  color: #595959;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Contact Form Section */
+.contact-form-section {
+  padding: 80px 24px;
+  background: linear-gradient(180deg, #fff 0%, #f8f9fa 100%);
+}
+
+.form-intro {
+  padding-right: 32px;
+}
+
+.departments-list {
+  margin-top: 48px;
+}
+
+.departments-list h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 24px 0;
+  color: #262626;
+}
+
+.department-item {
+  padding: 20px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.department-item:last-child {
+  border-bottom: none;
+}
+
+.department-item h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #262626;
+}
+
+.department-item a {
+  color: #667eea;
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.3s;
+}
+
+.department-item a:hover {
+  color: #764ba2;
+}
+
+.department-item p {
+  font-size: 14px;
+  color: #8c8c8c;
+  margin: 8px 0 0 0;
+}
+
+.contact-form-card {
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+}
+
+.contact-form-card .ant-form-item-label > label {
+  font-weight: 600;
+  color: #262626;
+}
+
+.contact-form-card .ant-input,
+.contact-form-card .ant-input-textarea textarea {
+  border-radius: 8px;
+}
+
+.contact-form-card .ant-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s;
+}
+
+.contact-form-card .ant-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* Map Section */
+.map-section {
+  padding: 0;
+  background: #f8f9fa;
+}
+
+.map-placeholder {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e8e9ea 100%);
+  padding: 100px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.map-placeholder p {
+  font-size: 18px;
+  color: #595959;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .contact-page {
+    padding-top: 64px;
+  }
+
+  .contact-hero {
+    padding: 80px 16px 60px;
+  }
+
+  .contact-info-section,
+  .contact-form-section {
+    padding: 60px 16px;
+  }
+
+  .form-intro {
+    padding-right: 0;
+    margin-bottom: 32px;
+  }
+
+  .departments-list {
+    margin-top: 32px;
+  }
+
+  .map-placeholder {
+    padding: 60px 16px;
+  }
+}
