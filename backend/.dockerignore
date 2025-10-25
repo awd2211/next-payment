@@ -1,0 +1,80 @@
+# ============================================================
+# Docker ignore file - 排除不需要打包到镜像的文件
+# ============================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 日志文件
+logs/
+*.log
+nohup.out
+
+# 测试文件
+*_test.go
+testdata/
+coverage.out
+coverage.html
+
+# 构建产物
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.bak
+*.old
+
+# 文档
+docs/
+*.pdf
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Docker 相关（避免嵌套）
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# 环境变量文件（敏感信息）
+.env
+.env.*
+*.pem
+*.key
+*.crt
+certs/
+
+# 脚本（不需要在容器内）
+scripts/
+Makefile
+
+# Air 热重载配置
+.air.toml
+
+# Go 模块缓存
+go.sum.backup
+
+# 其他服务的代码（构建时只复制需要的服务）
+# 注意：这个会被 Dockerfile 中的 COPY 覆盖
