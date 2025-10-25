@@ -84,11 +84,21 @@ air -c .air.toml
 
 ## 🌐 监控端点
 
+### 核心监控
+
 - **Prometheus**: http://localhost:40090
 - **Grafana**: http://localhost:40300 (admin/admin)
-- **Jaeger**: http://localhost:40686
+- **Jaeger**: http://localhost:50686
 - **Health Check**: http://localhost:PORT/health
 - **Metrics**: http://localhost:PORT/metrics
+
+### ELK Stack (日志分析)
+
+- **Kibana UI**: http://localhost:40561
+- **Elasticsearch API**: http://localhost:40920
+- **Logstash Monitoring**: http://localhost:40944
+
+参考：[ELK_INTEGRATION_GUIDE.md](ELK_INTEGRATION_GUIDE.md)
 
 ---
 

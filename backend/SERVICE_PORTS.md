@@ -48,7 +48,13 @@
 | 40379 | Redis | Cache and session store |
 | 40432 | PostgreSQL | Main database (19 databases) |
 | 40092 | Kafka | Message broker |
-| 40686 | Jaeger UI | Distributed tracing |
+| 50686 | Jaeger UI | Distributed tracing |
+| **40561** | **Kibana** | **Log analysis and visualization** |
+| **40920** | **Elasticsearch** | **Log storage and search (HTTP)** |
+| **40930** | **Elasticsearch** | **TCP transport** |
+| **40514** | **Logstash** | **TCP log input** |
+| **40515** | **Logstash** | **UDP log input** |
+| **40944** | **Logstash** | **Monitoring API** |
 
 ---
 
@@ -99,7 +105,7 @@ for port in 40001 40002 40003 40004 40005 40006 40007 40008 40009 40010 40011 40
 done
 
 # Infrastructure
-for port in 40090 40300 40379 40432 40092 40686; do
+for port in 40090 40300 40379 40432 40092 50686; do
   echo -n "Port $port: "
   if lsof -i:$port -sTCP:LISTEN >/dev/null 2>&1; then
     echo "✅ LISTENING"

@@ -325,7 +325,7 @@ Access monitoring dashboards:
 
 - **Grafana**: http://localhost:40300 (admin/admin)
 - **Prometheus**: http://localhost:40090
-- **Jaeger UI**: http://localhost:40686
+- **Jaeger UI**: http://localhost:50686
 
 Each service exposes metrics at `/metrics` endpoint:
 ```bash

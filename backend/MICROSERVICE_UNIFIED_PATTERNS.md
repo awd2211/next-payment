@@ -430,7 +430,7 @@ EnableTracing: true,
 - HTTP request spans (via middleware)
 - W3C Trace Context propagation
 - X-Trace-ID response header
-- Jaeger UI integration (http://localhost:40686)
+- Jaeger UI integration (http://localhost:50686)
 
 **Manual spans for business logic**:
 ```go

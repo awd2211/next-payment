@@ -401,7 +401,7 @@ PAYMENT_GATEWAY_URL=http://payment-gateway:40003
 All services expose:
 - ✅ `/health` - Health check endpoint
 - ✅ `/metrics` - Prometheus metrics
-- ✅ Jaeger tracing (http://localhost:40686)
+- ✅ Jaeger tracing (http://localhost:50686)
 - ✅ Structured logging (JSON format)
 
 ### Startup Commands

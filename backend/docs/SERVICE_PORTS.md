@@ -51,7 +51,7 @@
 | **40092** | Kafka | 消息队列（docker） |
 | **40090** | Prometheus | 指标监控 |
 | **40300** | Grafana | 可视化仪表盘（admin/admin） |
-| **40686** | Jaeger UI | 分布式追踪 |
+| **50686** | Jaeger UI | 分布式追踪 |
 
 ---
 

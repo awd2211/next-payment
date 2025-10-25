@@ -406,6 +406,70 @@ services:
     restart: unless-stopped
     pid: host
 
+  # Elasticsearch (ELK Stack)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: payment-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+    ports:
+      - "40920:9200"      # Elasticsearch HTTP
+      - "40930:9300"      # Elasticsearch TCP
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - payment-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Kibana (ELK Stack)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: payment-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      - SERVER_HOST=0.0.0.0
+    ports:
+      - "40561:5601"      # Kibana UI
+    networks:
+      - payment-network
+    depends_on:
+      - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Logstash (ELK Stack)
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: payment-logstash
+    volumes:
+      - ./config/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./backend/logs:/var/log/payment:ro
+    ports:
+      - "40514:5014"      # Logstash TCP input
+      - "40515:5015"      # Logstash UDP input
+      - "40944:9600"      # Logstash monitoring
+    environment:
+      - "LS_JAVA_OPTS=-Xms256m -Xmx256m"
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - payment-network
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
@@ -415,6 +479,7 @@ volumes:
   prometheus_data:
   grafana_data:
   kong_postgres_data:
+  elasticsearch_data:
 
 networks:
   payment-network:

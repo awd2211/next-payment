@@ -387,7 +387,7 @@ services:
 
   jaeger-all-in-one:
     ports:
-      - "40686:16686"  # UI
+      - "50686:16686"  # UI
       - "14268:14268"  # Collector HTTP
 ```
 
@@ -538,7 +538,7 @@ curl -X POST http://localhost:8003/api/v1/payments \
   -d '{"amount": 10000, "currency": "USD"}'
 
 # 3. 访问 Jaeger UI
-open http://localhost:40686
+open http://localhost:50686
 
 # 4. 搜索 trace
 # - Service: payment-gateway
