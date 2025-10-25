@@ -125,8 +125,8 @@ func main() {
 		}
 	}
 
-	// 6. 初始化汇率存储仓库
-	exchangeRateRepo := repository.NewExchangeRateRepository(application.DB)
+	// 6. 初始化汇率存储仓库（注入Redis客户端用于缓存）
+	exchangeRateRepo := repository.NewExchangeRateRepository(application.DB, application.Redis)
 
 	// 7. 初始化汇率客户端（用于 Crypto 适配器的法币转换）
 	exchangeRateCacheTTL := time.Duration(config.GetEnvInt("EXCHANGE_RATE_CACHE_TTL", 3600)) * time.Second

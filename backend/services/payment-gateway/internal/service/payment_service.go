@@ -11,9 +11,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/events"
+	"github.com/payment-platform/pkg/idempotent"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
+	"github.com/payment-platform/pkg/router"
 	"github.com/payment-platform/pkg/tracing"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/attribute"
@@ -32,6 +34,7 @@ type PaymentService interface {
 	CreatePayment(ctx context.Context, input *CreatePaymentInput) (*model.Payment, error)
 	GetPayment(ctx context.Context, paymentNo string) (*model.Payment, error)
 	QueryPayment(ctx context.Context, query *repository.PaymentQuery) ([]*model.Payment, int64, error)
+	BatchGetPayments(ctx context.Context, paymentNos []string, merchantID uuid.UUID) (map[string]*model.Payment, []string, error)
 	CancelPayment(ctx context.Context, paymentNo string, reason string) error
 
 	// 回调处理
@@ -41,6 +44,7 @@ type PaymentService interface {
 	CreateRefund(ctx context.Context, input *CreateRefundInput) (*model.Refund, error)
 	GetRefund(ctx context.Context, refundNo string) (*model.Refund, error)
 	QueryRefunds(ctx context.Context, query *repository.RefundQuery) ([]*model.Refund, int64, error)
+	BatchGetRefunds(ctx context.Context, refundNos []string, merchantID uuid.UUID) (map[string]*model.Refund, []string, error)
 
 	// 路由管理
 	SelectChannel(ctx context.Context, payment *model.Payment) (string, error)
@@ -56,12 +60,14 @@ type paymentService struct {
 	notificationClient  *client.NotificationClient // 保留作为降级方案
 	analyticsClient     *client.AnalyticsClient    // 保留作为降级方案
 	redisClient         *redis.Client
+	idempotentService   idempotent.Service         // 幂等性服务
 	paymentMetrics      *metrics.PaymentMetrics
 	messageService      MessageService
 	eventPublisher      *kafka.EventPublisher // 新增: 统一事件发布器
 	webhookBaseURL      string                // Webhook基础URL，用于构建回调地址
 	refundSagaService   *RefundSagaService    // Refund Saga 分布式事务服务
 	callbackSagaService *CallbackSagaService  // Callback Saga 分布式事务服务
+	routerService       *router.RouterService // 智能路由服务
 }
 
 // NewPaymentService 创建支付服务实例
@@ -81,21 +87,23 @@ func NewPaymentService(
 	webhookBaseURL string,
 ) PaymentService {
 	return &paymentService{
-		db:                 db,
-		paymentRepo:        paymentRepo,
-		apiKeyRepo:         apiKeyRepo,
-		orderClient:        orderClient,
-		channelClient:      channelClient,
-		riskClient:         riskClient,
-		notificationClient: notificationClient,
-		analyticsClient:    analyticsClient,
-		redisClient:        redisClient,
-		paymentMetrics:     paymentMetrics,
-		messageService:     messageService,
-		eventPublisher:     eventPublisher, // 新增字段
+		db:                  db,
+		paymentRepo:         paymentRepo,
+		apiKeyRepo:          apiKeyRepo,
+		orderClient:         orderClient,
+		channelClient:       channelClient,
+		riskClient:          riskClient,
+		notificationClient:  notificationClient,
+		analyticsClient:     analyticsClient,
+		redisClient:         redisClient,
+		idempotentService:   idempotent.NewService(redisClient), // 初始化幂等性服务
+		paymentMetrics:      paymentMetrics,
+		messageService:      messageService,
+		eventPublisher:      eventPublisher, // 新增字段
 		webhookBaseURL:      webhookBaseURL,
 		refundSagaService:   nil, // 通过 setter 注入
 		callbackSagaService: nil, // 通过 setter 注入
+		routerService:       nil, // 通过 setter 注入
 	}
 }
 
@@ -107,6 +115,11 @@ func (s *paymentService) SetRefundSagaService(sagaService *RefundSagaService) {
 // SetCallbackSagaService 设置 Callback Saga 服务（依赖注入）
 func (s *paymentService) SetCallbackSagaService(sagaService *CallbackSagaService) {
 	s.callbackSagaService = sagaService
+}
+
+// SetRouterService 设置路由服务（依赖注入）
+func (s *paymentService) SetRouterService(routerService *router.RouterService) {
+	s.routerService = routerService
 }
 
 // CreatePaymentInput 创建支付输入
@@ -139,7 +152,7 @@ type CreateRefundInput struct {
 	OperatorType string   `json:"operator_type"`                    // 操作人类型
 }
 
-// CreatePayment 创建支付（完整流程，带事务保护）
+// CreatePayment 创建支付（完整流程，带事务保护 + 幂等性保护）
 func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePaymentInput) (*model.Payment, error) {
 	// 记录开始时间用于性能指标
 	start := time.Now()
@@ -155,6 +168,65 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 				finalChannel = input.Channel
 			}
 			s.paymentMetrics.RecordPayment(finalStatus, finalChannel, input.Currency, amount, duration)
+		}
+	}()
+
+	// 【幂等性保护】1. 生成幂等性键（merchant_id + order_no 唯一标识一笔支付）
+	idempotentKey := idempotent.GenerateKey("payment", input.MerchantID.String(), input.OrderNo)
+
+	// 【幂等性保护】2. 检查是否已处理过该请求
+	type IdempotentResult struct {
+		PaymentNo string `json:"payment_no"`
+		Status    string `json:"status"`
+		Message   string `json:"message,omitempty"`
+	}
+	var cachedResult IdempotentResult
+	exists, err := s.idempotentService.Check(ctx, idempotentKey, &cachedResult)
+	if err != nil {
+		// Redis 错误不阻塞请求，记录日志后继续
+		logger.Warn("idempotent check failed, continue processing",
+			zap.Error(err),
+			zap.String("merchant_id", input.MerchantID.String()),
+			zap.String("order_no", input.OrderNo))
+	} else if exists {
+		// 找到缓存结果，直接返回（避免重复创建支付）
+		logger.Info("idempotent request detected, returning cached result",
+			zap.String("merchant_id", input.MerchantID.String()),
+			zap.String("order_no", input.OrderNo),
+			zap.String("payment_no", cachedResult.PaymentNo))
+
+		// 从数据库查询完整的支付信息
+		payment, err := s.paymentRepo.GetByPaymentNo(ctx, cachedResult.PaymentNo)
+		if err != nil {
+			return nil, fmt.Errorf("查询缓存的支付记录失败: %w", err)
+		}
+
+		finalStatus = "duplicate" // 记录为重复请求
+		return payment, nil
+	}
+
+	// 【幂等性保护】3. 尝试获取分布式锁（防止并发重复请求）
+	lockAcquired, err := s.idempotentService.Try(ctx, idempotentKey, 30*time.Second)
+	if err != nil {
+		logger.Warn("failed to acquire distributed lock, continue processing",
+			zap.Error(err),
+			zap.String("merchant_id", input.MerchantID.String()),
+			zap.String("order_no", input.OrderNo))
+	} else if !lockAcquired {
+		// 其他请求正在处理，返回错误（客户端应稍后重试）
+		finalStatus = "duplicate"
+		return nil, fmt.Errorf("该订单正在处理中，请稍后查询结果")
+	}
+
+	// 【幂等性保护】4. 处理完成后释放锁
+	defer func() {
+		if lockAcquired {
+			if err := s.idempotentService.Release(ctx, idempotentKey); err != nil {
+				logger.Error("failed to release distributed lock",
+					zap.Error(err),
+					zap.String("merchant_id", input.MerchantID.String()),
+					zap.String("order_no", input.OrderNo))
+			}
 		}
 	}()
 
@@ -286,7 +358,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 
 	// 8. 在事务中检查订单号唯一性并创建支付记录
 	// 使用 SELECT FOR UPDATE 防止并发创建相同订单号
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// 8.1 在事务中使用行级锁检查订单号是否已存在
 		var count int64
 		if err := tx.Model(&model.Payment{}).
@@ -455,6 +527,21 @@ func (s *paymentService) CreatePayment(ctx context.Context, input *CreatePayment
 
 	// 支付创建成功
 	finalStatus = "success"
+
+	// 【幂等性保护】5. 缓存成功结果（24小时有效期）
+	cacheResult := IdempotentResult{
+		PaymentNo: payment.PaymentNo,
+		Status:    string(payment.Status),
+	}
+	if err := s.idempotentService.Store(ctx, idempotentKey, cacheResult, 24*time.Hour); err != nil {
+		logger.Error("failed to cache idempotent result",
+			zap.Error(err),
+			zap.String("merchant_id", payment.MerchantID.String()),
+			zap.String("order_no", payment.OrderNo),
+			zap.String("payment_no", payment.PaymentNo))
+		// 缓存失败不影响支付结果
+	}
+
 	return payment, nil
 }
 
@@ -480,6 +567,58 @@ func (s *paymentService) QueryPayment(ctx context.Context, query *repository.Pay
 	}
 
 	return s.paymentRepo.List(ctx, query)
+}
+
+// BatchGetPayments 批量查询支付
+// 返回: (成功查询的支付map, 查询失败的paymentNo列表, error)
+func (s *paymentService) BatchGetPayments(ctx context.Context, paymentNos []string, merchantID uuid.UUID) (map[string]*model.Payment, []string, error) {
+	// 验证请求
+	if len(paymentNos) == 0 {
+		return nil, nil, fmt.Errorf("支付流水号列表不能为空")
+	}
+	if len(paymentNos) > 100 {
+		return nil, nil, fmt.Errorf("批量查询最多支持100个支付流水号")
+	}
+
+	// 使用 map 去重
+	uniquePaymentNos := make(map[string]bool)
+	for _, paymentNo := range paymentNos {
+		if paymentNo != "" {
+			uniquePaymentNos[paymentNo] = true
+		}
+	}
+
+	results := make(map[string]*model.Payment)
+	failed := make([]string, 0)
+
+	// 批量查询（使用 WHERE IN 子句）
+	var payments []*model.Payment
+	err := s.db.WithContext(ctx).
+		Where("payment_no IN ? AND merchant_id = ?", paymentNos, merchantID).
+		Find(&payments).Error
+
+	if err != nil {
+		logger.Error("批量查询支付失败", zap.Error(err))
+		return nil, nil, fmt.Errorf("批量查询支付失败: %w", err)
+	}
+
+	// 构建结果 map
+	for _, payment := range payments {
+		results[payment.PaymentNo] = payment
+		delete(uniquePaymentNos, payment.PaymentNo)
+	}
+
+	// 未找到的支付流水号记录为 failed
+	for paymentNo := range uniquePaymentNos {
+		failed = append(failed, paymentNo)
+	}
+
+	logger.Info("批量查询支付完成",
+		zap.Int("total_requested", len(paymentNos)),
+		zap.Int("found", len(results)),
+		zap.Int("not_found", len(failed)))
+
+	return results, failed, nil
 }
 
 // CancelPayment 取消支付
@@ -771,6 +910,60 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 		}
 	}()
 
+	// 【幂等性保护】1. 生成幂等性键（payment_no + operator_id + amount 唯一标识一次退款操作）
+	// 注意：同一支付可能有多次退款，所以需要包含 amount 和 operator 区分
+	idempotentKey := idempotent.GenerateKey("refund", input.PaymentNo, input.OperatorID.String(), fmt.Sprintf("%d", input.Amount))
+
+	// 【幂等性保护】2. 检查是否已处理过该退款请求
+	type RefundIdempotentResult struct {
+		RefundNo string `json:"refund_no"`
+		Status   string `json:"status"`
+		Message  string `json:"message,omitempty"`
+	}
+	var cachedRefund RefundIdempotentResult
+	exists, err := s.idempotentService.Check(ctx, idempotentKey, &cachedRefund)
+	if err != nil {
+		logger.Warn("refund idempotent check failed, continue processing",
+			zap.Error(err),
+			zap.String("payment_no", input.PaymentNo))
+	} else if exists {
+		// 找到缓存结果，直接返回
+		logger.Info("idempotent refund request detected, returning cached result",
+			zap.String("payment_no", input.PaymentNo),
+			zap.String("refund_no", cachedRefund.RefundNo))
+
+		// 从数据库查询完整的退款信息
+		refund, err := s.GetRefund(ctx, cachedRefund.RefundNo)
+		if err != nil {
+			return nil, fmt.Errorf("查询缓存的退款记录失败: %w", err)
+		}
+
+		finalStatus = "duplicate"
+		return refund, nil
+	}
+
+	// 【幂等性保护】3. 尝试获取分布式锁
+	lockAcquired, err := s.idempotentService.Try(ctx, idempotentKey, 30*time.Second)
+	if err != nil {
+		logger.Warn("failed to acquire refund lock, continue processing",
+			zap.Error(err),
+			zap.String("payment_no", input.PaymentNo))
+	} else if !lockAcquired {
+		finalStatus = "duplicate"
+		return nil, fmt.Errorf("该退款请求正在处理中，请稍后查询结果")
+	}
+
+	// 【幂等性保护】4. 处理完成后释放锁
+	defer func() {
+		if lockAcquired {
+			if err := s.idempotentService.Release(ctx, idempotentKey); err != nil {
+				logger.Error("failed to release refund lock",
+					zap.Error(err),
+					zap.String("payment_no", input.PaymentNo))
+			}
+		}
+	}()
+
 	// 1. 获取原支付记录
 	payment, err := s.GetPayment(ctx, input.PaymentNo)
 	if err != nil {
@@ -986,6 +1179,20 @@ func (s *paymentService) CreateRefund(ctx context.Context, input *CreateRefundIn
 
 	// 退款成功
 	finalStatus = "success"
+
+	// 【幂等性保护】5. 缓存成功结果（24小时有效期）
+	refundCacheResult := RefundIdempotentResult{
+		RefundNo: refund.RefundNo,
+		Status:   string(refund.Status),
+	}
+	if err := s.idempotentService.Store(ctx, idempotentKey, refundCacheResult, 24*time.Hour); err != nil {
+		logger.Error("failed to cache refund idempotent result",
+			zap.Error(err),
+			zap.String("payment_no", input.PaymentNo),
+			zap.String("refund_no", refund.RefundNo))
+		// 缓存失败不影响退款结果
+	}
+
 	return refund, nil
 }
 
@@ -1029,9 +1236,96 @@ func (s *paymentService) QueryRefunds(ctx context.Context, query *repository.Ref
 	return s.paymentRepo.ListRefunds(ctx, query)
 }
 
+// BatchGetRefunds 批量查询退款
+// 返回: (成功查询的退款map, 查询失败的refundNo列表, error)
+func (s *paymentService) BatchGetRefunds(ctx context.Context, refundNos []string, merchantID uuid.UUID) (map[string]*model.Refund, []string, error) {
+	// 验证请求
+	if len(refundNos) == 0 {
+		return nil, nil, fmt.Errorf("退款流水号列表不能为空")
+	}
+	if len(refundNos) > 100 {
+		return nil, nil, fmt.Errorf("批量查询最多支持100个退款流水号")
+	}
+
+	// 使用 map 去重
+	uniqueRefundNos := make(map[string]bool)
+	for _, refundNo := range refundNos {
+		if refundNo != "" {
+			uniqueRefundNos[refundNo] = true
+		}
+	}
+
+	results := make(map[string]*model.Refund)
+	failed := make([]string, 0)
+
+	// 批量查询（使用 WHERE IN 子句）
+	var refunds []*model.Refund
+	err := s.db.WithContext(ctx).
+		Where("refund_no IN ? AND merchant_id = ?", refundNos, merchantID).
+		Find(&refunds).Error
+
+	if err != nil {
+		logger.Error("批量查询退款失败", zap.Error(err))
+		return nil, nil, fmt.Errorf("批量查询退款失败: %w", err)
+	}
+
+	// 构建结果 map
+	for _, refund := range refunds {
+		results[refund.RefundNo] = refund
+		delete(uniqueRefundNos, refund.RefundNo)
+	}
+
+	// 未找到的退款流水号记录为 failed
+	for refundNo := range uniqueRefundNos {
+		failed = append(failed, refundNo)
+	}
+
+	logger.Info("批量查询退款完成",
+		zap.Int("total_requested", len(refundNos)),
+		zap.Int("found", len(results)),
+		zap.Int("not_found", len(failed)))
+
+	return results, failed, nil
+}
+
 // SelectChannel 选择支付渠道
 func (s *paymentService) SelectChannel(ctx context.Context, payment *model.Payment) (string, error) {
-	// 获取所有启用的路由规则
+	// 如果已经指定渠道，直接返回（向后兼容）
+	if payment.Channel != "" {
+		logger.Info("使用指定渠道", zap.String("channel", payment.Channel))
+		return payment.Channel, nil
+	}
+
+	// 优先使用智能路由服务（如果已配置）
+	if s.routerService != nil {
+		// 提取客户国家/地区（从IP或其他字段）
+		country := "US" // 默认美国，TODO: 从 GeoIP 获取
+
+		routingReq := &router.RoutingRequest{
+			Amount:   payment.Amount,
+			Currency: payment.Currency,
+			Country:  country,
+		}
+
+		result, err := s.routerService.SelectChannel(ctx, routingReq)
+		if err != nil {
+			// 路由失败，降级到旧逻辑
+			logger.Warn("智能路由失败，降级到规则路由",
+				zap.Error(err),
+				zap.String("payment_no", payment.PaymentNo))
+		} else {
+			// 记录路由决策
+			logger.Info("智能路由选择渠道",
+				zap.String("payment_no", payment.PaymentNo),
+				zap.String("channel", result.Channel),
+				zap.String("reason", result.Reason),
+				zap.Int64("estimated_fee", result.EstimatedFee))
+
+			return result.Channel, nil
+		}
+	}
+
+	// 降级方案：使用数据库路由规则（向后兼容）
 	routes, err := s.paymentRepo.ListActiveRoutes(ctx)
 	if err != nil {
 		return "", fmt.Errorf("获取路由规则失败: %w", err)
@@ -1040,11 +1334,15 @@ func (s *paymentService) SelectChannel(ctx context.Context, payment *model.Payme
 	// 按优先级匹配规则
 	for _, route := range routes {
 		if s.matchRoute(payment, route) {
+			logger.Info("规则路由选择渠道",
+				zap.String("payment_no", payment.PaymentNo),
+				zap.String("channel", route.Channel))
 			return route.Channel, nil
 		}
 	}
 
-	// 默认渠道
+	// 最终降级：默认渠道
+	logger.Info("使用默认渠道", zap.String("channel", model.ChannelStripe))
 	return model.ChannelStripe, nil
 }
 

@@ -18,12 +18,14 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	exportpkg "github.com/payment-platform/pkg/export"
 	"github.com/payment-platform/pkg/health"
 	"github.com/payment-platform/pkg/idempotency"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/metrics"
 	"github.com/payment-platform/pkg/middleware"
+	"github.com/payment-platform/pkg/router"
 	"github.com/payment-platform/pkg/saga"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -61,8 +63,10 @@ func main() {
 			&model.Refund{},
 			&model.PaymentCallback{},
 			&model.PaymentRoute{},
+			&model.PreAuthPayment{}, // 预授权支付
 			&saga.Saga{},     // Saga 分布式事务
 			&saga.SagaStep{}, // Saga 步骤
+			&exportpkg.ExportTask{}, // 数据导出任务
 		},
 
 		// 启用企业级功能(gRPC 默认关闭,使用 HTTP/REST)
@@ -91,6 +95,7 @@ func main() {
 	// 3. 初始化Repository
 	paymentRepo := repository.NewPaymentRepository(application.DB)
 	apiKeyRepo := repository.NewAPIKeyRepository(application.DB)
+	preAuthRepo := repository.NewPreAuthRepository(application.DB)
 
 	// 4. 初始化微服务客户端
 	orderServiceURL := config.GetEnv("ORDER_SERVICE_URL", "http://localhost:40004")
@@ -144,6 +149,21 @@ func main() {
 	)
 	go recoveryWorker.Start(context.Background())
 	logger.Info("Saga Recovery Worker 已启动")
+
+	// 初始化超时处理服务
+	timeoutService := service.NewTimeoutService(
+		application.DB,
+		paymentRepo,
+		orderClient,
+		channelClient,
+		notificationClient,
+	)
+
+	// 启动超时扫描工作器（每5分钟扫描一次过期支付）
+	timeoutInterval := time.Duration(config.GetEnvInt("TIMEOUT_SCAN_INTERVAL", 300)) * time.Second
+	timeoutWorker := service.NewTimeoutWorker(timeoutService, timeoutInterval)
+	go timeoutWorker.Start(context.Background())
+	logger.Info(fmt.Sprintf("Timeout Worker 已启动，扫描间隔: %v", timeoutInterval))
 
 	// 初始化 Saga Payment Service（支付流程 Saga 编排）
 	// 注意：Saga 功能暂时可选，未来会集成到 paymentService 中使用
@@ -205,10 +225,62 @@ func main() {
 		logger.Info("Callback Saga Service 已注入到 PaymentService")
 	}
 
-	// 8. 初始化Handler
-	paymentHandler := handler.NewPaymentHandler(paymentService)
+	// 初始化智能路由服务
+	routerService := router.NewRouterService(application.Redis)
+	routingStrategyMode := config.GetEnv("ROUTING_STRATEGY", "balanced") // balanced, cost, success, geographic
+	if err := routerService.Initialize(context.Background(), routingStrategyMode); err != nil {
+		logger.Warn("智能路由服务初始化失败，将使用降级方案",
+			zap.Error(err),
+			zap.String("strategy_mode", routingStrategyMode))
+	} else {
+		// 注入到 Payment Service
+		if ps, ok := paymentService.(interface{ SetRouterService(*router.RouterService) }); ok {
+			ps.SetRouterService(routerService)
+			logger.Info("智能路由服务已注入到 PaymentService",
+				zap.String("strategy_mode", routingStrategyMode))
+		}
+	}
 
-	// 9. 初始化签名验证中间件（渐进式迁移：支持本地验证和远程验证）
+	// 8. 初始化导出服务和Handler
+	exportStorageDir := config.GetEnv("EXPORT_STORAGE_DIR", "/home/eric/payment/backend/exports")
+	paymentExportService := service.NewPaymentExportService(application.DB, application.Redis, exportStorageDir)
+	exportHandler := handler.NewExportHandler(paymentExportService)
+	logger.Info(fmt.Sprintf("导出服务已初始化，存储目录: %s", exportStorageDir))
+
+	// 初始化预授权服务
+	preAuthService := service.NewPreAuthService(
+		application.DB,
+		preAuthRepo,
+		paymentRepo,
+		orderClient,
+		channelClient,
+		riskClient,
+		paymentService,
+		application.Redis,
+	)
+	logger.Info("预授权服务已初始化")
+
+	// 启动预授权过期扫描工作器（每30分钟扫描一次）
+	preAuthExpireInterval := time.Duration(config.GetEnvInt("PRE_AUTH_EXPIRE_INTERVAL", 1800)) * time.Second
+	go func() {
+		ticker := time.NewTicker(preAuthExpireInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			count, err := preAuthService.ScanAndExpirePreAuths(context.Background())
+			if err != nil {
+				logger.Error("预授权过期扫描失败", zap.Error(err))
+			} else if count > 0 {
+				logger.Info("预授权过期扫描完成", zap.Int("expired_count", count))
+			}
+		}
+	}()
+	logger.Info(fmt.Sprintf("预授权过期扫描工作器已启动，扫描间隔: %v", preAuthExpireInterval))
+
+	// 9. 初始化Handler
+	paymentHandler := handler.NewPaymentHandler(paymentService)
+	preAuthHandler := handler.NewPreAuthHandler(preAuthService)
+
+	// 10. 初始化签名验证中间件（渐进式迁移：支持本地验证和远程验证）
 	useAuthService := config.GetEnv("USE_AUTH_SERVICE", "false") == "true"
 	var signatureMiddlewareFunc gin.HandlerFunc
 
@@ -328,6 +400,7 @@ func main() {
 		{
 			merchantPayments.GET("", paymentHandler.QueryPayments)
 			merchantPayments.GET("/:paymentNo", paymentHandler.GetPayment)
+			merchantPayments.POST("/export", exportHandler.CreatePaymentExport) // 导出支付记录
 			// 支付统计（暂时返回空数据，等待实现）
 			merchantPayments.GET("/stats", func(c *gin.Context) {
 				c.JSON(200, gin.H{
@@ -347,11 +420,30 @@ func main() {
 			})
 		}
 
+		// 预授权管理
+		preAuth := merchantAPI.Group("/pre-auth")
+		{
+			preAuth.POST("", preAuthHandler.CreatePreAuth)                   // 创建预授权
+			preAuth.POST("/capture", preAuthHandler.CapturePreAuth)          // 确认预授权（扣款）
+			preAuth.POST("/cancel", preAuthHandler.CancelPreAuth)            // 取消预授权
+			preAuth.GET("/:pre_auth_no", preAuthHandler.GetPreAuth)          // 查询预授权详情
+			preAuth.GET("", preAuthHandler.ListPreAuths)                     // 查询预授权列表
+		}
+
 		// 商户后台退款查询
 		merchantRefunds := merchantAPI.Group("/refunds")
 		{
 			merchantRefunds.GET("", paymentHandler.QueryRefunds)
 			merchantRefunds.GET("/:refundNo", paymentHandler.GetRefund)
+			merchantRefunds.POST("/export", exportHandler.CreateRefundExport) // 导出退款记录
+		}
+
+		// 导出任务管理
+		merchantExports := merchantAPI.Group("/exports")
+		{
+			merchantExports.GET("", exportHandler.ListExportTasks)                    // 查询导出任务列表
+			merchantExports.GET("/:task_id", exportHandler.GetExportTask)             // 获取导出任务状态
+			merchantExports.GET("/:task_id/download", exportHandler.DownloadExport)   // 下载导出文件
 		}
 	}
 

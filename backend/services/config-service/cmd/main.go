@@ -71,8 +71,8 @@ func main() {
 	// 2. 初始化 Repository
 	configRepo := repository.NewConfigRepository(application.DB)
 
-	// 3. 初始化 Service
-	configService := service.NewConfigService(configRepo)
+	// 3. 初始化 Service（注入Redis客户端用于缓存）
+	configService := service.NewConfigService(configRepo, application.Redis)
 
 	// 4. 初始化 Handler
 	configHandler := handler.NewConfigHandler(configService)

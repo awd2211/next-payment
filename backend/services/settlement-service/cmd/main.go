@@ -12,6 +12,7 @@ import (
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
 	"github.com/payment-platform/pkg/saga"
+	"github.com/payment-platform/pkg/scheduler"
 	"payment-platform/settlement-service/internal/client"
 	"payment-platform/settlement-service/internal/handler"
 	"payment-platform/settlement-service/internal/model"
@@ -48,6 +49,7 @@ func main() {
 			&model.SettlementItem{},
 			&model.SettlementApproval{},
 			&model.SettlementAccount{},
+			&scheduler.ScheduledTask{}, // 定时任务记录表
 		},
 
 		EnableTracing:     true,
@@ -102,6 +104,29 @@ func main() {
 	go recoveryWorker.Start(context.Background())
 	logger.Info("Saga Recovery Worker 已启动")
 
+	// 初始化定时任务调度器
+	taskScheduler := scheduler.NewScheduler(application.DB, application.Redis)
+
+	// 注册自动结算任务（每天凌晨2点执行）
+	taskScheduler.RegisterTask(&scheduler.Task{
+		Name:        "daily_auto_settlement",
+		Interval:    24 * time.Hour, // 每24小时
+		Func:        service.RunDailySettlement(application.DB, settlementRepo),
+		Description: "每日自动结算任务",
+	})
+
+	// 注册数据归档任务（每周执行一次）
+	taskScheduler.RegisterTask(&scheduler.Task{
+		Name:        "weekly_data_archive",
+		Interval:    7 * 24 * time.Hour, // 每7天
+		Func:        scheduler.RunArchiveTask(application.DB),
+		Description: "数据归档和清理任务",
+	})
+
+	// 启动调度器
+	go taskScheduler.Start(context.Background())
+	logger.Info("定时任务调度器已启动（包含自动结算和数据归档任务）")
+
 	// 5. 初始化Kafka EventPublisher (新增: 事件驱动架构)
 	var eventPublisher *kafka.EventPublisher
 	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
@@ -122,6 +147,7 @@ func main() {
 		merchantClient,
 		notificationClient,
 		eventPublisher,
+		application.Redis,
 	)
 	settlementAccountService := service.NewSettlementAccountService(settlementAccountRepo)
 

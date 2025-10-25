@@ -10,8 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/events"
+	"github.com/payment-platform/pkg/idempotent"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/order-service/internal/client"
@@ -27,6 +29,7 @@ type OrderService interface {
 	GetOrderByID(ctx context.Context, id uuid.UUID) (*model.Order, error)
 	GetOrderByPaymentNo(ctx context.Context, paymentNo string) (*model.Order, error)
 	QueryOrders(ctx context.Context, query *repository.OrderQuery) ([]*model.Order, int64, error)
+	BatchGetOrders(ctx context.Context, orderNos []string, merchantID uuid.UUID) (map[string]*model.Order, []string, error)
 	CancelOrder(ctx context.Context, orderNo string, reason string, operatorID uuid.UUID, operatorType string) error
 	UpdateOrderStatus(ctx context.Context, orderNo string, status string, operatorID uuid.UUID, operatorType string) error
 
@@ -46,15 +49,19 @@ type OrderService interface {
 type orderService struct {
 	db                 *gorm.DB
 	orderRepo          repository.OrderRepository
+	redisClient        *redis.Client
+	idempotentService  idempotent.Service
 	notificationClient *client.NotificationClient // 保留作为降级方案
 	eventPublisher     *kafka.EventPublisher      // 事件发布器
 }
 
 // NewOrderService 创建订单服务实例
-func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository, notificationClient *client.NotificationClient, eventPublisher *kafka.EventPublisher) OrderService {
+func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository, redisClient *redis.Client, notificationClient *client.NotificationClient, eventPublisher *kafka.EventPublisher) OrderService {
 	return &orderService{
 		db:                 db,
 		orderRepo:          orderRepo,
+		redisClient:        redisClient,
+		idempotentService:  idempotent.NewService(redisClient),
 		notificationClient: notificationClient,
 		eventPublisher:     eventPublisher,
 	}
@@ -63,6 +70,8 @@ func NewOrderService(db *gorm.DB, orderRepo repository.OrderRepository, notifica
 // CreateOrderInput 创建订单输入
 type CreateOrderInput struct {
 	MerchantID      uuid.UUID             `json:"merchant_id" binding:"required"`
+	OrderNo         string                `json:"order_no"`         // 订单号（可选，用于幂等性）
+	PaymentNo       string                `json:"payment_no"`       // 支付流水号（可选，用于幂等性）
 	CustomerID      uuid.UUID             `json:"customer_id"`
 	CustomerEmail   string                `json:"customer_email" binding:"required,email"`
 	CustomerName    string                `json:"customer_name" binding:"required"`
@@ -93,7 +102,7 @@ type OrderItemInput struct {
 	Extra        map[string]interface{} `json:"extra"`
 }
 
-// CreateOrder 创建订单（使用事务保护订单和订单项的完整性）
+// CreateOrder 创建订单（使用事务保护订单和订单项的完整性 + 幂等性保护）
 func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput) (*model.Order, error) {
 	logger.Info("creating order",
 		zap.String("merchant_id", input.MerchantID.String()),
@@ -101,8 +110,61 @@ func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput)
 		zap.String("currency", input.Currency),
 		zap.Int("item_count", len(input.Items)))
 
-	// 生成订单号
-	orderNo := s.generateOrderNo()
+	// 【幂等性保护】1. 如果有 PaymentNo（从 payment-gateway 调用），使用它作为幂等性键
+	if input.PaymentNo != "" {
+		idempotentKey := idempotent.GenerateKey("order", input.MerchantID.String(), input.PaymentNo)
+
+		// 2. 检查是否已处理
+		type OrderIdempotentResult struct {
+			OrderNo string `json:"order_no"`
+			OrderID string `json:"order_id"`
+		}
+		var cachedResult OrderIdempotentResult
+		exists, err := s.idempotentService.Check(ctx, idempotentKey, &cachedResult)
+		if err != nil {
+			logger.Warn("order idempotent check failed, continue processing",
+				zap.Error(err),
+				zap.String("payment_no", input.PaymentNo))
+		} else if exists {
+			logger.Info("idempotent order request detected, returning cached result",
+				zap.String("payment_no", input.PaymentNo),
+				zap.String("order_no", cachedResult.OrderNo))
+
+			// 从数据库查询订单
+			order, err := s.GetOrder(ctx, cachedResult.OrderNo)
+			if err != nil {
+				return nil, fmt.Errorf("查询缓存的订单失败: %w", err)
+			}
+			return order, nil
+		}
+
+		// 3. 获取分布式锁
+		lockAcquired, err := s.idempotentService.Try(ctx, idempotentKey, 30*time.Second)
+		if err != nil {
+			logger.Warn("failed to acquire order lock, continue processing",
+				zap.Error(err),
+				zap.String("payment_no", input.PaymentNo))
+		} else if !lockAcquired {
+			return nil, fmt.Errorf("该订单正在创建中，请稍后查询")
+		}
+
+		// 4. 释放锁
+		defer func() {
+			if lockAcquired {
+				if err := s.idempotentService.Release(ctx, idempotentKey); err != nil {
+					logger.Error("failed to release order lock",
+						zap.Error(err),
+						zap.String("payment_no", input.PaymentNo))
+				}
+			}
+		}()
+	}
+
+	// 生成订单号（如果没有提供）
+	orderNo := input.OrderNo
+	if orderNo == "" {
+		orderNo = s.generateOrderNo()
+	}
 
 	// 计算订单金额
 	var totalAmount int64 = 0
@@ -295,6 +357,22 @@ func (s *orderService) CreateOrder(ctx context.Context, input *CreateOrderInput)
 	// 发布订单创建事件 (异步,不阻塞主流程)
 	s.publishOrderEvent(ctx, events.OrderCreated, order)
 
+	// 【幂等性保护】5. 缓存成功结果（如果有 PaymentNo）
+	if input.PaymentNo != "" {
+		idempotentKey := idempotent.GenerateKey("order", input.MerchantID.String(), input.PaymentNo)
+		cacheResult := map[string]string{
+			"order_no": order.OrderNo,
+			"order_id": order.ID.String(),
+		}
+		if err := s.idempotentService.Store(ctx, idempotentKey, cacheResult, 24*time.Hour); err != nil {
+			logger.Error("failed to cache order idempotent result",
+				zap.Error(err),
+				zap.String("payment_no", input.PaymentNo),
+				zap.String("order_no", order.OrderNo))
+			// 缓存失败不影响订单创建结果
+		}
+	}
+
 	return order, nil
 }
 
@@ -344,6 +422,58 @@ func (s *orderService) QueryOrders(ctx context.Context, query *repository.OrderQ
 	}
 
 	return s.orderRepo.List(ctx, query)
+}
+
+// BatchGetOrders 批量查询订单
+// 返回: (成功查询的订单map, 查询失败的orderNo列表, error)
+func (s *orderService) BatchGetOrders(ctx context.Context, orderNos []string, merchantID uuid.UUID) (map[string]*model.Order, []string, error) {
+	// 验证请求
+	if len(orderNos) == 0 {
+		return nil, nil, fmt.Errorf("订单号列表不能为空")
+	}
+	if len(orderNos) > 100 {
+		return nil, nil, fmt.Errorf("批量查询最多支持100个订单号")
+	}
+
+	// 使用 map 去重
+	uniqueOrderNos := make(map[string]bool)
+	for _, orderNo := range orderNos {
+		if orderNo != "" {
+			uniqueOrderNos[orderNo] = true
+		}
+	}
+
+	results := make(map[string]*model.Order)
+	failed := make([]string, 0)
+
+	// 批量查询（使用 WHERE IN 子句）
+	var orders []*model.Order
+	err := s.db.WithContext(ctx).
+		Where("order_no IN ? AND merchant_id = ?", orderNos, merchantID).
+		Find(&orders).Error
+
+	if err != nil {
+		logger.Error("批量查询订单失败", zap.Error(err))
+		return nil, nil, fmt.Errorf("批量查询订单失败: %w", err)
+	}
+
+	// 构建结果 map
+	for _, order := range orders {
+		results[order.OrderNo] = order
+		delete(uniqueOrderNos, order.OrderNo)
+	}
+
+	// 未找到的订单号记录为 failed
+	for orderNo := range uniqueOrderNos {
+		failed = append(failed, orderNo)
+	}
+
+	logger.Info("批量查询订单完成",
+		zap.Int("total_requested", len(orderNos)),
+		zap.Int("found", len(results)),
+		zap.Int("not_found", len(failed)))
+
+	return results, failed, nil
 }
 
 // CancelOrder 取消订单（使用事务保证状态更新和日志记录的原子性）

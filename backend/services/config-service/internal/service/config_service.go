@@ -6,10 +6,15 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"payment-platform/config-service/internal/model"
 	"payment-platform/config-service/internal/repository"
 )
@@ -45,13 +50,15 @@ type ConfigService interface {
 type configService struct {
 	configRepo     repository.ConfigRepository
 	encryptionKey  string
+	redisClient    *redis.Client
 }
 
 // NewConfigService 创建配置服务实例
-func NewConfigService(configRepo repository.ConfigRepository) ConfigService {
+func NewConfigService(configRepo repository.ConfigRepository, redisClient *redis.Client) ConfigService {
 	return &configService{
 		configRepo:    configRepo,
 		encryptionKey: "default-encryption-key-change-me",
+		redisClient:   redisClient,
 	}
 }
 
@@ -145,6 +152,29 @@ func (s *configService) CreateConfig(ctx context.Context, input *CreateConfigInp
 }
 
 func (s *configService) GetConfig(ctx context.Context, serviceName, configKey, environment string) (*model.Config, error) {
+	// 【缓存优化】1. 先查 Redis 缓存
+	cacheKey := fmt.Sprintf("config:%s:%s:%s", serviceName, configKey, environment)
+
+	if s.redisClient != nil {
+		cached, err := s.redisClient.Get(ctx, cacheKey).Result()
+		if err == nil {
+			// 缓存命中，反序列化返回
+			var config model.Config
+			if err := json.Unmarshal([]byte(cached), &config); err == nil {
+				logger.Debug("Config cache hit",
+					zap.String("service", serviceName),
+					zap.String("key", configKey))
+				return &config, nil
+			}
+		} else if err != redis.Nil {
+			// Redis 错误，记录日志但继续查询数据库
+			logger.Warn("Redis get failed, fallback to DB",
+				zap.Error(err),
+				zap.String("cache_key", cacheKey))
+		}
+	}
+
+	// 【缓存优化】2. 缓存未命中，查询数据库
 	config, err := s.configRepo.GetConfig(ctx, serviceName, configKey, environment)
 	if err != nil {
 		return nil, fmt.Errorf("获取配置失败: %w", err)
@@ -160,6 +190,23 @@ func (s *configService) GetConfig(ctx context.Context, serviceName, configKey, e
 			return nil, fmt.Errorf("解密配置值失败: %w", err)
 		}
 		config.ConfigValue = decrypted
+	}
+
+	// 【缓存优化】3. 写入缓存 (10分钟TTL)
+	if s.redisClient != nil {
+		data, err := json.Marshal(config)
+		if err == nil {
+			// 设置缓存，失败不影响业务
+			if err := s.redisClient.Set(ctx, cacheKey, data, 10*time.Minute).Err(); err != nil {
+				logger.Warn("Failed to set config cache",
+					zap.Error(err),
+					zap.String("cache_key", cacheKey))
+			} else {
+				logger.Debug("Config cached",
+					zap.String("service", serviceName),
+					zap.String("key", configKey))
+			}
+		}
 	}
 
 	return config, nil
@@ -243,6 +290,9 @@ func (s *configService) UpdateConfig(ctx context.Context, id uuid.UUID, input *U
 		return nil, fmt.Errorf("更新配置失败: %w", err)
 	}
 
+	// 【缓存失效】更新成功后删除缓存
+	s.invalidateConfigCache(ctx, config.ServiceName, config.ConfigKey, config.Environment)
+
 	return config, nil
 }
 
@@ -269,7 +319,14 @@ func (s *configService) DeleteConfig(ctx context.Context, id uuid.UUID, deletedB
 		return fmt.Errorf("记录配置历史失败: %w", err)
 	}
 
-	return s.configRepo.DeleteConfig(ctx, id)
+	if err := s.configRepo.DeleteConfig(ctx, id); err != nil {
+		return err
+	}
+
+	// 【缓存失效】删除成功后清除缓存
+	s.invalidateConfigCache(ctx, config.ServiceName, config.ConfigKey, config.Environment)
+
+	return nil
 }
 
 func (s *configService) GetConfigHistory(ctx context.Context, configID uuid.UUID, limit int) ([]*model.ConfigHistory, error) {
@@ -336,6 +393,9 @@ func (s *configService) RollbackConfig(ctx context.Context, configID uuid.UUID, 
 	if err := s.configRepo.UpdateConfig(ctx, config); err != nil {
 		return nil, fmt.Errorf("回滚配置失败: %w", err)
 	}
+
+	// 【缓存失效】回滚成功后清除缓存
+	s.invalidateConfigCache(ctx, config.ServiceName, config.ConfigKey, config.Environment)
 
 	return config, nil
 }
@@ -627,4 +687,18 @@ func (s *configService) decrypt(encrypted string) (string, error) {
 	}
 
 	return string(plaintext), nil
+}
+
+// 【缓存优化】缓存失效辅助方法
+func (s *configService) invalidateConfigCache(ctx context.Context, serviceName, configKey, environment string) {
+	if s.redisClient == nil {
+		return
+	}
+
+	cacheKey := fmt.Sprintf("config:%s:%s:%s", serviceName, configKey, environment)
+	if err := s.redisClient.Del(ctx, cacheKey).Err(); err != nil {
+		logger.Warn("删除配置缓存失败", zap.String("cache_key", cacheKey), zap.Error(err))
+	} else {
+		logger.Info("配置缓存已失效", zap.String("cache_key", cacheKey))
+	}
 }

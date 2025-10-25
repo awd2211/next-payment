@@ -7,8 +7,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/events"
+	"github.com/payment-platform/pkg/idempotent"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/settlement-service/internal/client"
@@ -37,6 +39,8 @@ type settlementService struct {
 	notificationClient *client.NotificationClient // 保留作为降级方案
 	eventPublisher     *kafka.EventPublisher // 新增: 统一事件发布器
 	sagaService        *SettlementSagaService // Settlement Saga 分布式事务服务
+	redisClient        *redis.Client
+	idempotentService  idempotent.Service
 }
 
 // NewSettlementService 创建结算服务
@@ -48,6 +52,7 @@ func NewSettlementService(
 	merchantClient *client.MerchantClient,
 	notificationClient *client.NotificationClient,
 	eventPublisher *kafka.EventPublisher,
+	redisClient *redis.Client,
 ) SettlementService {
 	return &settlementService{
 		db:                 db,
@@ -58,6 +63,8 @@ func NewSettlementService(
 		notificationClient: notificationClient,
 		eventPublisher:     eventPublisher,
 		sagaService:        nil, // 通过 setter 注入
+		redisClient:        redisClient,
+		idempotentService:  idempotent.NewService(redisClient),
 	}
 }
 
@@ -73,6 +80,7 @@ type CreateSettlementInput struct {
 	StartDate    time.Time
 	EndDate      time.Time
 	Transactions []TransactionItem
+	BatchNo      string // 批次号（可选，用于幂等性）
 }
 
 // TransactionItem 交易明细
@@ -87,6 +95,55 @@ type TransactionItem struct {
 
 // CreateSettlement 创建结算单
 func (s *settlementService) CreateSettlement(ctx context.Context, input *CreateSettlementInput) (*model.Settlement, error) {
+	// 【幂等性保护】1. 如果提供了BatchNo（通常是自动结算任务），使用它作为幂等性键
+	var lockAcquired bool
+	if input.BatchNo != "" {
+		// 幂等性键: settlement:{merchant_id}:{batch_no}:{date}
+		dateStr := input.StartDate.Format("20060102")
+		idempotentKey := idempotent.GenerateKey("settlement", input.MerchantID.String(), input.BatchNo, dateStr)
+
+		// 【幂等性保护】2. 检查是否已处理过该结算请求
+		type SettlementIdempotentResult struct {
+			SettlementNo string `json:"settlement_no"`
+			SettlementID string `json:"settlement_id"`
+			Status       string `json:"status"`
+		}
+		var cachedResult SettlementIdempotentResult
+		exists, err := s.idempotentService.Check(ctx, idempotentKey, &cachedResult)
+		if err != nil {
+			logger.Warn("幂等性检查失败(Redis不可用)，继续处理", zap.Error(err))
+		}
+		if exists {
+			logger.Info("结算单已存在(幂等性缓存命中)",
+				zap.String("settlement_no", cachedResult.SettlementNo),
+				zap.String("batch_no", input.BatchNo))
+
+			// 返回已存在的结算单
+			settlementID, _ := uuid.Parse(cachedResult.SettlementID)
+			settlement, err := s.settlementRepo.GetByID(ctx, settlementID)
+			if err != nil {
+				return nil, fmt.Errorf("获取已存在的结算单失败: %w", err)
+			}
+			return settlement, nil
+		}
+
+		// 【幂等性保护】3. 尝试获取分布式锁（30秒超时）
+		lockAcquired, err = s.idempotentService.Try(ctx, idempotentKey, 30*time.Second)
+		if err != nil {
+			logger.Warn("获取分布式锁失败(Redis不可用)，继续处理", zap.Error(err))
+		}
+		if !lockAcquired {
+			return nil, fmt.Errorf("该结算批次正在创建中，请稍后查询结果")
+		}
+
+		// 【幂等性保护】4. 确保释放锁（defer在return之后执行）
+		defer func() {
+			if lockAcquired {
+				s.idempotentService.Release(ctx, idempotentKey)
+			}
+		}()
+	}
+
 	// 生成结算单号
 	settlementNo := fmt.Sprintf("STL%s%d", input.MerchantID.String()[:8], time.Now().Unix())
 
@@ -146,6 +203,21 @@ func (s *settlementService) CreateSettlement(ctx context.Context, input *CreateS
 
 	if err != nil {
 		return nil, err
+	}
+
+	// 【幂等性保护】5. 缓存成功结果（如果使用了幂等性键）
+	if input.BatchNo != "" {
+		dateStr := input.StartDate.Format("20060102")
+		idempotentKey := idempotent.GenerateKey("settlement", input.MerchantID.String(), input.BatchNo, dateStr)
+
+		cacheResult := map[string]interface{}{
+			"settlement_no": settlement.SettlementNo,
+			"settlement_id": settlement.ID.String(),
+			"status":        settlement.Status,
+		}
+		if err := s.idempotentService.Store(ctx, idempotentKey, cacheResult, 24*time.Hour); err != nil {
+			logger.Warn("缓存结算单结果失败(Redis不可用)，不影响业务", zap.Error(err))
+		}
 	}
 
 	// 发布结算创建事件 (异步, 不阻塞主流程)

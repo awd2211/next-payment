@@ -196,10 +196,11 @@ const CashierConfigPage = () => {
           </Space>
         }
         extra={
-          <Button type="primary" loading={loading} onClick={handleSave}>
+          <Button type="primary" loading={loading} onClick={handleSave} style={{ borderRadius: 8 }}>
             {t('common.save') || '保存配置'}
           </Button>
         }
+        style={{ borderRadius: 12 }}
       >
         <Tabs defaultActiveKey="appearance" tabPosition="left">
           {/* 外观设置 */}

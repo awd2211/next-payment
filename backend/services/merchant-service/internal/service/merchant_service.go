@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/merchant-service/internal/model"
@@ -38,6 +41,7 @@ type merchantService struct {
 	db           *gorm.DB
 	merchantRepo repository.MerchantRepository
 	jwtManager   *auth.JWTManager
+	redisClient  *redis.Client
 }
 
 // NewMerchantService 创建商户服务实例（Phase 10：移除 apiKeyRepo）
@@ -45,11 +49,13 @@ func NewMerchantService(
 	db *gorm.DB,
 	merchantRepo repository.MerchantRepository,
 	jwtManager *auth.JWTManager,
+	redisClient *redis.Client,
 ) MerchantService {
 	return &merchantService{
 		db:           db,
 		merchantRepo: merchantRepo,
 		jwtManager:   jwtManager,
+		redisClient:  redisClient,
 	}
 }
 
@@ -178,7 +184,48 @@ func (s *merchantService) Register(ctx context.Context, input *RegisterMerchantI
 }
 
 func (s *merchantService) GetByID(ctx context.Context, id uuid.UUID) (*model.Merchant, error) {
-	return s.merchantRepo.GetByID(ctx, id)
+	// 【缓存优化】1. 先查 Redis 缓存
+	cacheKey := fmt.Sprintf("merchant:%s", id.String())
+
+	if s.redisClient != nil {
+		cached, err := s.redisClient.Get(ctx, cacheKey).Result()
+		if err == nil {
+			// 缓存命中，反序列化返回
+			var merchant model.Merchant
+			if err := json.Unmarshal([]byte(cached), &merchant); err == nil {
+				logger.Debug("Merchant cache hit", zap.String("merchant_id", id.String()))
+				return &merchant, nil
+			}
+		} else if err != redis.Nil {
+			// Redis 错误（不是 key 不存在），记录日志但继续查询数据库
+			logger.Warn("Redis get failed, fallback to DB",
+				zap.Error(err),
+				zap.String("merchant_id", id.String()))
+		}
+	}
+
+	// 【缓存优化】2. 缓存未命中或 Redis 不可用，查询数据库
+	merchant, err := s.merchantRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 【缓存优化】3. 写入缓存 (1小时TTL)
+	if s.redisClient != nil && merchant != nil {
+		data, err := json.Marshal(merchant)
+		if err == nil {
+			// 设置缓存，失败不影响业务
+			if err := s.redisClient.Set(ctx, cacheKey, data, time.Hour).Err(); err != nil {
+				logger.Warn("Failed to set merchant cache",
+					zap.Error(err),
+					zap.String("merchant_id", id.String()))
+			} else {
+				logger.Debug("Merchant cached", zap.String("merchant_id", id.String()))
+			}
+		}
+	}
+
+	return merchant, nil
 }
 
 func (s *merchantService) GetByEmail(ctx context.Context, email string) (*model.Merchant, error) {
@@ -232,6 +279,9 @@ func (s *merchantService) Update(ctx context.Context, id uuid.UUID, input *Updat
 		return nil, fmt.Errorf("更新商户失败: %w", err)
 	}
 
+	// 【缓存失效】更新成功后删除缓存
+	s.invalidateMerchantCache(ctx, id)
+
 	return merchant, nil
 }
 
@@ -242,7 +292,13 @@ func (s *merchantService) UpdateStatus(ctx context.Context, id uuid.UUID, status
 	}
 
 	merchant.Status = status
-	return s.merchantRepo.Update(ctx, merchant)
+	if err := s.merchantRepo.Update(ctx, merchant); err != nil {
+		return err
+	}
+
+	// 【缓存失效】更新成功后删除缓存
+	s.invalidateMerchantCache(ctx, id)
+	return nil
 }
 
 func (s *merchantService) UpdateKYCStatus(ctx context.Context, id uuid.UUID, kycStatus string) error {
@@ -304,5 +360,27 @@ func (s *merchantService) UpdatePasswordHash(ctx context.Context, id uuid.UUID, 
 	}
 
 	merchant.PasswordHash = passwordHash
-	return s.merchantRepo.Update(ctx, merchant)
+	if err := s.merchantRepo.Update(ctx, merchant); err != nil {
+		return err
+	}
+
+	// 【缓存失效】更新成功后删除缓存
+	s.invalidateMerchantCache(ctx, id)
+	return nil
+}
+
+// invalidateMerchantCache 删除商户缓存
+func (s *merchantService) invalidateMerchantCache(ctx context.Context, id uuid.UUID) {
+	if s.redisClient == nil {
+		return
+	}
+
+	cacheKey := fmt.Sprintf("merchant:%s", id.String())
+	if err := s.redisClient.Del(ctx, cacheKey).Err(); err != nil {
+		logger.Warn("Failed to invalidate merchant cache",
+			zap.Error(err),
+			zap.String("merchant_id", id.String()))
+	} else {
+		logger.Debug("Merchant cache invalidated", zap.String("merchant_id", id.String()))
+	}
 }

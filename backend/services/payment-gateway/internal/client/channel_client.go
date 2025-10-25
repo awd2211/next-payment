@@ -161,3 +161,111 @@ func (c *ChannelClient) CancelPayment(ctx context.Context, channelTradeNo string
 
 	return nil
 }
+
+// ====== 预授权相关接口 ======
+
+// CreatePreAuthRequest 创建预授权请求
+type CreatePreAuthRequest struct {
+	MerchantID string `json:"merchant_id"`
+	OrderNo    string `json:"order_no"`
+	PreAuthNo  string `json:"pre_auth_no"`
+	Amount     int64  `json:"amount"`
+	Currency   string `json:"currency"`
+	Channel    string `json:"channel"`
+	Subject    string `json:"subject"`
+	Body       string `json:"body"`
+	ReturnURL  string `json:"return_url"`
+	NotifyURL  string `json:"notify_url"`
+}
+
+// CreatePreAuthResponse 创建预授权响应
+type CreatePreAuthResponse struct {
+	Code    int              `json:"code"`
+	Message string           `json:"message"`
+	Data    *PreAuthResult   `json:"data"`
+}
+
+// PreAuthResult 预授权结果
+type PreAuthResult struct {
+	ChannelTradeNo string `json:"channel_trade_no"` // 渠道交易号
+	PaymentURL     string `json:"payment_url"`      // 支付URL
+	Status         string `json:"status"`           // 预授权状态
+}
+
+// CapturePreAuthRequest 确认预授权请求
+type CapturePreAuthRequest struct {
+	PreAuthNo      string `json:"pre_auth_no"`
+	ChannelTradeNo string `json:"channel_trade_no"`
+	Amount         int64  `json:"amount"`
+	Currency       string `json:"currency"`
+}
+
+// CapturePreAuthResponse 确认预授权响应
+type CapturePreAuthResponse struct {
+	Code    int                `json:"code"`
+	Message string             `json:"message"`
+	Data    *CaptureResult     `json:"data"`
+}
+
+// CaptureResult 确认结果
+type CaptureResult struct {
+	PaymentTradeNo string `json:"payment_trade_no"` // 支付交易号
+	Status         string `json:"status"`           // 状态
+}
+
+// CancelPreAuthRequest 取消预授权请求
+type CancelPreAuthRequest struct {
+	PreAuthNo      string `json:"pre_auth_no"`
+	ChannelTradeNo string `json:"channel_trade_no"`
+}
+
+// CancelPreAuthResponse 取消预授权响应
+type CancelPreAuthResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// CreatePreAuth 创建预授权
+func (c *ChannelClient) CreatePreAuth(ctx context.Context, req *CreatePreAuthRequest) (*CreatePreAuthResponse, error) {
+	resp, err := c.http.Post(ctx, "/api/v1/channel/pre-auth", req, nil)
+	if err != nil {
+		return nil, fmt.Errorf("调用Channel服务创建预授权失败: %w", err)
+	}
+
+	var result CreatePreAuthResponse
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// CapturePreAuth 确认预授权（扣款）
+func (c *ChannelClient) CapturePreAuth(ctx context.Context, req *CapturePreAuthRequest) (*CapturePreAuthResponse, error) {
+	resp, err := c.http.Post(ctx, "/api/v1/channel/pre-auth/capture", req, nil)
+	if err != nil {
+		return nil, fmt.Errorf("调用Channel服务确认预授权失败: %w", err)
+	}
+
+	var result CapturePreAuthResponse
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// CancelPreAuth 取消预授权
+func (c *ChannelClient) CancelPreAuth(ctx context.Context, req *CancelPreAuthRequest) (*CancelPreAuthResponse, error) {
+	resp, err := c.http.Post(ctx, "/api/v1/channel/pre-auth/cancel", req, nil)
+	if err != nil {
+		return nil, fmt.Errorf("调用Channel服务取消预授权失败: %w", err)
+	}
+
+	var result CancelPreAuthResponse
+	if err := resp.ParseResponse(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}

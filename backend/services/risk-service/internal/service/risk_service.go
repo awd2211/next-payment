@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/logger"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"payment-platform/risk-service/internal/client"
 	"payment-platform/risk-service/internal/model"
 	"payment-platform/risk-service/internal/repository"
@@ -112,6 +115,21 @@ func (s *riskService) CreateRule(ctx context.Context, input *CreateRuleInput) (*
 }
 
 func (s *riskService) GetRule(ctx context.Context, id uuid.UUID) (*model.RiskRule, error) {
+	// 【缓存优化】1. 先查 Redis 缓存
+	cacheKey := fmt.Sprintf("risk_rule:%s", id.String())
+
+	if s.redisClient != nil {
+		cached, err := s.redisClient.Get(ctx, cacheKey).Result()
+		if err == nil {
+			var rule model.RiskRule
+			if err := json.Unmarshal([]byte(cached), &rule); err == nil {
+				logger.Info("风控规则缓存命中", zap.String("rule_id", id.String()))
+				return &rule, nil
+			}
+		}
+	}
+
+	// 【缓存优化】2. 缓存未命中，查询数据库
 	rule, err := s.riskRepo.GetRuleByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("获取规则失败: %w", err)
@@ -119,6 +137,17 @@ func (s *riskService) GetRule(ctx context.Context, id uuid.UUID) (*model.RiskRul
 	if rule == nil {
 		return nil, fmt.Errorf("规则不存在")
 	}
+
+	// 【缓存优化】3. 写入缓存 (5分钟TTL - 风控规则变更频率较低)
+	if s.redisClient != nil {
+		data, err := json.Marshal(rule)
+		if err == nil {
+			if err := s.redisClient.Set(ctx, cacheKey, data, 5*time.Minute).Err(); err != nil {
+				logger.Warn("写入风控规则缓存失败", zap.String("rule_id", id.String()), zap.Error(err))
+			}
+		}
+	}
+
 	return rule, nil
 }
 
@@ -158,11 +187,21 @@ func (s *riskService) UpdateRule(ctx context.Context, id uuid.UUID, input *Updat
 		return nil, fmt.Errorf("更新规则失败: %w", err)
 	}
 
+	// 【缓存失效】更新成功后删除缓存
+	s.invalidateRuleCache(ctx, id)
+
 	return rule, nil
 }
 
 func (s *riskService) DeleteRule(ctx context.Context, id uuid.UUID) error {
-	return s.riskRepo.DeleteRule(ctx, id)
+	if err := s.riskRepo.DeleteRule(ctx, id); err != nil {
+		return err
+	}
+
+	// 【缓存失效】删除成功后清除缓存
+	s.invalidateRuleCache(ctx, id)
+
+	return nil
 }
 
 func (s *riskService) EnableRule(ctx context.Context, id uuid.UUID) error {
@@ -171,7 +210,14 @@ func (s *riskService) EnableRule(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	rule.Status = model.RuleStatusActive
-	return s.riskRepo.UpdateRule(ctx, rule)
+	if err := s.riskRepo.UpdateRule(ctx, rule); err != nil {
+		return err
+	}
+
+	// 【缓存失效】启用成功后删除缓存
+	s.invalidateRuleCache(ctx, id)
+
+	return nil
 }
 
 func (s *riskService) DisableRule(ctx context.Context, id uuid.UUID) error {
@@ -180,7 +226,14 @@ func (s *riskService) DisableRule(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	rule.Status = model.RuleStatusInactive
-	return s.riskRepo.UpdateRule(ctx, rule)
+	if err := s.riskRepo.UpdateRule(ctx, rule); err != nil {
+		return err
+	}
+
+	// 【缓存失效】禁用成功后删除缓存
+	s.invalidateRuleCache(ctx, id)
+
+	return nil
 }
 
 // Risk Checks
@@ -803,4 +856,18 @@ func (s *riskService) isHighRiskCountry(countryCode string) bool {
 		// "XX": true,
 	}
 	return highRiskCountries[countryCode]
+}
+
+// 【缓存优化】缓存失效辅助方法
+func (s *riskService) invalidateRuleCache(ctx context.Context, id uuid.UUID) {
+	if s.redisClient == nil {
+		return
+	}
+
+	cacheKey := fmt.Sprintf("risk_rule:%s", id.String())
+	if err := s.redisClient.Del(ctx, cacheKey).Err(); err != nil {
+		logger.Warn("删除风控规则缓存失败", zap.String("cache_key", cacheKey), zap.Error(err))
+	} else {
+		logger.Info("风控规则缓存已失效", zap.String("cache_key", cacheKey))
+	}
 }

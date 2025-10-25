@@ -84,7 +84,7 @@ func main() {
 	notificationClient := client.NewNotificationClient(notificationServiceURL)
 
 	repo := repository.NewOrderRepository(application.DB)
-	svc := service.NewOrderService(application.DB, repo, notificationClient, eventPublisher)
+	svc := service.NewOrderService(application.DB, repo, application.Redis, notificationClient, eventPublisher)
 	handler := handler.NewOrderHandler(svc)
 
 	idempotencyManager := idempotency.NewIdempotencyManager(application.Redis, "order-service", 24*time.Hour)

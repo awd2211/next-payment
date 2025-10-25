@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -54,6 +55,8 @@ func main() {
 			&model.Merchant{},         // 核心：商户主表
 			&model.MerchantUser{},     // 保留：商户子账户（Merchant聚合根）
 			&model.MerchantContract{}, // 保留：商户合同（Merchant聚合根）
+			&model.MerchantLimit{},    // 新增：商户交易额度管理
+			&model.MerchantTierConfig{}, // 新增：商户等级配置
 		},
 
 		// 启用企业级功能
@@ -81,10 +84,22 @@ func main() {
 	// 3. 初始化Repository（仅保留核心）
 	merchantRepo := repository.NewMerchantRepository(application.DB)
 	merchantUserRepo := repository.NewMerchantUserRepository(application.DB)
+	merchantLimitRepo := repository.NewMerchantLimitRepository(application.DB)
+	merchantTierRepo := repository.NewMerchantTierRepository(application.DB)
 
 	// 4. 初始化Service
 	// Note: apiKeyRepo removed - APIKey management now in merchant-auth-service
-	merchantService := service.NewMerchantService(application.DB, merchantRepo, jwtManager)
+	merchantService := service.NewMerchantService(application.DB, merchantRepo, jwtManager, application.Redis)
+	merchantLimitService := service.NewMerchantLimitService(application.DB, merchantLimitRepo, application.Redis)
+	merchantTierService := service.NewMerchantTierService(application.DB, merchantTierRepo, merchantRepo, merchantLimitService, application.Redis)
+	logger.Info("商户额度服务和等级服务已初始化")
+
+	// 初始化默认等级配置
+	if err := merchantTierService.InitializeDefaultTiers(context.Background()); err != nil {
+		logger.Warn(fmt.Sprintf("初始化默认等级配置失败: %v", err))
+	} else {
+		logger.Info("默认等级配置已初始化（Starter/Business/Enterprise/Premium）")
+	}
 
 	// 初始化邮件服务（可选）
 	var emailProvider email.EmailProvider

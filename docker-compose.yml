@@ -210,12 +210,12 @@ services:
       KONG_NGINX_HTTP_CLIENT_BODY_BUFFER_SIZE: 8k
       # Other
       KONG_TRUSTED_IPS: 0.0.0.0/0,::/0
-      # mTLS Configuration (for connecting to backend services)
-      KONG_CLIENT_SSL: "on"
-      KONG_CLIENT_SSL_CERT: /kong/certs/kong-gateway/cert.pem
-      KONG_CLIENT_SSL_CERT_KEY: /kong/certs/kong-gateway/key.pem
-      KONG_LUA_SSL_TRUSTED_CERTIFICATE: /kong/certs/ca/ca-cert.pem
-      KONG_LUA_SSL_VERIFY_DEPTH: 2
+      # mTLS Configuration (for connecting to backend services) - 暂时禁用
+      # KONG_CLIENT_SSL: "on"
+      # KONG_CLIENT_SSL_CERT: /kong/certs/kong-gateway/cert.pem
+      # KONG_CLIENT_SSL_CERT_KEY: /kong/certs/kong-gateway/key.pem
+      # KONG_LUA_SSL_TRUSTED_CERTIFICATE: /kong/certs/ca/ca-cert.pem
+      # KONG_LUA_SSL_VERIFY_DEPTH: 2
     ports:
       - "40080:8000"   # Kong Proxy (API Gateway)
       - "40081:8001"   # Kong Admin API
@@ -238,7 +238,10 @@ services:
     image: pantsel/konga:latest
     container_name: konga-ui
     depends_on:
-      - kong
+      kong-database:
+        condition: service_healthy
+      kong:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       DB_ADAPTER: postgres
@@ -247,9 +250,10 @@ services:
       DB_USER: kong
       DB_PASSWORD: kong_secret
       DB_DATABASE: konga
-      TOKEN_SECRET: konga_secret_token
+      TOKEN_SECRET: konga_secret_token_change_in_production
+      KONGA_HOOK_TIMEOUT: 120000
     ports:
-      - "40082:1337"  # Konga Web UI
+      - "50001:1337"  # Konga Web UI (修改为50001端口)
     networks:
       - payment-network
     restart: unless-stopped
@@ -307,17 +311,22 @@ services:
     container_name: payment-jaeger
     environment:
       - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
     ports:
-      - "40775:5775/udp"
-      - "40831:6831/udp"
-      - "40832:6832/udp"
-      - "40778:5778"
-      - "40686:16686"  # Jaeger UI
-      - "40268:14268"
-      - "40250:14250"
-      - "40411:9411"
+      - "50775:5775/udp"  # Zipkin compact thrift
+      - "50831:6831/udp"  # Jaeger compact thrift
+      - "50832:6832/udp"  # Jaeger binary thrift
+      - "50778:5778"      # Jaeger configs
+      - "50686:16686"     # Jaeger UI (修改为50686端口)
+      - "50268:14268"     # Jaeger HTTP collector
+      - "50250:14250"     # Jaeger gRPC
+      - "50411:9411"      # Zipkin HTTP
+      - "50317:4317"      # OTLP gRPC
+      - "50318:4318"      # OTLP HTTP
     networks:
       - payment-network
+    restart: unless-stopped
 
   # ========================================
   # 监控组件 - Exporters

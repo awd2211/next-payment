@@ -38,6 +38,7 @@ func (h *PaymentHandler) RegisterRoutes(router *gin.Engine) {
 			payments.POST("", h.CreatePayment)
 			payments.GET("/:paymentNo", h.GetPayment)
 			payments.GET("", h.QueryPayments)
+			payments.POST("/batch", h.BatchGetPayments) // 批量查询支付
 			payments.POST("/:paymentNo/cancel", h.CancelPayment)
 		}
 
@@ -47,6 +48,7 @@ func (h *PaymentHandler) RegisterRoutes(router *gin.Engine) {
 			refunds.POST("", h.CreateRefund)
 			refunds.GET("/:refundNo", h.GetRefund)
 			refunds.GET("", h.QueryRefunds)
+			refunds.POST("/batch", h.BatchGetRefunds) // 批量查询退款
 		}
 
 		// 商户后台查询路由（使用JWT认证）
@@ -54,12 +56,14 @@ func (h *PaymentHandler) RegisterRoutes(router *gin.Engine) {
 		{
 			merchantPayments.GET("", h.QueryPayments)
 			merchantPayments.GET("/:paymentNo", h.GetPayment)
+			merchantPayments.POST("/batch", h.BatchGetPayments) // 批量查询支付
 		}
 
 		merchantRefunds := v1.Group("/merchant/refunds")
 		{
 			merchantRefunds.GET("", h.QueryRefunds)
 			merchantRefunds.GET("/:refundNo", h.GetRefund)
+			merchantRefunds.POST("/batch", h.BatchGetRefunds) // 批量查询退款
 		}
 
 		// 回调处理
@@ -594,4 +598,148 @@ func ErrorResponse(message string) Response {
 		Code:    -1,
 		Message: message,
 	}
+}
+
+// BatchGetPaymentsRequest 批量查询支付请求
+type BatchGetPaymentsRequest struct {
+	PaymentNos []string  `json:"payment_nos" binding:"required,min=1,max=100"`
+	MerchantID uuid.UUID `json:"merchant_id" binding:"required"`
+}
+
+// BatchGetPaymentsResponse 批量查询支付响应
+type BatchGetPaymentsResponse struct {
+	Results map[string]interface{} `json:"results"` // paymentNo -> Payment
+	Failed  []string               `json:"failed"`  // 查询失败的 paymentNo
+	Summary struct {
+		Total    int `json:"total"`     // 请求的总数
+		Found    int `json:"found"`     // 找到的数量
+		NotFound int `json:"not_found"` // 未找到的数量
+	} `json:"summary"`
+}
+
+// BatchGetPayments 批量查询支付
+//
+//	@Summary		批量查询支付
+//	@Description	一次性查询多个支付记录（最多100个）
+//	@Tags			Payments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		BatchGetPaymentsRequest	true	"批量查询请求"
+//	@Success		200		{object}	BatchGetPaymentsResponse
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/payments/batch [post]
+func (h *PaymentHandler) BatchGetPayments(c *gin.Context) {
+	var req BatchGetPaymentsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	// 调用服务层批量查询
+	results, failed, err := h.paymentService.BatchGetPayments(c.Request.Context(), req.PaymentNos, req.MerchantID)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "批量查询支付失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	// 构建响应
+	response := BatchGetPaymentsResponse{
+		Results: make(map[string]interface{}),
+		Failed:  failed,
+	}
+	for paymentNo, payment := range results {
+		response.Results[paymentNo] = payment
+	}
+	response.Summary.Total = len(req.PaymentNos)
+	response.Summary.Found = len(results)
+	response.Summary.NotFound = len(failed)
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(response).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// BatchGetRefundsRequest 批量查询退款请求
+type BatchGetRefundsRequest struct {
+	RefundNos  []string  `json:"refund_nos" binding:"required,min=1,max=100"`
+	MerchantID uuid.UUID `json:"merchant_id" binding:"required"`
+}
+
+// BatchGetRefundsResponse 批量查询退款响应
+type BatchGetRefundsResponse struct {
+	Results map[string]interface{} `json:"results"` // refundNo -> Refund
+	Failed  []string               `json:"failed"`  // 查询失败的 refundNo
+	Summary struct {
+		Total    int `json:"total"`     // 请求的总数
+		Found    int `json:"found"`     // 找到的数量
+		NotFound int `json:"not_found"` // 未找到的数量
+	} `json:"summary"`
+}
+
+// BatchGetRefunds 批量查询退款
+//
+//	@Summary		批量查询退款
+//	@Description	一次性查询多个退款记录（最多100个）
+//	@Tags			Refunds
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		BatchGetRefundsRequest	true	"批量查询请求"
+//	@Success		200		{object}	BatchGetRefundsResponse
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/refunds/batch [post]
+func (h *PaymentHandler) BatchGetRefunds(c *gin.Context) {
+	var req BatchGetRefundsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	// 调用服务层批量查询
+	results, failed, err := h.paymentService.BatchGetRefunds(c.Request.Context(), req.RefundNos, req.MerchantID)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "批量查询退款失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	// 构建响应
+	response := BatchGetRefundsResponse{
+		Results: make(map[string]interface{}),
+		Failed:  failed,
+	}
+	for refundNo, refund := range results {
+		response.Results[refundNo] = refund
+	}
+	response.Summary.Total = len(req.RefundNos)
+	response.Summary.Found = len(results)
+	response.Summary.NotFound = len(failed)
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(response).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
 }

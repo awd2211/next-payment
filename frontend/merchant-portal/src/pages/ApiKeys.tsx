@@ -15,6 +15,7 @@ import {
   Row,
   Col,
   Divider,
+  Tooltip,
 } from 'antd'
 import {
   CopyOutlined,
@@ -27,6 +28,7 @@ import {
   LockOutlined,
   SafetyOutlined,
   ApiOutlined,
+  CheckOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 
@@ -49,6 +51,7 @@ const ApiKeys = () => {
   const [form] = Form.useForm()
   const [ipForm] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
 
   // Mock data
   const [apiKey] = useState('mpk_test_1234567890abcdefghijklmnopqrstuvwxyz')
@@ -69,10 +72,12 @@ const ApiKeys = () => {
     },
   ])
 
-  const handleCopy = async (text: string, type: string) => {
+  const handleCopy = async (text: string, type: string, fieldId: string) => {
     try {
       await navigator.clipboard.writeText(text)
+      setCopiedField(fieldId)
       message.success(t('apiKeys.copySuccess', { type }))
+      setTimeout(() => setCopiedField(null), 2000)
     } catch (error) {
       message.error(t('apiKeys.copyFailed'))
     }
@@ -156,8 +161,10 @@ const ApiKeys = () => {
 
   return (
     <div>
-      <Title level={2}>{t('apiKeys.title')}</Title>
-      <Paragraph type="secondary">{t('apiKeys.subtitle')}</Paragraph>
+      <div style={{ marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>{t('apiKeys.title')}</Title>
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>{t('apiKeys.subtitle')}</Paragraph>
+      </div>
 
       <Alert
         message={t('apiKeys.securityNotice')}
@@ -166,7 +173,7 @@ const ApiKeys = () => {
         showIcon
         icon={<SafetyOutlined />}
         closable
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: 16, borderRadius: 8 }}
       />
 
       {/* API Credentials */}
@@ -177,38 +184,41 @@ const ApiKeys = () => {
             {t('apiKeys.credentials')}
           </Space>
         }
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: 16, borderRadius: 12 }}
       >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           {/* API Key */}
           <div>
             <div style={{ marginBottom: 8 }}>
               <Text strong>{t('apiKeys.apiKey')}</Text>
-              <Tag color="blue" style={{ marginLeft: 8 }}>
+              <Tag color="blue" style={{ marginLeft: 8, borderRadius: 12 }}>
                 {t('apiKeys.public')}
               </Tag>
             </div>
             <Input.Group compact>
               <Input
-                style={{ width: 'calc(100% - 120px)' }}
+                style={{ width: 'calc(100% - 120px)', borderRadius: '8px 0 0 8px' }}
                 value={maskString(apiKey, apiKeyVisible)}
                 readOnly
                 prefix={<ApiOutlined />}
               />
-              <Button
-                icon={apiKeyVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                onClick={() => setApiKeyVisible(!apiKeyVisible)}
-              >
-                {apiKeyVisible ? t('apiKeys.hide') : t('apiKeys.show')}
-              </Button>
-              <Button
-                icon={<CopyOutlined />}
-                onClick={() => handleCopy(apiKey, t('apiKeys.apiKey'))}
-              >
-                {t('apiKeys.copy')}
-              </Button>
+              <Tooltip title={apiKeyVisible ? t('apiKeys.hide') : t('apiKeys.show')}>
+                <Button
+                  icon={apiKeyVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                  onClick={() => setApiKeyVisible(!apiKeyVisible)}
+                  style={{ borderRadius: 0 }}
+                />
+              </Tooltip>
+              <Tooltip title={copiedField === 'apiKey' ? t('common.copied') : t('apiKeys.copy')}>
+                <Button
+                  type={copiedField === 'apiKey' ? 'primary' : 'default'}
+                  icon={copiedField === 'apiKey' ? <CheckOutlined /> : <CopyOutlined />}
+                  onClick={() => handleCopy(apiKey, t('apiKeys.apiKey'), 'apiKey')}
+                  style={{ borderRadius: '0 8px 8px 0' }}
+                />
+              </Tooltip>
             </Input.Group>
-            <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+            <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
               {t('apiKeys.apiKeyDesc')}
             </Paragraph>
           </div>
@@ -217,31 +227,34 @@ const ApiKeys = () => {
           <div>
             <div style={{ marginBottom: 8 }}>
               <Text strong>{t('apiKeys.apiSecret')}</Text>
-              <Tag color="red" style={{ marginLeft: 8 }}>
+              <Tag color="red" style={{ marginLeft: 8, borderRadius: 12 }}>
                 {t('apiKeys.private')}
               </Tag>
             </div>
             <Input.Group compact>
               <Input
-                style={{ width: 'calc(100% - 120px)' }}
+                style={{ width: 'calc(100% - 120px)', borderRadius: '8px 0 0 8px' }}
                 value={maskString(apiSecret, secretVisible)}
                 readOnly
                 prefix={<LockOutlined />}
               />
-              <Button
-                icon={secretVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                onClick={() => setSecretVisible(!secretVisible)}
-              >
-                {secretVisible ? t('apiKeys.hide') : t('apiKeys.show')}
-              </Button>
-              <Button
-                icon={<CopyOutlined />}
-                onClick={() => handleCopy(apiSecret, t('apiKeys.apiSecret'))}
-              >
-                {t('apiKeys.copy')}
-              </Button>
+              <Tooltip title={secretVisible ? t('apiKeys.hide') : t('apiKeys.show')}>
+                <Button
+                  icon={secretVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                  onClick={() => setSecretVisible(!secretVisible)}
+                  style={{ borderRadius: 0 }}
+                />
+              </Tooltip>
+              <Tooltip title={copiedField === 'apiSecret' ? t('common.copied') : t('apiKeys.copy')}>
+                <Button
+                  type={copiedField === 'apiSecret' ? 'primary' : 'default'}
+                  icon={copiedField === 'apiSecret' ? <CheckOutlined /> : <CopyOutlined />}
+                  onClick={() => handleCopy(apiSecret, t('apiKeys.apiSecret'), 'apiSecret')}
+                  style={{ borderRadius: '0 8px 8px 0' }}
+                />
+              </Tooltip>
             </Input.Group>
-            <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+            <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
               {t('apiKeys.apiSecretDesc')}
             </Paragraph>
           </div>
@@ -254,6 +267,7 @@ const ApiKeys = () => {
             icon={<ReloadOutlined />}
             onClick={handleRegenerateApiKey}
             loading={loading}
+            style={{ borderRadius: 8 }}
           >
             {t('apiKeys.regenerate')}
           </Button>
@@ -264,32 +278,37 @@ const ApiKeys = () => {
       <Card
         title={t('apiKeys.webhookConfig')}
         extra={
-          <Button onClick={() => setWebhookModalVisible(true)}>
+          <Button onClick={() => setWebhookModalVisible(true)} style={{ borderRadius: 8 }}>
             {t('apiKeys.edit')}
           </Button>
         }
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: 16, borderRadius: 12 }}
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <div>
             <Text strong>{t('apiKeys.webhookUrl')}</Text>
-            <Input
-              value={webhookUrl}
-              readOnly
-              style={{ marginTop: 8 }}
-              addonAfter={
-                <CopyOutlined
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleCopy(webhookUrl, t('apiKeys.webhookUrl'))}
+            <Input.Group compact style={{ marginTop: 8 }}>
+              <Input
+                value={webhookUrl}
+                readOnly
+                style={{ width: 'calc(100% - 40px)', borderRadius: '8px 0 0 8px' }}
+              />
+              <Tooltip title={copiedField === 'webhook' ? t('common.copied') : t('apiKeys.copy')}>
+                <Button
+                  type={copiedField === 'webhook' ? 'primary' : 'default'}
+                  icon={copiedField === 'webhook' ? <CheckOutlined /> : <CopyOutlined />}
+                  onClick={() => handleCopy(webhookUrl, t('apiKeys.webhookUrl'), 'webhook')}
+                  style={{ borderRadius: '0 8px 8px 0' }}
                 />
-              }
-            />
+              </Tooltip>
+            </Input.Group>
           </div>
           <Alert
             message={t('apiKeys.webhookNotice')}
             description={t('apiKeys.webhookNoticeDesc')}
             type="info"
             showIcon
+            style={{ borderRadius: 8 }}
           />
         </Space>
       </Card>
@@ -302,10 +321,12 @@ const ApiKeys = () => {
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setIpModalVisible(true)}
+            style={{ borderRadius: 8 }}
           >
             {t('apiKeys.addIp')}
           </Button>
         }
+        style={{ borderRadius: 12 }}
       >
         <Alert
           message={t('apiKeys.ipNotice')}
@@ -313,7 +334,7 @@ const ApiKeys = () => {
           type="info"
           showIcon
           closable
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 16, borderRadius: 8 }}
         />
         <List
           dataSource={ipWhitelist}
@@ -326,22 +347,29 @@ const ApiKeys = () => {
                   okText={t('common.confirm')}
                   cancelText={t('common.cancel')}
                 >
-                  <Button type="link" danger icon={<DeleteOutlined />}>
+                  <Button type="link" danger icon={<DeleteOutlined />} style={{ borderRadius: 8 }}>
                     {t('common.delete')}
                   </Button>
                 </Popconfirm>,
               ]}
+              style={{ borderRadius: 8, padding: '16px', marginBottom: 8, border: '1px solid #f0f0f0' }}
             >
               <List.Item.Meta
                 title={
                   <Space>
-                    <Text code>{item.ip}</Text>
+                    <Tag color="blue" style={{ fontFamily: 'monospace', borderRadius: 12 }}>
+                      {item.ip}
+                    </Tag>
                     {item.description && <Text type="secondary">- {item.description}</Text>}
                   </Space>
                 }
-                description={t('apiKeys.addedAt', {
-                  date: new Date(item.created_at).toLocaleString(),
-                })}
+                description={
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {t('apiKeys.addedAt', {
+                      date: new Date(item.created_at).toLocaleString(),
+                    })}
+                  </Text>
+                }
               />
             </List.Item>
           )}

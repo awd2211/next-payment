@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/middleware"
 
-	"github.com/payment-platform/merchant-service/internal/client"
-	"github.com/payment-platform/merchant-service/internal/errors"
+	"payment-platform/merchant-service/internal/client"
+	"payment-platform/merchant-service/internal/errors"
 )
 
 // PaymentHandler 支付处理器（代理payment-gateway）

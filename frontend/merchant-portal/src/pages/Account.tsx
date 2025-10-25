@@ -17,6 +17,10 @@ import {
   Tag,
   QRCode,
   Divider,
+  Progress,
+  Tooltip,
+  Row,
+  Col,
 } from 'antd'
 import {
   UserOutlined,
@@ -28,6 +32,9 @@ import {
   GlobalOutlined,
   ClockCircleOutlined,
   DollarOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
@@ -322,24 +329,26 @@ const Account = () => {
     },
   ]
 
-  // 密码强度颜色
-  const getPasswordStrengthColor = () => {
+  // 密码强度颜色和百分比
+  const getPasswordStrengthInfo = () => {
     switch (passwordStrength) {
       case 'weak':
-        return 'red'
+        return { color: '#ff4d4f', percent: 33, text: '弱' }
       case 'medium':
-        return 'orange'
+        return { color: '#faad14', percent: 66, text: '中等' }
       case 'strong':
-        return 'green'
+        return { color: '#52c41a', percent: 100, text: '强' }
       default:
-        return ''
+        return { color: '#d9d9d9', percent: 0, text: '' }
     }
   }
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Title level={2}>{t('account.title')}</Title>
-      <Paragraph type="secondary">{t('account.subtitle')}</Paragraph>
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>{t('account.title')}</Title>
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>{t('account.subtitle')}</Paragraph>
+      </div>
 
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
         {/* 安全设置 */}
@@ -352,19 +361,19 @@ const Account = () => {
           }
           key="security"
         >
-          <Card title={t('account.changePassword')} style={{ marginBottom: 24 }}>
+          <Card title={t('account.changePassword')} style={{ marginBottom: 24, borderRadius: 12 }}>
             <Form
               form={passwordForm}
               layout="vertical"
               onFinish={handleChangePassword}
-              style={{ maxWidth: 500 }}
+              style={{ maxWidth: 600 }}
             >
               <Form.Item
                 label={t('account.oldPassword')}
                 name="oldPassword"
                 rules={[{ required: true, message: t('account.oldPasswordRequired') }]}
               >
-                <Input.Password prefix={<LockOutlined />} />
+                <Input.Password prefix={<LockOutlined />} style={{ borderRadius: 8 }} />
               </Form.Item>
 
               <Form.Item
@@ -388,16 +397,27 @@ const Account = () => {
                 <Input.Password
                   prefix={<KeyOutlined />}
                   onChange={handlePasswordChange}
+                  style={{ borderRadius: 8 }}
                 />
               </Form.Item>
 
               {passwordStrength && (
-                <Alert
-                  message={t(`account.passwordStrength${passwordStrength.charAt(0).toUpperCase() + passwordStrength.slice(1)}`)}
-                  type={passwordStrength === 'strong' ? 'success' : passwordStrength === 'medium' ? 'warning' : 'error'}
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                />
+                <div style={{ marginBottom: 16 }}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text type="secondary">密码强度:</Text>
+                      <Text strong style={{ color: getPasswordStrengthInfo().color }}>
+                        {getPasswordStrengthInfo().text}
+                      </Text>
+                    </div>
+                    <Progress
+                      percent={getPasswordStrengthInfo().percent}
+                      strokeColor={getPasswordStrengthInfo().color}
+                      showInfo={false}
+                      strokeWidth={8}
+                    />
+                  </Space>
+                </div>
               )}
 
               <Form.Item
@@ -416,11 +436,11 @@ const Account = () => {
                   }),
                 ]}
               >
-                <Input.Password prefix={<KeyOutlined />} />
+                <Input.Password prefix={<KeyOutlined />} style={{ borderRadius: 8 }} />
               </Form.Item>
 
               <Form.Item>
-                <Button type="primary" htmlType="submit" loading={loading}>
+                <Button type="primary" htmlType="submit" loading={loading} style={{ borderRadius: 8 }}>
                   {t('account.changePasswordButton')}
                 </Button>
               </Form.Item>
@@ -428,7 +448,7 @@ const Account = () => {
           </Card>
 
           {/* 2FA设置 */}
-          <Card title={t('account.twoFactorAuth')}>
+          <Card title={t('account.twoFactorAuth')} style={{ borderRadius: 12 }}>
             <Space direction="vertical" style={{ width: '100%' }} size="large">
               <Alert
                 message={t('account.2FADescription')}
@@ -436,33 +456,56 @@ const Account = () => {
                 type="info"
                 showIcon
                 icon={<SafetyOutlined />}
+                style={{ borderRadius: 8 }}
               />
 
-              <div>
-                <Space>
-                  <Text strong>{t('account.status')}:</Text>
-                  {twoFactorEnabled ? (
-                    <Tag color="green">{t('account.enabled')}</Tag>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Card style={{ borderRadius: 8, background: twoFactorEnabled ? '#f6ffed' : '#fff2f0', border: `1px solid ${twoFactorEnabled ? '#b7eb8f' : '#ffccc7'}` }}>
+                    <Space>
+                      {twoFactorEnabled ? (
+                        <CheckCircleOutlined style={{ fontSize: 24, color: '#52c41a' }} />
+                      ) : (
+                        <WarningOutlined style={{ fontSize: 24, color: '#ff4d4f' }} />
+                      )}
+                      <div>
+                        <Text type="secondary">状态</Text>
+                        <div>
+                          <Text strong style={{ fontSize: 16, color: twoFactorEnabled ? '#52c41a' : '#ff4d4f' }}>
+                            {twoFactorEnabled ? '已启用' : '未启用'}
+                          </Text>
+                        </div>
+                      </div>
+                    </Space>
+                  </Card>
+                </Col>
+                <Col span={12}>
+                  {!twoFactorEnabled ? (
+                    <Button
+                      type="primary"
+                      icon={<SafetyOutlined />}
+                      onClick={handleEnable2FA}
+                      loading={loading}
+                      block
+                      size="large"
+                      style={{ borderRadius: 8, height: '100%' }}
+                    >
+                      {t('account.enable2FA')}
+                    </Button>
                   ) : (
-                    <Tag color="red">{t('account.disabled')}</Tag>
+                    <Button
+                      danger
+                      onClick={handleDisable2FA}
+                      loading={loading}
+                      block
+                      size="large"
+                      style={{ borderRadius: 8, height: '100%' }}
+                    >
+                      {t('account.disable2FA')}
+                    </Button>
                   )}
-                </Space>
-              </div>
-
-              {!twoFactorEnabled ? (
-                <Button
-                  type="primary"
-                  icon={<SafetyOutlined />}
-                  onClick={handleEnable2FA}
-                  loading={loading}
-                >
-                  {t('account.enable2FA')}
-                </Button>
-              ) : (
-                <Button danger onClick={handleDisable2FA} loading={loading}>
-                  {t('account.disable2FA')}
-                </Button>
-              )}
+                </Col>
+              </Row>
 
               {/* 2FA设置Modal */}
               <Modal
@@ -528,7 +571,7 @@ const Account = () => {
           }
           key="activity"
         >
-          <Card>
+          <Card style={{ borderRadius: 12 }}>
             <Table
               columns={activityColumns}
               dataSource={activityLogs}
@@ -553,7 +596,7 @@ const Account = () => {
           }
           key="preferences"
         >
-          <Card>
+          <Card style={{ borderRadius: 12 }}>
             <Form
               form={preferencesForm}
               layout="vertical"
@@ -570,7 +613,7 @@ const Account = () => {
                 name="language"
                 tooltip={t('account.languageTooltip')}
               >
-                <Select>
+                <Select style={{ borderRadius: 8 }}>
                   <Option value="zh-CN">简体中文</Option>
                   <Option value="en-US">English</Option>
                   <Option value="zh-TW">繁體中文</Option>
@@ -584,7 +627,7 @@ const Account = () => {
                 name="timezone"
                 tooltip={t('account.timezoneTooltip')}
               >
-                <Select showSearch>
+                <Select showSearch style={{ borderRadius: 8 }}>
                   <Option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</Option>
                   <Option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</Option>
                   <Option value="Asia/Seoul">Asia/Seoul (UTC+9)</Option>
@@ -600,7 +643,7 @@ const Account = () => {
                 name="currency"
                 tooltip={t('account.currencyTooltip')}
               >
-                <Select>
+                <Select style={{ borderRadius: 8 }}>
                   <Option value="USD">USD - 美元</Option>
                   <Option value="CNY">CNY - 人民币</Option>
                   <Option value="EUR">EUR - 欧元</Option>
@@ -618,7 +661,7 @@ const Account = () => {
               </Title>
 
               <Form.Item label={t('account.dateFormat')} name="date_format">
-                <Select>
+                <Select style={{ borderRadius: 8 }}>
                   <Option value="YYYY-MM-DD">YYYY-MM-DD (2024-01-15)</Option>
                   <Option value="MM/DD/YYYY">MM/DD/YYYY (01/15/2024)</Option>
                   <Option value="DD/MM/YYYY">DD/MM/YYYY (15/01/2024)</Option>
@@ -627,7 +670,7 @@ const Account = () => {
               </Form.Item>
 
               <Form.Item label={t('account.timeFormat')} name="time_format">
-                <Select>
+                <Select style={{ borderRadius: 8 }}>
                   <Option value="24h">24小时制 (14:30)</Option>
                   <Option value="12h">12小时制 (2:30 PM)</Option>
                 </Select>
@@ -639,36 +682,62 @@ const Account = () => {
                 <SafetyOutlined /> {t('account.notificationSettings')}
               </Title>
 
-              <Form.Item
-                label={t('account.emailNotifications')}
-                name="notifications_email"
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={8}>
+                  <Card style={{ borderRadius: 8, height: '100%' }}>
+                    <Space direction="vertical" size="small">
+                      <Form.Item
+                        label={t('account.emailNotifications')}
+                        name="notifications_email"
+                        valuePropName="checked"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Switch />
+                      </Form.Item>
+                      <Text type="secondary" style={{ fontSize: 12 }}>接收重要事件的邮件通知</Text>
+                    </Space>
+                  </Card>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Card style={{ borderRadius: 8, height: '100%' }}>
+                    <Space direction="vertical" size="small">
+                      <Form.Item
+                        label={t('account.smsNotifications')}
+                        name="notifications_sms"
+                        valuePropName="checked"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Switch />
+                      </Form.Item>
+                      <Text type="secondary" style={{ fontSize: 12 }}>接收紧急事件的短信通知</Text>
+                    </Space>
+                  </Card>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Card style={{ borderRadius: 8, height: '100%' }}>
+                    <Space direction="vertical" size="small">
+                      <Form.Item
+                        label={t('account.pushNotifications')}
+                        name="notifications_push"
+                        valuePropName="checked"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Switch />
+                      </Form.Item>
+                      <Text type="secondary" style={{ fontSize: 12 }}>接收浏览器推送通知</Text>
+                    </Space>
+                  </Card>
+                </Col>
+              </Row>
 
-              <Form.Item
-                label={t('account.smsNotifications')}
-                name="notifications_sms"
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
-
-              <Form.Item
-                label={t('account.pushNotifications')}
-                name="notifications_push"
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
+              <Divider />
 
               <Form.Item>
                 <Space>
-                  <Button type="primary" htmlType="submit" loading={loading}>
+                  <Button type="primary" htmlType="submit" loading={loading} style={{ borderRadius: 8 }}>
                     {t('account.savePreferences')}
                   </Button>
-                  <Button onClick={() => preferencesForm.resetFields()}>
+                  <Button onClick={() => preferencesForm.resetFields()} style={{ borderRadius: 8 }}>
                     {t('common.reset')}
                   </Button>
                 </Space>

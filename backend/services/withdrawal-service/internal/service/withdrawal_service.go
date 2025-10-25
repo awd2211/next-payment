@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/payment-platform/pkg/idempotent"
 	"github.com/payment-platform/pkg/logger"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/withdrawal-service/internal/client"
@@ -40,6 +42,8 @@ type withdrawalService struct {
 	notificationClient  *client.NotificationClient
 	bankTransferClient  *client.BankTransferClient
 	sagaService         *WithdrawalSagaService // Saga 分布式事务服务
+	redisClient         *redis.Client
+	idempotentService   idempotent.Service
 }
 
 // NewWithdrawalService 创建提现服务
@@ -49,6 +53,7 @@ func NewWithdrawalService(
 	accountingClient *client.AccountingClient,
 	notificationClient *client.NotificationClient,
 	bankTransferClient *client.BankTransferClient,
+	redisClient *redis.Client,
 ) WithdrawalService {
 	return &withdrawalService{
 		db:                 db,
@@ -57,6 +62,8 @@ func NewWithdrawalService(
 		notificationClient: notificationClient,
 		bankTransferClient: bankTransferClient,
 		sagaService:        nil, // 通过 SetSagaService 注入
+		redisClient:        redisClient,
+		idempotentService:  idempotent.NewService(redisClient),
 	}
 }
 
@@ -73,10 +80,59 @@ type CreateWithdrawalInput struct {
 	BankAccountID uuid.UUID
 	Remarks       string
 	CreatedBy     uuid.UUID
+	RequestNo     string // 请求单号（可选，用于幂等性，通常由前端或上游服务生成）
 }
 
 // CreateWithdrawal 创建提现申请
 func (s *withdrawalService) CreateWithdrawal(ctx context.Context, input *CreateWithdrawalInput) (*model.Withdrawal, error) {
+	// 【幂等性保护】1. 如果提供了RequestNo，使用它作为幂等性键
+	var lockAcquired bool
+	if input.RequestNo != "" {
+		// 幂等性键: withdrawal:{merchant_id}:{request_no}
+		idempotentKey := idempotent.GenerateKey("withdrawal", input.MerchantID.String(), input.RequestNo)
+
+		// 【幂等性保护】2. 检查是否已处理过该提现请求
+		type WithdrawalIdempotentResult struct {
+			WithdrawalNo string `json:"withdrawal_no"`
+			WithdrawalID string `json:"withdrawal_id"`
+			Status       string `json:"status"`
+		}
+		var cachedResult WithdrawalIdempotentResult
+		exists, err := s.idempotentService.Check(ctx, idempotentKey, &cachedResult)
+		if err != nil {
+			logger.Warn("幂等性检查失败(Redis不可用)，继续处理", zap.Error(err))
+		}
+		if exists {
+			logger.Info("提现单已存在(幂等性缓存命中)",
+				zap.String("withdrawal_no", cachedResult.WithdrawalNo),
+				zap.String("request_no", input.RequestNo))
+
+			// 返回已存在的提现单
+			withdrawalID, _ := uuid.Parse(cachedResult.WithdrawalID)
+			withdrawal, err := s.withdrawalRepo.GetByID(ctx, withdrawalID)
+			if err != nil {
+				return nil, fmt.Errorf("获取已存在的提现单失败: %w", err)
+			}
+			return withdrawal, nil
+		}
+
+		// 【幂等性保护】3. 尝试获取分布式锁（30秒超时）
+		lockAcquired, err = s.idempotentService.Try(ctx, idempotentKey, 30*time.Second)
+		if err != nil {
+			logger.Warn("获取分布式锁失败(Redis不可用)，继续处理", zap.Error(err))
+		}
+		if !lockAcquired {
+			return nil, fmt.Errorf("该提现请求正在处理中，请稍后查询结果")
+		}
+
+		// 【幂等性保护】4. 确保释放锁
+		defer func() {
+			if lockAcquired {
+				s.idempotentService.Release(ctx, idempotentKey)
+			}
+		}()
+	}
+
 	// 验证提现金额
 	if input.Amount <= 0 {
 		return nil, fmt.Errorf("提现金额必须大于0")
@@ -139,6 +195,20 @@ func (s *withdrawalService) CreateWithdrawal(ctx context.Context, input *CreateW
 	// 创建提现记录
 	if err := s.withdrawalRepo.Create(ctx, withdrawal); err != nil {
 		return nil, fmt.Errorf("创建提现记录失败: %w", err)
+	}
+
+	// 【幂等性保护】5. 缓存成功结果（如果使用了幂等性键）
+	if input.RequestNo != "" {
+		idempotentKey := idempotent.GenerateKey("withdrawal", input.MerchantID.String(), input.RequestNo)
+
+		cacheResult := map[string]interface{}{
+			"withdrawal_no": withdrawal.WithdrawalNo,
+			"withdrawal_id": withdrawal.ID.String(),
+			"status":        withdrawal.Status,
+		}
+		if err := s.idempotentService.Store(ctx, idempotentKey, cacheResult, 24*time.Hour); err != nil {
+			logger.Warn("缓存提现单结果失败(Redis不可用)，不影响业务", zap.Error(err))
+		}
 	}
 
 	// 发送审批通知（调用 notification-service）

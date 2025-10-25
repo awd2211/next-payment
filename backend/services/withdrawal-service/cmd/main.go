@@ -115,6 +115,7 @@ func main() {
 		accountingClient,
 		notificationClient,
 		bankTransferClient,
+		application.Redis,
 	)
 
 	// 初始化Withdrawal Saga Service（用于提现执行）

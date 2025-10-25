@@ -17,6 +17,10 @@ import {
   Row,
   Col,
   Alert,
+  Tooltip,
+  Badge,
+  Skeleton,
+  Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -28,11 +32,15 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
   RollbackOutlined,
+  FilterOutlined,
+  ClearOutlined,
+  PlusOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 
 const { RangePicker } = DatePicker
+const { Title } = Typography
 
 interface Refund {
   refund_no: string
@@ -60,6 +68,7 @@ interface RefundStats {
 const Refunds = () => {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(false)
   const [dataSource, setDataSource] = useState<Refund[]>([])
   const [selectedRefund, setSelectedRefund] = useState<Refund | null>(null)
   const [detailModalVisible, setDetailModalVisible] = useState(false)
@@ -85,21 +94,45 @@ const Refunds = () => {
     date_range: null as [dayjs.Dayjs, dayjs.Dayjs] | null,
   })
 
+  // 计算激活的过滤器数量
+  const activeFilterCount = [
+    searchFilters.refund_no,
+    searchFilters.payment_no,
+    searchFilters.status,
+    searchFilters.date_range,
+  ].filter(Boolean).length
+
   useEffect(() => {
     fetchRefunds()
     fetchStats()
   }, [pagination.current, pagination.pageSize])
 
   const fetchStats = async () => {
-    // Mock stats data
-    setStats({
-      total_refunds: 156,
-      total_amount: 234567.89,
-      success_count: 142,
-      success_amount: 218900.45,
-      pending_count: 8,
-      failed_count: 6,
+    setStatsLoading(true)
+    try {
+      // Mock stats data
+      setStats({
+        total_refunds: 156,
+        total_amount: 234567.89,
+        success_count: 142,
+        success_amount: 218900.45,
+        pending_count: 8,
+        failed_count: 6,
+      })
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
+  const handleClearFilters = () => {
+    setSearchFilters({
+      refund_no: '',
+      payment_no: '',
+      status: '',
+      date_range: null,
     })
+    setPagination((prev) => ({ ...prev, current: 1 }))
+    fetchRefunds()
   }
 
   const fetchRefunds = async () => {
@@ -192,7 +225,7 @@ const Refunds = () => {
     }
     const config = statusMap[status] || { color: 'default', icon: null, text: status }
     return (
-      <Tag color={config.color} icon={config.icon}>
+      <Tag color={config.color} icon={config.icon} style={{ borderRadius: 12 }}>
         {config.text}
       </Tag>
     )
@@ -206,7 +239,7 @@ const Refunds = () => {
       wechat: { color: 'orange', text: '微信支付' },
     }
     const config = channelMap[channel] || { color: 'default', text: channel }
-    return <Tag color={config.color}>{config.text}</Tag>
+    return <Tag color={config.color} style={{ borderRadius: 12 }}>{config.text}</Tag>
   }
 
   const columns: ColumnsType<Refund> = [
@@ -216,18 +249,39 @@ const Refunds = () => {
       key: 'refund_no',
       fixed: 'left',
       width: 180,
+      render: (id: string) => (
+        <Tooltip title={id}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {id.slice(0, 12)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
       title: t('refunds.paymentNo'),
       dataIndex: 'payment_no',
       key: 'payment_no',
       width: 180,
+      render: (id: string) => (
+        <Tooltip title={id}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {id.slice(0, 12)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
       title: t('refunds.orderNo'),
       dataIndex: 'order_no',
       key: 'order_no',
       width: 180,
+      render: (id: string) => (
+        <Tooltip title={id}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {id.slice(0, 12)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
       title: t('refunds.originalAmount'),
@@ -244,7 +298,7 @@ const Refunds = () => {
       width: 120,
       align: 'right',
       render: (amount, record) => (
-        <span style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
+        <span style={{ color: '#ff4d4f', fontWeight: 600 }}>
           {formatAmount(amount, record.currency)}
         </span>
       ),
@@ -261,7 +315,19 @@ const Refunds = () => {
       dataIndex: 'reason',
       key: 'reason',
       width: 150,
-      ellipsis: true,
+      render: (text: string) => (
+        <Tooltip title={text}>
+          <span style={{
+            display: 'inline-block',
+            maxWidth: '140px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {text}
+          </span>
+        </Tooltip>
+      ),
     },
     {
       title: t('refunds.status'),
@@ -275,7 +341,11 @@ const Refunds = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
-      render: (date) => dayjs(date).format('YYYY-MM-DD HH:mm:ss'),
+      render: (date) => (
+        <Tooltip title={dayjs(date).format('YYYY-MM-DD HH:mm:ss')}>
+          {dayjs(date).format('MM-DD HH:mm')}
+        </Tooltip>
+      ),
     },
     {
       title: t('common.actions'),
@@ -297,56 +367,122 @@ const Refunds = () => {
 
   return (
     <div>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>{t('refunds.title')}</Title>
+        <Space>
+          <Tooltip title={t('common.refresh')}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                fetchRefunds()
+                fetchStats()
+              }}
+              loading={loading || statsLoading}
+              style={{ borderRadius: 8 }}
+            >
+              {t('common.refresh')}
+            </Button>
+          </Tooltip>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateModalVisible(true)}
+            style={{ borderRadius: 8 }}
+          >
+            {t('refunds.createRefund')}
+          </Button>
+        </Space>
+      </div>
+
+      {/* Statistics Cards with Skeleton */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('refunds.totalRefunds')}
-              value={stats.total_refunds}
-              prefix={<RollbackOutlined />}
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('refunds.totalRefunds')}</span>}
+                value={stats.total_refunds}
+                prefix={<RollbackOutlined />}
+                valueStyle={{ fontSize: 24, fontWeight: 600 }}
+              />
+            )}
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('refunds.totalAmount')}
-              value={stats.total_amount}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: '#ff4d4f' }}
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('refunds.totalAmount')}</span>}
+                value={stats.total_amount}
+                precision={2}
+                prefix="¥"
+                valueStyle={{ fontSize: 24, fontWeight: 600, color: '#ff4d4f' }}
+              />
+            )}
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('refunds.successCount')}
-              value={stats.success_count}
-              prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#52c41a' }}
-              suffix={
-                <span style={{ fontSize: 14 }}>
-                  / ¥{(stats.success_amount / 10000).toFixed(1)}万
-                </span>
-              }
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('refunds.successCount')}</span>}
+                value={stats.success_count}
+                prefix={<CheckCircleOutlined />}
+                valueStyle={{ fontSize: 24, fontWeight: 600, color: '#52c41a' }}
+                suffix={
+                  <span style={{ fontSize: 14 }}>
+                    / ¥{(stats.success_amount / 10000).toFixed(1)}万
+                  </span>
+                }
+              />
+            )}
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('refunds.pendingCount')}
-              value={stats.pending_count}
-              prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: '#faad14' }}
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('refunds.pendingCount')}</span>}
+                value={stats.pending_count}
+                prefix={<ClockCircleOutlined />}
+                valueStyle={{ fontSize: 24, fontWeight: 600, color: '#faad14' }}
+              />
+            )}
           </Card>
         </Col>
       </Row>
 
-      <Card>
+      {/* Smart Filters */}
+      <Card style={{ marginBottom: 16, borderRadius: 12 }}>
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space>
+              <FilterOutlined />
+              <span style={{ fontWeight: 500 }}>{t('common.filter')}</span>
+              {activeFilterCount > 0 && (
+                <Badge count={activeFilterCount} style={{ backgroundColor: '#1890ff' }} />
+              )}
+            </Space>
+            {activeFilterCount > 0 && (
+              <Button
+                icon={<ClearOutlined />}
+                onClick={handleClearFilters}
+                style={{ borderRadius: 8 }}
+              >
+                清除筛选
+              </Button>
+            )}
+          </div>
+
           <Space wrap>
             <Input
               placeholder={t('refunds.refundNo')}
@@ -354,7 +490,7 @@ const Refunds = () => {
               onChange={(e) =>
                 setSearchFilters({ ...searchFilters, refund_no: e.target.value })
               }
-              style={{ width: 200 }}
+              style={{ width: 200, borderRadius: 8 }}
               prefix={<SearchOutlined />}
             />
             <Input
@@ -363,14 +499,14 @@ const Refunds = () => {
               onChange={(e) =>
                 setSearchFilters({ ...searchFilters, payment_no: e.target.value })
               }
-              style={{ width: 200 }}
+              style={{ width: 200, borderRadius: 8 }}
               prefix={<SearchOutlined />}
             />
             <Select
               placeholder={t('refunds.status')}
               value={searchFilters.status}
               onChange={(value) => setSearchFilters({ ...searchFilters, status: value })}
-              style={{ width: 150 }}
+              style={{ width: 150, borderRadius: 8 }}
               allowClear
             >
               <Select.Option value="pending">{t('refunds.statusPending')}</Select.Option>
@@ -382,23 +518,22 @@ const Refunds = () => {
               onChange={(dates) =>
                 setSearchFilters({ ...searchFilters, date_range: dates as [dayjs.Dayjs, dayjs.Dayjs] | null })
               }
+              style={{ borderRadius: 8 }}
             />
             <Button
               type="primary"
               icon={<SearchOutlined />}
               onClick={handleSearch}
+              style={{ borderRadius: 8 }}
             >
               {t('common.search')}
             </Button>
-            <Button icon={<ReloadOutlined />} onClick={handleReset}>
-              {t('common.reset')}
-            </Button>
             <Button
-              type="primary"
-              icon={<RollbackOutlined />}
-              onClick={() => setCreateModalVisible(true)}
+              icon={<ReloadOutlined />}
+              onClick={handleReset}
+              style={{ borderRadius: 8 }}
             >
-              {t('refunds.createRefund')}
+              {t('common.reset')}
             </Button>
           </Space>
 
@@ -408,25 +543,29 @@ const Refunds = () => {
             type="info"
             showIcon
             closable
-          />
-
-          <Table
-            columns={columns}
-            dataSource={dataSource}
-            rowKey="refund_no"
-            loading={loading}
-            pagination={{
-              ...pagination,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total) => t('common.total', { count: total }),
-              onChange: (page, pageSize) => {
-                setPagination({ ...pagination, current: page, pageSize })
-              },
-            }}
-            scroll={{ x: 1600 }}
+            style={{ borderRadius: 8 }}
           />
         </Space>
+      </Card>
+
+      {/* Table */}
+      <Card style={{ borderRadius: 12 }}>
+        <Table
+          columns={columns}
+          dataSource={dataSource}
+          rowKey="refund_no"
+          loading={loading}
+          pagination={{
+            ...pagination,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => t('common.total', { count: total }),
+            onChange: (page, pageSize) => {
+              setPagination({ ...pagination, current: page, pageSize })
+            },
+          }}
+          scroll={{ x: 1600 }}
+        />
       </Card>
 
       {/* Detail Modal */}

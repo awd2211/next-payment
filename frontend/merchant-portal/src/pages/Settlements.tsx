@@ -16,6 +16,10 @@ import {
   Alert,
   Timeline,
   Divider,
+  Tooltip,
+  Badge,
+  Skeleton,
+  Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -27,11 +31,14 @@ import {
   ClockCircleOutlined,
   BankOutlined,
   CalendarOutlined,
+  FilterOutlined,
+  ClearOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 
 const { RangePicker } = DatePicker
+const { Title } = Typography
 
 interface Settlement {
   settlement_no: string
@@ -63,6 +70,7 @@ interface SettlementStats {
 const Settlements = () => {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(false)
   const [dataSource, setDataSource] = useState<Settlement[]>([])
   const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null)
   const [detailModalVisible, setDetailModalVisible] = useState(false)
@@ -84,20 +92,41 @@ const Settlements = () => {
     date_range: null as [dayjs.Dayjs, dayjs.Dayjs] | null,
   })
 
+  const activeFilterCount = [
+    searchFilters.settlement_no,
+    searchFilters.status,
+    searchFilters.date_range,
+  ].filter(Boolean).length
+
+  const handleClearFilters = () => {
+    setSearchFilters({
+      settlement_no: '',
+      status: '',
+      date_range: null,
+    })
+    setPagination((prev) => ({ ...prev, current: 1 }))
+    fetchSettlements()
+  }
+
   useEffect(() => {
     fetchSettlements()
     fetchStats()
   }, [pagination.current, pagination.pageSize])
 
   const fetchStats = async () => {
-    // Mock stats data
-    setStats({
-      total_settlements: 48,
-      pending_amount: 15680.50,
-      processing_amount: 28900.00,
-      completed_amount: 456789.25,
-      this_month_amount: 89456.78,
-    })
+    setStatsLoading(true)
+    try {
+      // Mock stats data
+      setStats({
+        total_settlements: 48,
+        pending_amount: 15680.50,
+        processing_amount: 28900.00,
+        completed_amount: 456789.25,
+        this_month_amount: 89456.78,
+      })
+    } finally {
+      setStatsLoading(false)
+    }
   }
 
   const fetchSettlements = async () => {
@@ -180,7 +209,7 @@ const Settlements = () => {
     }
     const config = statusMap[status] || { color: 'default', icon: null, text: status }
     return (
-      <Tag color={config.color} icon={config.icon}>
+      <Tag color={config.color} icon={config.icon} style={{ borderRadius: 12 }}>
         {config.text}
       </Tag>
     )
@@ -193,18 +222,32 @@ const Settlements = () => {
       key: 'settlement_no',
       fixed: 'left',
       width: 180,
+      render: (id: string) => (
+        <Tooltip title={id}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {id.slice(0, 12)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
       title: t('settlements.settlementPeriod'),
       key: 'settlement_period',
       width: 220,
-      render: (_, record) => (
-        <div>
-          {dayjs(record.settlement_period_start).format('YYYY-MM-DD')}
-          <br />
-          至 {dayjs(record.settlement_period_end).format('YYYY-MM-DD')}
-        </div>
-      ),
+      render: (_, record) => {
+        const days = dayjs(record.settlement_period_end).diff(
+          dayjs(record.settlement_period_start),
+          'day'
+        )
+        return (
+          <div>
+            <div>{dayjs(record.settlement_period_start).format('MM-DD')}</div>
+            <div style={{ fontSize: 12, color: '#999' }}>
+              至 {dayjs(record.settlement_period_end).format('MM-DD')} ({days}天)
+            </div>
+          </div>
+        )
+      },
     },
     {
       title: t('settlements.settlementDate'),
@@ -218,8 +261,8 @@ const Settlements = () => {
       dataIndex: 'transaction_count',
       key: 'transaction_count',
       width: 100,
-      align: 'right',
-      render: (count) => `${count} 笔`,
+      align: 'center',
+      render: (count) => <Badge count={count} showZero color="#1890ff" />,
     },
     {
       title: t('settlements.settlementAmount'),
@@ -235,7 +278,11 @@ const Settlements = () => {
       key: 'fee_amount',
       width: 120,
       align: 'right',
-      render: (amount, record) => formatAmount(amount, record.currency),
+      render: (amount, record) => (
+        <span style={{ color: '#ff4d4f' }}>
+          {formatAmount(amount, record.currency)}
+        </span>
+      ),
     },
     {
       title: t('settlements.actualAmount'),
@@ -244,7 +291,7 @@ const Settlements = () => {
       width: 150,
       align: 'right',
       render: (amount, record) => (
-        <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
+        <span style={{ fontWeight: 600, color: '#52c41a' }}>
           {formatAmount(amount, record.currency)}
         </span>
       ),
@@ -276,60 +323,108 @@ const Settlements = () => {
 
   return (
     <div>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>{t('settlements.title')}</Title>
+        <Tooltip title={t('common.refresh')}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              fetchSettlements()
+              fetchStats()
+            }}
+            loading={loading || statsLoading}
+            style={{ borderRadius: 8 }}
+          >
+            {t('common.refresh')}
+          </Button>
+        </Tooltip>
+      </div>
+
+      {/* Statistics Cards with Skeleton */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('settlements.totalSettlements')}
-              value={stats.total_settlements}
-              prefix={<BankOutlined />}
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('settlements.totalSettlements')}</span>}
+                value={stats.total_settlements}
+                prefix={<BankOutlined />}
+                valueStyle={{ fontSize: 24, fontWeight: 600 }}
+              />
+            )}
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('settlements.pendingAmount')}
-              value={stats.pending_amount}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: '#faad14' }}
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('settlements.pendingAmount')}</span>}
+                value={stats.pending_amount}
+                precision={2}
+                prefix="¥"
+                valueStyle={{ fontSize: 24, fontWeight: 600, color: '#faad14' }}
+              />
+            )}
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('settlements.completedAmount')}
-              value={stats.completed_amount}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: '#52c41a' }}
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('settlements.completedAmount')}</span>}
+                value={stats.completed_amount}
+                precision={2}
+                prefix="¥"
+                valueStyle={{ fontSize: 24, fontWeight: 600, color: '#52c41a' }}
+              />
+            )}
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title={t('settlements.thisMonthAmount')}
-              value={stats.this_month_amount}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: '#1890ff' }}
-            />
+          <Card hoverable style={{ borderRadius: 12, transition: 'all 0.3s ease', cursor: 'default' }}>
+            {statsLoading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : (
+              <Statistic
+                title={<span style={{ fontSize: 14, fontWeight: 500 }}>{t('settlements.thisMonthAmount')}</span>}
+                value={stats.this_month_amount}
+                precision={2}
+                prefix="¥"
+                valueStyle={{ fontSize: 24, fontWeight: 600, color: '#1890ff' }}
+              />
+            )}
           </Card>
         </Col>
       </Row>
 
-      <Card>
+      {/* Smart Filters */}
+      <Card style={{ marginBottom: 16, borderRadius: 12 }}>
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          <Alert
-            message={t('settlements.notice')}
-            description={t('settlements.noticeDesc')}
-            type="info"
-            showIcon
-            closable
-          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space>
+              <FilterOutlined />
+              <span style={{ fontWeight: 500 }}>{t('common.filter')}</span>
+              {activeFilterCount > 0 && (
+                <Badge count={activeFilterCount} style={{ backgroundColor: '#1890ff' }} />
+              )}
+            </Space>
+            {activeFilterCount > 0 && (
+              <Button
+                icon={<ClearOutlined />}
+                onClick={handleClearFilters}
+                style={{ borderRadius: 8 }}
+              >
+                清除筛选
+              </Button>
+            )}
+          </div>
 
           <Space wrap>
             <Input
@@ -338,7 +433,7 @@ const Settlements = () => {
               onChange={(e) =>
                 setSearchFilters({ ...searchFilters, settlement_no: e.target.value })
               }
-              style={{ width: 200 }}
+              style={{ width: 200, borderRadius: 8 }}
               prefix={<SearchOutlined />}
             />
             <Select
@@ -358,36 +453,54 @@ const Settlements = () => {
                 setSearchFilters({ ...searchFilters, date_range: dates as [dayjs.Dayjs, dayjs.Dayjs] | null })
               }
               placeholder={[t('settlements.startDate'), t('settlements.endDate')]}
+              style={{ borderRadius: 8 }}
             />
             <Button
               type="primary"
               icon={<SearchOutlined />}
               onClick={handleSearch}
+              style={{ borderRadius: 8 }}
             >
               {t('common.search')}
             </Button>
-            <Button icon={<ReloadOutlined />} onClick={handleReset}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={handleReset}
+              style={{ borderRadius: 8 }}
+            >
               {t('common.reset')}
             </Button>
           </Space>
 
-          <Table
-            columns={columns}
-            dataSource={dataSource}
-            rowKey="settlement_no"
-            loading={loading}
-            pagination={{
-              ...pagination,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total) => t('common.total', { count: total }),
-              onChange: (page, pageSize) => {
-                setPagination({ ...pagination, current: page, pageSize })
-              },
-            }}
-            scroll={{ x: 1500 }}
+          <Alert
+            message={t('settlements.notice')}
+            description={t('settlements.noticeDesc')}
+            type="info"
+            showIcon
+            closable
+            style={{ borderRadius: 8 }}
           />
         </Space>
+      </Card>
+
+      {/* Table */}
+      <Card style={{ borderRadius: 12 }}>
+        <Table
+          columns={columns}
+          dataSource={dataSource}
+          rowKey="settlement_no"
+          loading={loading}
+          pagination={{
+            ...pagination,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => t('common.total', { count: total }),
+            onChange: (page, pageSize) => {
+              setPagination({ ...pagination, current: page, pageSize })
+            },
+          }}
+          scroll={{ x: 1500 }}
+        />
       </Card>
 
       {/* Detail Modal */}

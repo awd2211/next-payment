@@ -14,6 +14,8 @@ import {
   Tabs,
   Dropdown,
   Menu,
+  Tooltip,
+  Checkbox,
 } from 'antd'
 import {
   BellOutlined,
@@ -24,6 +26,8 @@ import {
   WarningOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  ReloadOutlined,
+  ClearOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
@@ -49,6 +53,7 @@ const Notifications = () => {
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [activeTab, setActiveTab] = useState('all')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   useEffect(() => {
     loadNotifications()
@@ -113,17 +118,44 @@ const Notifications = () => {
 
   const handleMarkAllAsRead = () => {
     setNotifications(notifications.map(n => ({ ...n, read: true })))
+    setSelectedIds([])
     message.success('已全部标记为已读')
   }
 
   const handleDelete = (id: string) => {
     setNotifications(notifications.filter(n => n.id !== id))
+    setSelectedIds(selectedIds.filter(sid => sid !== id))
     message.success('已删除')
   }
 
   const handleClearAll = () => {
     setNotifications([])
+    setSelectedIds([])
     message.success('已清空所有通知')
+  }
+
+  const handleBatchDelete = () => {
+    setNotifications(notifications.filter(n => !selectedIds.includes(n.id)))
+    setSelectedIds([])
+    message.success(`已删除 ${selectedIds.length} 条通知`)
+  }
+
+  const handleBatchMarkAsRead = () => {
+    setNotifications(
+      notifications.map(n =>
+        selectedIds.includes(n.id) ? { ...n, read: true } : n
+      )
+    )
+    setSelectedIds([])
+    message.success(`已标记 ${selectedIds.length} 条为已读`)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredNotifications.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(filteredNotifications.map(n => n.id))
+    }
   }
 
   const getIcon = (type: Notification['type']) => {
@@ -156,16 +188,16 @@ const Notifications = () => {
     }
   }
 
+  const unreadCount = notifications.filter(n => !n.read).length
+
   const filteredNotifications = notifications.filter(n => {
     if (activeTab === 'unread') return !n.read
     if (activeTab === 'read') return n.read
     return true
   })
 
-  const unreadCount = notifications.filter(n => !n.read).length
-
   return (
-    <div style={{ padding: '24px' }}>
+    <div>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={2} style={{ margin: 0 }}>
           <Badge count={unreadCount} offset={[10, 0]}>
@@ -173,16 +205,28 @@ const Notifications = () => {
           </Badge>
         </Title>
         <Space>
-          <Button onClick={handleMarkAllAsRead} disabled={unreadCount === 0}>
+          <Tooltip title="刷新">
+            <Button icon={<ReloadOutlined />} onClick={loadNotifications} style={{ borderRadius: 8 }} />
+          </Tooltip>
+          <Button
+            onClick={handleMarkAllAsRead}
+            disabled={unreadCount === 0}
+            style={{ borderRadius: 8 }}
+          >
             全部已读
           </Button>
-          <Button danger onClick={handleClearAll} disabled={notifications.length === 0}>
+          <Button
+            danger
+            onClick={handleClearAll}
+            disabled={notifications.length === 0}
+            style={{ borderRadius: 8 }}
+          >
             清空所有
           </Button>
         </Space>
       </div>
 
-      <Card>
+      <Card style={{ borderRadius: 12 }}>
         <Tabs activeKey={activeTab} onChange={setActiveTab}>
           <TabPane tab={`全部 (${notifications.length})`} key="all" />
           <TabPane
@@ -196,12 +240,53 @@ const Notifications = () => {
           <TabPane tab={`已读 (${notifications.length - unreadCount})`} key="read" />
         </Tabs>
 
+        {selectedIds.length > 0 && (
+          <Space style={{ marginBottom: 16 }}>
+            <Text>已选择 {selectedIds.length} 项</Text>
+            <Button
+              size="small"
+              icon={<CheckOutlined />}
+              onClick={handleBatchMarkAsRead}
+              style={{ borderRadius: 8 }}
+            >
+              批量已读
+            </Button>
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleBatchDelete}
+              style={{ borderRadius: 8 }}
+            >
+              批量删除
+            </Button>
+            <Button
+              size="small"
+              icon={<ClearOutlined />}
+              onClick={() => setSelectedIds([])}
+              style={{ borderRadius: 8 }}
+            >
+              取消选择
+            </Button>
+          </Space>
+        )}
+
+        <div style={{ marginBottom: 16 }}>
+          <Checkbox
+            checked={selectedIds.length === filteredNotifications.length && filteredNotifications.length > 0}
+            indeterminate={selectedIds.length > 0 && selectedIds.length < filteredNotifications.length}
+            onChange={handleSelectAll}
+          >
+            全选
+          </Checkbox>
+        </div>
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px' }}>
             <Spin size="large" tip="加载中..." />
           </div>
         ) : filteredNotifications.length === 0 ? (
-          <Empty description="暂无通知" />
+          <Empty description="暂无通知" style={{ padding: '40px 0' }} />
         ) : (
           <List
             itemLayout="horizontal"
@@ -212,18 +297,37 @@ const Notifications = () => {
                   background: item.read ? '#fff' : '#f6ffed',
                   padding: '16px',
                   marginBottom: '8px',
-                  borderRadius: '4px',
+                  borderRadius: 12,
                   border: item.read ? '1px solid #f0f0f0' : '1px solid #b7eb8f',
+                  transition: 'all 0.3s ease',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = 'none'
                 }}
                 actions={[
+                  <Checkbox
+                    checked={selectedIds.includes(item.id)}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedIds([...selectedIds, item.id])
+                      } else {
+                        setSelectedIds(selectedIds.filter(id => id !== item.id))
+                      }
+                    }}
+                  />,
                   !item.read && (
-                    <Button
-                      type="link"
-                      icon={<CheckOutlined />}
-                      onClick={() => handleMarkAsRead(item.id)}
-                    >
-                      标记已读
-                    </Button>
+                    <Tooltip title="标记已读">
+                      <Button
+                        type="link"
+                        icon={<CheckOutlined />}
+                        onClick={() => handleMarkAsRead(item.id)}
+                        style={{ borderRadius: 8 }}
+                      />
+                    </Tooltip>
                   ),
                   <Dropdown
                     overlay={
@@ -239,27 +343,29 @@ const Notifications = () => {
                       </Menu>
                     }
                   >
-                    <Button type="text" icon={<MoreOutlined />} />
+                    <Button type="text" icon={<MoreOutlined />} style={{ borderRadius: 8 }} />
                   </Dropdown>,
                 ].filter(Boolean)}
               >
                 <List.Item.Meta
-                  avatar={<Avatar icon={getIcon(item.type)} />}
+                  avatar={<Avatar icon={getIcon(item.type)} size={48} />}
                   title={
                     <Space>
-                      <Text strong>{item.title}</Text>
-                      <Tag color={getTypeColor(item.type)}>{item.type.toUpperCase()}</Tag>
+                      <Text strong style={{ fontSize: 15 }}>{item.title}</Text>
+                      <Tag color={getTypeColor(item.type)} style={{ borderRadius: 12 }}>
+                        {item.type.toUpperCase()}
+                      </Tag>
                       {!item.read && <Badge status="processing" text="未读" />}
                     </Space>
                   }
                   description={
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space direction="vertical" style={{ width: '100%' }} size="small">
                       <Text>{item.content}</Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         {dayjs(item.created_at).fromNow()}
                       </Text>
                       {item.action_url && (
-                        <Button type="link" size="small" style={{ padding: 0 }}>
+                        <Button type="link" size="small" style={{ padding: 0, height: 'auto' }}>
                           查看详情 →
                         </Button>
                       )}

@@ -16,12 +16,21 @@ import {
   Col,
   Descriptions,
   Tag,
+  Tooltip,
+  Alert,
+  Radio,
+  Statistic,
 } from 'antd'
 import {
   CopyOutlined,
   CheckCircleOutlined,
   QrcodeOutlined,
   LinkOutlined,
+  CheckOutlined,
+  DollarOutlined,
+  CreditCardOutlined,
+  WalletOutlined,
+  PayCircleOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
@@ -47,6 +56,9 @@ const CreatePayment = () => {
   const [currentStep, setCurrentStep] = useState(0)
   const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null)
   const [resultModalVisible, setResultModalVisible] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [previewAmount, setPreviewAmount] = useState<number>(0)
+  const [previewCurrency, setPreviewCurrency] = useState<string>('CNY')
 
   const handleSubmit = async (values: any) => {
     setLoading(true)
@@ -76,12 +88,26 @@ const CreatePayment = () => {
     }
   }
 
-  const handleCopy = async (text: string, type: string) => {
+  const handleCopy = async (text: string, type: string, fieldId: string) => {
     try {
       await navigator.clipboard.writeText(text)
+      setCopiedField(fieldId)
       message.success(t('createPayment.copySuccess', { type }))
+      setTimeout(() => setCopiedField(null), 2000)
     } catch (error) {
       message.error(t('createPayment.copyFailed'))
+    }
+  }
+
+  const handleValuesChange = (changedValues: any, allValues: any) => {
+    if (changedValues.amount !== undefined) {
+      setPreviewAmount(changedValues.amount || 0)
+    }
+    if (changedValues.currency !== undefined) {
+      setPreviewCurrency(changedValues.currency)
+    }
+    if (Object.keys(changedValues).length > 0 && currentStep === 0) {
+      setCurrentStep(1)
     }
   }
 
@@ -111,24 +137,59 @@ const CreatePayment = () => {
     },
   ]
 
+  const channelOptions = [
+    {
+      value: 'stripe',
+      label: 'Stripe',
+      color: 'blue',
+      icon: <CreditCardOutlined />,
+      recommended: true,
+    },
+    {
+      value: 'paypal',
+      label: 'PayPal',
+      color: 'cyan',
+      icon: <PayCircleOutlined />,
+      recommended: false,
+    },
+    {
+      value: 'alipay',
+      label: '支付宝',
+      color: 'green',
+      icon: <WalletOutlined />,
+      recommended: false,
+    },
+    {
+      value: 'wechat',
+      label: '微信支付',
+      color: 'orange',
+      icon: <PayCircleOutlined />,
+      recommended: false,
+    },
+  ]
+
   return (
     <div>
-      <Title level={2}>{t('createPayment.title')}</Title>
-      <Paragraph type="secondary">{t('createPayment.subtitle')}</Paragraph>
+      <div style={{ marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>{t('createPayment.title')}</Title>
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>{t('createPayment.subtitle')}</Paragraph>
+      </div>
 
-      <Card style={{ marginTop: 24 }}>
-        <Steps current={currentStep} items={steps} style={{ marginBottom: 32 }} />
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={16}>
+          <Card style={{ borderRadius: 12 }}>
+            <Steps current={currentStep} items={steps} style={{ marginBottom: 32 }} />
 
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
-          initialValues={{
-            currency: 'CNY',
-            channel: 'stripe',
-          }}
-          onValuesChange={() => setCurrentStep(1)}
-        >
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={handleSubmit}
+              initialValues={{
+                currency: 'CNY',
+                channel: 'stripe',
+              }}
+              onValuesChange={handleValuesChange}
+            >
           <Row gutter={16}>
             <Col xs={24} lg={12}>
               <Form.Item
@@ -145,6 +206,7 @@ const CreatePayment = () => {
                 <Input
                   placeholder={t('createPayment.merchantOrderNoPlaceholder')}
                   maxLength={64}
+                  style={{ borderRadius: 8 }}
                 />
               </Form.Item>
             </Col>
@@ -155,7 +217,11 @@ const CreatePayment = () => {
                 name="product_name"
                 rules={[{ required: true, message: t('createPayment.productNameRequired') }]}
               >
-                <Input placeholder={t('createPayment.productNamePlaceholder')} maxLength={128} />
+                <Input
+                  placeholder={t('createPayment.productNamePlaceholder')}
+                  maxLength={128}
+                  style={{ borderRadius: 8 }}
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -171,11 +237,12 @@ const CreatePayment = () => {
                 ]}
               >
                 <InputNumber
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', borderRadius: 8 }}
                   placeholder="0.00"
                   precision={2}
                   min={0.01}
                   max={999999.99}
+                  prefix={<DollarOutlined />}
                 />
               </Form.Item>
             </Col>
@@ -186,7 +253,7 @@ const CreatePayment = () => {
                 name="currency"
                 rules={[{ required: true, message: t('createPayment.currencyRequired') }]}
               >
-                <Select>
+                <Select style={{ borderRadius: 8 }}>
                   <Select.Option value="CNY">CNY - 人民币</Select.Option>
                   <Select.Option value="USD">USD - 美元</Select.Option>
                   <Select.Option value="EUR">EUR - 欧元</Select.Option>
@@ -195,33 +262,54 @@ const CreatePayment = () => {
                 </Select>
               </Form.Item>
             </Col>
-
-            <Col xs={24} sm={12} lg={8}>
-              <Form.Item
-                label={t('createPayment.channel')}
-                name="channel"
-                rules={[{ required: true, message: t('createPayment.channelRequired') }]}
-              >
-                <Select>
-                  <Select.Option value="stripe">
-                    <Space>
-                      <Tag color="blue">Stripe</Tag>
-                      {t('createPayment.channelRecommended')}
-                    </Space>
-                  </Select.Option>
-                  <Select.Option value="paypal">
-                    <Tag color="cyan">PayPal</Tag>
-                  </Select.Option>
-                  <Select.Option value="alipay">
-                    <Tag color="green">支付宝</Tag>
-                  </Select.Option>
-                  <Select.Option value="wechat">
-                    <Tag color="orange">微信支付</Tag>
-                  </Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
           </Row>
+
+          <Form.Item
+            label={t('createPayment.channel')}
+            name="channel"
+            rules={[{ required: true, message: t('createPayment.channelRequired') }]}
+          >
+            <Radio.Group style={{ width: '100%' }}>
+              <Row gutter={[12, 12]}>
+                {channelOptions.map((option) => (
+                  <Col xs={12} sm={12} md={6} key={option.value}>
+                    <Radio.Button
+                      value={option.value}
+                      style={{
+                        width: '100%',
+                        height: '80px',
+                        borderRadius: 12,
+                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 24, marginBottom: 8 }}>{option.icon}</div>
+                        <div style={{ fontWeight: 500 }}>{option.label}</div>
+                        {option.recommended && (
+                          <Tag
+                            color="green"
+                            style={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              fontSize: 10,
+                              borderRadius: 8,
+                            }}
+                          >
+                            推荐
+                          </Tag>
+                        )}
+                      </div>
+                    </Radio.Button>
+                  </Col>
+                ))}
+              </Row>
+            </Radio.Group>
+          </Form.Item>
 
           <Form.Item label={t('createPayment.description')} name="description">
             <TextArea
@@ -229,6 +317,7 @@ const CreatePayment = () => {
               rows={3}
               maxLength={512}
               showCount
+              style={{ borderRadius: 8 }}
             />
           </Form.Item>
 
@@ -246,6 +335,7 @@ const CreatePayment = () => {
                 <Input
                   placeholder="https://your-domain.com/api/payment/notify"
                   prefix={<LinkOutlined />}
+                  style={{ borderRadius: 8 }}
                 />
               </Form.Item>
             </Col>
@@ -263,6 +353,7 @@ const CreatePayment = () => {
                 <Input
                   placeholder="https://your-domain.com/order/success"
                   prefix={<LinkOutlined />}
+                  style={{ borderRadius: 8 }}
                 />
               </Form.Item>
             </Col>
@@ -270,14 +361,50 @@ const CreatePayment = () => {
 
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit" loading={loading} size="large">
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={loading}
+                size="large"
+                style={{ borderRadius: 8 }}
+              >
                 {t('createPayment.createButton')}
               </Button>
-              <Button onClick={handleReset}>{t('common.reset')}</Button>
+              <Button onClick={handleReset} style={{ borderRadius: 8 }}>
+                {t('common.reset')}
+              </Button>
             </Space>
           </Form.Item>
         </Form>
       </Card>
+    </Col>
+
+    <Col xs={24} lg={8}>
+      <Card
+        title="金额预览"
+        style={{ borderRadius: 12, position: 'sticky', top: 24 }}
+      >
+        <Statistic
+          title="待支付金额"
+          value={previewAmount}
+          precision={2}
+          prefix={previewCurrency}
+          valueStyle={{
+            fontSize: 36,
+            fontWeight: 700,
+            color: previewAmount > 0 ? '#1890ff' : '#999',
+          }}
+        />
+        <Alert
+          message="提示"
+          description="输入金额后,这里会实时显示支付金额预览"
+          type="info"
+          showIcon
+          style={{ marginTop: 16, borderRadius: 8 }}
+        />
+      </Card>
+    </Col>
+  </Row>
 
       {/* Result Modal */}
       <Modal
@@ -291,48 +418,69 @@ const CreatePayment = () => {
         onCancel={() => setResultModalVisible(false)}
         width={800}
         footer={[
-          <Button key="another" type="primary" onClick={handleCreateAnother}>
+          <Button
+            key="another"
+            type="primary"
+            onClick={handleCreateAnother}
+            style={{ borderRadius: 8 }}
+          >
             {t('createPayment.createAnother')}
           </Button>,
-          <Button key="close" onClick={() => setResultModalVisible(false)}>
+          <Button
+            key="close"
+            onClick={() => setResultModalVisible(false)}
+            style={{ borderRadius: 8 }}
+          >
             {t('common.cancel')}
           </Button>,
         ]}
       >
         {paymentResult && (
           <div>
-            <Descriptions bordered column={2} style={{ marginBottom: 24 }}>
+            <Descriptions bordered column={2} style={{ marginBottom: 24, borderRadius: 8 }}>
               <Descriptions.Item label={t('createPayment.orderNo')} span={2}>
                 <Space>
-                  <Text copyable>{paymentResult.order_no}</Text>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={() => handleCopy(paymentResult.order_no, t('createPayment.orderNo'))}
-                  />
+                  <Text code style={{ fontFamily: 'monospace' }}>
+                    {paymentResult.order_no}
+                  </Text>
+                  <Tooltip title={copiedField === 'orderNo' ? t('common.copied') : t('apiKeys.copy')}>
+                    <Button
+                      type={copiedField === 'orderNo' ? 'primary' : 'link'}
+                      size="small"
+                      icon={copiedField === 'orderNo' ? <CheckOutlined /> : <CopyOutlined />}
+                      onClick={() => handleCopy(paymentResult.order_no, t('createPayment.orderNo'), 'orderNo')}
+                      style={{ borderRadius: 8 }}
+                    />
+                  </Tooltip>
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label={t('createPayment.paymentNo')} span={2}>
                 <Space>
-                  <Text copyable>{paymentResult.payment_no}</Text>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={() =>
-                      handleCopy(paymentResult.payment_no, t('createPayment.paymentNo'))
-                    }
-                  />
+                  <Text code style={{ fontFamily: 'monospace' }}>
+                    {paymentResult.payment_no}
+                  </Text>
+                  <Tooltip title={copiedField === 'paymentNo' ? t('common.copied') : t('apiKeys.copy')}>
+                    <Button
+                      type={copiedField === 'paymentNo' ? 'primary' : 'link'}
+                      size="small"
+                      icon={copiedField === 'paymentNo' ? <CheckOutlined /> : <CopyOutlined />}
+                      onClick={() =>
+                        handleCopy(paymentResult.payment_no, t('createPayment.paymentNo'), 'paymentNo')
+                      }
+                      style={{ borderRadius: 8 }}
+                    />
+                  </Tooltip>
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label={t('createPayment.amount')}>
-                <Text strong style={{ fontSize: 16 }}>
+                <Text strong style={{ fontSize: 16, color: '#1890ff' }}>
                   {paymentResult.currency} {paymentResult.amount.toFixed(2)}
                 </Text>
               </Descriptions.Item>
               <Descriptions.Item label={t('createPayment.channel')}>
-                <Tag color="blue">{paymentResult.channel.toUpperCase()}</Tag>
+                <Tag color="blue" style={{ borderRadius: 12 }}>
+                  {paymentResult.channel.toUpperCase()}
+                </Tag>
               </Descriptions.Item>
               <Descriptions.Item label={t('createPayment.expiresAt')} span={2}>
                 {dayjs(paymentResult.expires_at).format('YYYY-MM-DD HH:mm:ss')}
@@ -352,24 +500,27 @@ const CreatePayment = () => {
                     </Space>
                   }
                   size="small"
+                  style={{ borderRadius: 12 }}
                 >
                   <Paragraph
-                    copyable
                     ellipsis={{ rows: 2, expandable: true }}
-                    style={{ marginBottom: 8 }}
+                    style={{ marginBottom: 8, fontSize: 12 }}
                   >
                     {paymentResult.payment_url}
                   </Paragraph>
-                  <Button
-                    type="primary"
-                    block
-                    icon={<CopyOutlined />}
-                    onClick={() =>
-                      handleCopy(paymentResult.payment_url, t('createPayment.paymentUrl'))
-                    }
-                  >
-                    {t('createPayment.copyUrl')}
-                  </Button>
+                  <Tooltip title={copiedField === 'paymentUrl' ? t('common.copied') : t('createPayment.copyUrl')}>
+                    <Button
+                      type={copiedField === 'paymentUrl' ? 'default' : 'primary'}
+                      block
+                      icon={copiedField === 'paymentUrl' ? <CheckOutlined /> : <CopyOutlined />}
+                      onClick={() =>
+                        handleCopy(paymentResult.payment_url, t('createPayment.paymentUrl'), 'paymentUrl')
+                      }
+                      style={{ borderRadius: 8 }}
+                    >
+                      {copiedField === 'paymentUrl' ? '已复制' : t('createPayment.copyUrl')}
+                    </Button>
+                  </Tooltip>
                 </Card>
               </Col>
 
@@ -382,10 +533,11 @@ const CreatePayment = () => {
                     </Space>
                   }
                   size="small"
+                  style={{ borderRadius: 12 }}
                 >
                   <div style={{ textAlign: 'center' }}>
                     <QRCode value={paymentResult.payment_url} size={200} />
-                    <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+                    <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
                       {t('createPayment.qrCodeHint')}
                     </Paragraph>
                   </div>

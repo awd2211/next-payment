@@ -20,6 +20,9 @@ import {
   message,
   Popconfirm,
   Divider,
+  Tooltip,
+  Badge,
+  Skeleton,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -30,9 +33,14 @@ import {
   DollarOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  ReloadOutlined,
+  FilterOutlined,
+  ClearOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons'
 import { orderService, Order, OrderStats, CreateOrderRequest, OrderItem } from '../services/orderService'
 import { useAuthStore } from '../stores/authStore'
+import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 
@@ -40,7 +48,9 @@ const { Title } = Typography
 const { RangePicker } = DatePicker
 
 const Orders = () => {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -56,6 +66,14 @@ const Orders = () => {
   const [statusFilter, setStatusFilter] = useState<string | undefined>()
   const [customerEmailFilter, setCustomerEmailFilter] = useState('')
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null)
+
+  // 计算激活的过滤器数量
+  const activeFilterCount = [
+    merchantOrderIdFilter,
+    statusFilter,
+    customerEmailFilter,
+    dateRange,
+  ].filter(Boolean).length
 
   useEffect(() => {
     loadOrders()
@@ -111,12 +129,23 @@ const Orders = () => {
       return
     }
 
+    setStatsLoading(true)
     try {
       const response = await orderService.getStats({})
       setStats(response.data)
     } catch (error) {
       // Error handled by interceptor
+    } finally {
+      setStatsLoading(false)
     }
+  }
+
+  const handleClearFilters = () => {
+    setMerchantOrderIdFilter('')
+    setStatusFilter(undefined)
+    setCustomerEmailFilter('')
+    setDateRange(null)
+    setPage(1)
   }
 
   const handleViewDetail = (order: Order) => {
@@ -175,47 +204,64 @@ const Orders = () => {
 
   const getStatusText = (status: string) => {
     const texts: Record<string, string> = {
-      pending: '待支付',
-      paid: '已支付',
-      cancelled: '已取消',
+      pending: t('orders.statusPending'),
+      paid: t('orders.statusPaid'),
+      cancelled: t('orders.statusCancelled'),
       completed: '已完成',
+      expired: t('orders.statusExpired'),
     }
     return texts[status] || status
   }
 
   const columns: ColumnsType<Order> = [
     {
-      title: '订单ID',
+      title: t('orders.orderNo'),
       dataIndex: 'id',
       key: 'id',
-      width: 100,
+      width: 120,
       ellipsis: true,
+      render: (id: string) => (
+        <Tooltip title={id}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {id.slice(0, 8)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
-      title: '商户订单号',
+      title: t('orders.merchantOrderNo'),
       dataIndex: 'merchant_order_id',
       key: 'merchant_order_id',
       width: 150,
       ellipsis: true,
+      render: (merchantOrderId: string) => (
+        <Tooltip title={merchantOrderId}>
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {merchantOrderId?.slice(0, 12)}...
+          </span>
+        </Tooltip>
+      ),
     },
     {
-      title: '金额',
+      title: t('orders.amount'),
       dataIndex: 'amount',
       key: 'amount',
-      width: 120,
+      width: 140,
       render: (amount: number, record) => (
-        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+        <span style={{ fontWeight: 600, color: '#1890ff', fontSize: 14 }}>
           {record.currency} {(amount / 100).toFixed(2)}
         </span>
       ),
     },
     {
-      title: '状态',
+      title: t('orders.status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{getStatusText(status)}</Tag>
+        <Tag color={getStatusColor(status)} style={{ borderRadius: 12, fontWeight: 500 }}>
+          {getStatusText(status)}
+        </Tag>
       ),
     },
     {
@@ -229,43 +275,56 @@ const Orders = () => {
       dataIndex: 'customer_email',
       key: 'customer_email',
       ellipsis: true,
+      width: 180,
     },
     {
       title: '商品数量',
       key: 'items_count',
       width: 100,
-      render: (_, record) => record.items?.length || 0,
+      align: 'center',
+      render: (_, record) => (
+        <Badge count={record.items?.length || 0} showZero color="#1890ff" />
+      ),
     },
     {
-      title: '创建时间',
+      title: t('common.createdAt'),
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
-      render: (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm:ss'),
+      render: (time: string) => (
+        <Tooltip title={dayjs(time).format('YYYY-MM-DD HH:mm:ss')}>
+          {dayjs(time).format('MM-DD HH:mm')}
+        </Tooltip>
+      ),
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'action',
       width: 150,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetail(record)}
-          >
-            详情
-          </Button>
+        <Space size="small">
+          <Tooltip title={t('orders.viewDetails')}>
+            <Button
+              type="link"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => handleViewDetail(record)}
+              style={{ padding: '4px 8px' }}
+            >
+              {t('common.detail')}
+            </Button>
+          </Tooltip>
           {record.status === 'pending' && (
             <Popconfirm
-              title="确认取消"
-              description="确定要取消这个订单吗？"
+              title={t('common.confirm')}
+              description={t('orders.cancel')}
               onConfirm={() => handleCancel(record)}
+              okText={t('common.yes')}
+              cancelText={t('common.no')}
             >
-              <Button type="link" size="small" danger>
-                取消
+              <Button type="link" size="small" danger style={{ padding: '4px 8px' }}>
+                {t('common.cancel')}
               </Button>
             </Popconfirm>
           )}

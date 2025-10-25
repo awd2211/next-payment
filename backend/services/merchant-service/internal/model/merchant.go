@@ -20,6 +20,7 @@ type Merchant struct {
 	Website      string         `gorm:"type:varchar(255)" json:"website"`                            // 网站
 	Status       string         `gorm:"type:varchar(20);default:'pending';index" json:"status"`      // pending, active, suspended, rejected
 	KYCStatus    string         `gorm:"type:varchar(20);default:'pending';index" json:"kyc_status"`  // pending, verified, rejected
+	Tier         MerchantTier   `gorm:"type:varchar(20);default:'starter';index" json:"tier"`        // 商户等级：starter, business, enterprise, premium
 	IsTestMode   bool           `gorm:"default:true" json:"is_test_mode"`                            // 是否测试模式
 	Metadata     *string        `gorm:"type:jsonb" json:"metadata"`                                  // 扩展元数据（JSON）- 使用指针以支持 NULL
 	CreatedAt    time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`

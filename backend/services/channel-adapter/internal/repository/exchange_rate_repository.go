@@ -2,8 +2,13 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
+	"github.com/payment-platform/pkg/logger"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"payment-platform/channel-adapter/internal/model"
 )
@@ -34,12 +39,16 @@ type ExchangeRateRepository interface {
 
 // exchangeRateRepository 汇率仓库实现
 type exchangeRateRepository struct {
-	db *gorm.DB
+	db          *gorm.DB
+	redisClient *redis.Client
 }
 
 // NewExchangeRateRepository 创建汇率仓库实例
-func NewExchangeRateRepository(db *gorm.DB) ExchangeRateRepository {
-	return &exchangeRateRepository{db: db}
+func NewExchangeRateRepository(db *gorm.DB, redisClient *redis.Client) ExchangeRateRepository {
+	return &exchangeRateRepository{
+		db:          db,
+		redisClient: redisClient,
+	}
 }
 
 // SaveRate 保存单个汇率记录
@@ -49,7 +58,14 @@ func (r *exchangeRateRepository) SaveRate(ctx context.Context, rate *model.Excha
 		rate.ValidFrom = time.Now()
 	}
 
-	return r.db.WithContext(ctx).Create(rate).Error
+	if err := r.db.WithContext(ctx).Create(rate).Error; err != nil {
+		return err
+	}
+
+	// 【缓存失效】保存新汇率后删除缓存
+	r.invalidateRateCache(ctx, rate.BaseCurrency, rate.TargetCurrency)
+
+	return nil
 }
 
 // SaveSnapshot 保存汇率快照
@@ -64,6 +80,23 @@ func (r *exchangeRateRepository) SaveSnapshot(ctx context.Context, snapshot *mod
 
 // GetLatestRate 获取最新汇率
 func (r *exchangeRateRepository) GetLatestRate(ctx context.Context, baseCurrency, targetCurrency string) (*model.ExchangeRate, error) {
+	// 【缓存优化】1. 先查 Redis 缓存
+	cacheKey := fmt.Sprintf("exchange_rate:%s:%s", baseCurrency, targetCurrency)
+
+	if r.redisClient != nil {
+		cached, err := r.redisClient.Get(ctx, cacheKey).Result()
+		if err == nil {
+			var rate model.ExchangeRate
+			if err := json.Unmarshal([]byte(cached), &rate); err == nil {
+				logger.Info("汇率缓存命中",
+					zap.String("from", baseCurrency),
+					zap.String("to", targetCurrency))
+				return &rate, nil
+			}
+		}
+	}
+
+	// 【缓存优化】2. 缓存未命中，查询数据库
 	var rate model.ExchangeRate
 	err := r.db.WithContext(ctx).
 		Where("base_currency = ? AND target_currency = ?", baseCurrency, targetCurrency).
@@ -74,7 +107,24 @@ func (r *exchangeRateRepository) GetLatestRate(ctx context.Context, baseCurrency
 		return nil, nil
 	}
 
-	return &rate, err
+	if err != nil {
+		return nil, err
+	}
+
+	// 【缓存优化】3. 写入缓存 (1小时TTL - 汇率变动频率较低)
+	if r.redisClient != nil {
+		data, err := json.Marshal(&rate)
+		if err == nil {
+			if err := r.redisClient.Set(ctx, cacheKey, data, time.Hour).Err(); err != nil {
+				logger.Warn("写入汇率缓存失败",
+					zap.String("from", baseCurrency),
+					zap.String("to", targetCurrency),
+					zap.Error(err))
+			}
+		}
+	}
+
+	return &rate, nil
 }
 
 // GetRateAtTime 获取指定时间的汇率
@@ -131,4 +181,20 @@ func (r *exchangeRateRepository) GetSnapshotHistory(ctx context.Context, baseCur
 		Find(&snapshots).Error
 
 	return snapshots, err
+}
+
+// 【缓存优化】缓存失效辅助方法
+func (r *exchangeRateRepository) invalidateRateCache(ctx context.Context, baseCurrency, targetCurrency string) {
+	if r.redisClient == nil {
+		return
+	}
+
+	cacheKey := fmt.Sprintf("exchange_rate:%s:%s", baseCurrency, targetCurrency)
+	if err := r.redisClient.Del(ctx, cacheKey).Err(); err != nil {
+		logger.Warn("删除汇率缓存失败",
+			zap.String("cache_key", cacheKey),
+			zap.Error(err))
+	} else {
+		logger.Info("汇率缓存已失效", zap.String("cache_key", cacheKey))
+	}
 }

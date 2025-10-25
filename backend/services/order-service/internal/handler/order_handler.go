@@ -36,7 +36,8 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine) {
 			orders.POST("", h.CreateOrder)
 			orders.GET("/:orderNo", h.GetOrder)
 			orders.GET("", h.QueryOrders)
-			orders.GET("/stats", h.GetOrderStats) // 添加统计接口
+			orders.POST("/batch", h.BatchGetOrders) // 批量查询订单
+			orders.GET("/stats", h.GetOrderStats)   // 添加统计接口
 			orders.POST("/:orderNo/cancel", h.CancelOrder)
 			orders.POST("/:orderNo/pay", h.PayOrder)
 			orders.POST("/:orderNo/refund", h.RefundOrder)
@@ -239,6 +240,78 @@ func (h *OrderHandler) QueryOrders(c *gin.Context) {
 		Page:     query.Page,
 		PageSize: query.PageSize,
 	}).WithTraceID(traceID)
+	c.JSON(http.StatusOK, resp)
+}
+
+// BatchGetOrdersRequest 批量查询订单请求
+type BatchGetOrdersRequest struct {
+	OrderNos   []string  `json:"order_nos" binding:"required,min=1,max=100"`
+	MerchantID uuid.UUID `json:"merchant_id" binding:"required"`
+}
+
+// BatchGetOrdersResponse 批量查询订单响应
+type BatchGetOrdersResponse struct {
+	Results map[string]interface{} `json:"results"` // orderNo -> Order
+	Failed  []string               `json:"failed"`  // 查询失败的 orderNo
+	Summary struct {
+		Total      int `json:"total"`       // 请求的总数
+		Found      int `json:"found"`       // 找到的数量
+		NotFound   int `json:"not_found"`   // 未找到的数量
+	} `json:"summary"`
+}
+
+// BatchGetOrders 批量查询订单
+//
+//	@Summary		批量查询订单
+//	@Description	一次性查询多个订单（最多100个）
+//	@Tags			Orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		BatchGetOrdersRequest	true	"批量查询请求"
+//	@Success		200		{object}	BatchGetOrdersResponse
+//	@Failure		400		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/orders/batch [post]
+func (h *OrderHandler) BatchGetOrders(c *gin.Context) {
+	var req BatchGetOrdersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		traceID := middleware.GetRequestID(c)
+		resp := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "请求参数错误", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	// 调用服务层批量查询
+	results, failed, err := h.orderService.BatchGetOrders(c.Request.Context(), req.OrderNos, req.MerchantID)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "批量查询订单失败", err.Error()).
+				WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
+
+	// 构建响应
+	response := BatchGetOrdersResponse{
+		Results: make(map[string]interface{}),
+		Failed:  failed,
+	}
+	for orderNo, order := range results {
+		response.Results[orderNo] = order
+	}
+	response.Summary.Total = len(req.OrderNos)
+	response.Summary.Found = len(results)
+	response.Summary.NotFound = len(failed)
+
+	traceID := middleware.GetRequestID(c)
+	resp := errors.NewSuccessResponse(response).WithTraceID(traceID)
 	c.JSON(http.StatusOK, resp)
 }
 
