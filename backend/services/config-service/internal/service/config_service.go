@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,15 +52,60 @@ type configService struct {
 	configRepo     repository.ConfigRepository
 	encryptionKey  string
 	redisClient    *redis.Client
+	notifier       ConfigNotifier
 }
 
 // NewConfigService 创建配置服务实例
 func NewConfigService(configRepo repository.ConfigRepository, redisClient *redis.Client) ConfigService {
+	// 从环境变量读取加密密钥（生产环境必须设置）
+	encryptionKey := getEncryptionKey()
+
+	// 初始化配置变更通知服务
+	kafkaBrokers := getKafkaBrokers()
+	notifier, err := NewConfigNotifier(kafkaBrokers)
+	if err != nil {
+		logger.Warn("Failed to initialize config notifier, notifications disabled", zap.Error(err))
+	}
+
 	return &configService{
 		configRepo:    configRepo,
-		encryptionKey: "default-encryption-key-change-me",
+		encryptionKey: encryptionKey,
 		redisClient:   redisClient,
+		notifier:      notifier,
 	}
+}
+
+// getKafkaBrokers 获取 Kafka Brokers 地址
+func getKafkaBrokers() []string {
+	brokers := getEnv("KAFKA_BROKERS", "localhost:40092")
+	return []string{brokers}
+}
+
+// getEncryptionKey 从环境变量或密钥管理系统获取加密密钥
+func getEncryptionKey() string {
+	// 优先从环境变量读取
+	if key := getEnv("CONFIG_ENCRYPTION_KEY", ""); key != "" {
+		if len(key) != 32 {
+			logger.Fatal("CONFIG_ENCRYPTION_KEY must be exactly 32 bytes for AES-256")
+		}
+		return key
+	}
+
+	// 开发环境默认密钥（仅用于本地测试）
+	env := getEnv("ENV", "development")
+	if env == "production" {
+		logger.Fatal("CONFIG_ENCRYPTION_KEY environment variable is required in production")
+	}
+
+	logger.Warn("Using default encryption key (development mode only)")
+	return "dev-key-32-bytes-please-chang"
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // Input structures
@@ -292,6 +338,21 @@ func (s *configService) UpdateConfig(ctx context.Context, id uuid.UUID, input *U
 
 	// 【缓存失效】更新成功后删除缓存
 	s.invalidateConfigCache(ctx, config.ServiceName, config.ConfigKey, config.Environment)
+
+	// 【通知推送】发布配置变更事件
+	if s.notifier != nil {
+		event := &ConfigChangeEvent{
+			ConfigID:    config.ID,
+			ServiceName: config.ServiceName,
+			ConfigKey:   config.ConfigKey,
+			Environment: config.Environment,
+			OldValue:    history.OldValue,
+			NewValue:    input.ConfigValue,
+			ChangeType:  "updated",
+			ChangedBy:   input.UpdatedBy,
+		}
+		_ = s.notifier.PublishConfigChange(ctx, event)
+	}
 
 	return config, nil
 }

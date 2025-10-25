@@ -36,6 +36,10 @@ type ConfigRepository interface {
 	ListServices(ctx context.Context) ([]*model.ServiceRegistry, error)
 	UpdateServiceHeartbeat(ctx context.Context, serviceName string) error
 	DeregisterService(ctx context.Context, serviceName string) error
+
+	// 审计日志（细粒度配置访问记录）
+	CreateAccessLog(ctx context.Context, log *model.ConfigAccessLog) error
+	ListAccessLogs(ctx context.Context, configID uuid.UUID, limit int) ([]*model.ConfigAccessLog, error)
 }
 
 type configRepository struct {
@@ -231,4 +235,20 @@ func (r *configRepository) DeregisterService(ctx context.Context, serviceName st
 		Model(&model.ServiceRegistry{}).
 		Where("service_name = ?", serviceName).
 		Update("status", "inactive").Error
+}
+
+// Audit Logs (配置访问审计)
+
+func (r *configRepository) CreateAccessLog(ctx context.Context, log *model.ConfigAccessLog) error {
+	return r.db.WithContext(ctx).Create(log).Error
+}
+
+func (r *configRepository) ListAccessLogs(ctx context.Context, configID uuid.UUID, limit int) ([]*model.ConfigAccessLog, error) {
+	var logs []*model.ConfigAccessLog
+	err := r.db.WithContext(ctx).
+		Where("config_id = ?", configID).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&logs).Error
+	return logs, err
 }

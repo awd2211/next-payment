@@ -34,7 +34,9 @@ declare -A SERVICES=(
     ["settlement-service"]=40013
     ["withdrawal-service"]=40014
     ["kyc-service"]=40015
-    ["cashier-service"]=40016
+    ["reconciliation-service"]=40020
+    ["dispute-service"]=40021
+    ["merchant-limit-service"]=40022
 )
 
 # 统计

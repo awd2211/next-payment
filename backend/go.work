@@ -20,5 +20,8 @@ use (
 	./services/settlement-service
 	./services/withdrawal-service
 	./services/merchant-config-service
+	./services/reconciliation-service
+	./services/dispute-service
+	./services/merchant-limit-service
 	./tests/integration
 )

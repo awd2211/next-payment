@@ -1,221 +1,95 @@
-# Quick Reference - API Gateway & Service Discovery
+# Payment Platform Quick Reference
 
-## 📋 Executive Summary
-
-**Decision**: APISIX + Consul
-**Timeline**: 5 weeks (25 working days)
-**Team**: 2-3 developers
-**Status**: ✅ Planning Complete, Ready for Implementation
+**快速参考 | 开发者速查表**
 
 ---
 
-## 🎯 Selected Solutions
+## 🚀 快速启动
 
-### API Gateway: Apache APISIX
-- **Why**: Cloud-native, high performance (45k+ req/s), etcd-based configuration
-- **Port**: 40080 (HTTP), 40443 (HTTPS), 40091 (Admin API)
-- **Dashboard**: http://localhost:40000 (admin/admin)
-
-### Service Discovery: Consul
-- **Why**: Mature, excellent Go SDK, production-proven
-- **Port**: 40500 (HTTP), 40600 (DNS), 48300-48302 (Gossip)
-- **UI**: http://localhost:40500/ui
-
----
-
-## 🚀 Immediate Next Steps
-
-### Step 1: Team Review Meeting (This Week)
-- [ ] Review [API_GATEWAY_AND_SERVICE_DISCOVERY_PLAN.md](./API_GATEWAY_AND_SERVICE_DISCOVERY_PLAN.md)
-- [ ] Confirm solution selection (APISIX + Consul)
-- [ ] Assign 2-3 developers
-- [ ] Request test environment resources
-
-### Step 2: Deploy Consul (Week 1, Days 1-2)
-```bash
-# Add to docker-compose.yml (already provided in plan)
-docker-compose up -d consul
-docker-compose ps consul
-
-# Verify Consul UI
-curl http://localhost:40500/v1/status/leader
-```
-
-### Step 3: First Service Integration (Week 1, Days 3-5)
-```bash
-# Modify payment-gateway to register with Consul
-cd /home/eric/payment/backend/services/payment-gateway
-# Follow code examples in API_GATEWAY_AND_SERVICE_DISCOVERY_PLAN.md
-```
-
----
-
-## 📊 Architecture Changes
-
-### Before (Current)
-```
-Client → payment-gateway:40003 → order-service:40004
-Client → merchant-service:40002 → risk-service:40006
-(15 separate endpoints, hardcoded URLs)
-```
-
-### After (Target)
-```
-Client → APISIX:40080 → Consul DNS → service instances
-       ↓
-     Route rules, rate limiting, authentication
-       ↓
-     Dynamic service discovery
-```
-
----
-
-## 🔧 Key Configuration Files
-
-### 1. Consul Registration (Bootstrap Framework)
-**File**: `backend/pkg/app/bootstrap.go`
-```go
-// Add Consul registration capability
-consulConfig := consul.DefaultConfig()
-consulConfig.Address = "localhost:40500"
-consulClient, _ := consul.NewClient(consulConfig)
-
-registration := &consul.AgentServiceRegistration{
-    ID:      fmt.Sprintf("%s-%d", cfg.ServiceName, cfg.Port),
-    Name:    cfg.ServiceName,
-    Port:    cfg.Port,
-    Address: "localhost",
-    Check: &consul.AgentServiceCheck{
-        HTTP:     fmt.Sprintf("http://localhost:%d/health", cfg.Port),
-        Interval: "10s",
-        Timeout:  "3s",
-    },
-}
-consulClient.Agent().ServiceRegister(registration)
-```
-
-### 2. Service Discovery Client
-**File**: `backend/pkg/discovery/consul_client.go`
-```go
-func (c *ConsulClient) Discover(serviceName string) ([]string, error) {
-    services, _, err := c.client.Health().Service(serviceName, "", true, nil)
-    if err != nil {
-        return nil, err
-    }
-
-    var addresses []string
-    for _, service := range services {
-        addr := fmt.Sprintf("http://%s:%d", service.Service.Address, service.Service.Port)
-        addresses = append(addresses, addr)
-    }
-    return addresses, nil
-}
-```
-
-### 3. APISIX Route Configuration
-**File**: Route for payment-gateway
-```bash
-curl http://localhost:40091/apisix/admin/routes/1 \
--H 'X-API-KEY: edd1c9f034335f136f87ad84b625c8f1' \
--X PUT -d '{
-  "uri": "/api/v1/payments/*",
-  "upstream": {
-    "type": "roundrobin",
-    "discovery_type": "consul",
-    "service_name": "payment-gateway"
-  },
-  "plugins": {
-    "limit-req": {
-      "rate": 100,
-      "burst": 50
-    }
-  }
-}'
-```
-
----
-
-## 📈 Success Metrics
-
-### Phase 1 (Week 2)
-- ✅ All 15 services registered in Consul
-- ✅ Health checks showing green in Consul UI
-- ✅ Zero manual configuration changes needed
-
-### Phase 2 (Week 4)
-- ✅ 100% traffic through APISIX
-- ✅ API latency < 50ms (P95)
-- ✅ Rate limiting active on all routes
-
-### Phase 3 (Week 5)
-- ✅ Frontend using APISIX endpoints
-- ✅ Service discovery working (scale test)
-- ✅ Monitoring dashboards complete
-
----
-
-## 💰 Cost Estimation
-
-- **Development**: 25 days × 2-3 developers = 50-75 person-days
-- **Infrastructure**:
-  - Consul: 1 node = 2GB RAM, 1 CPU
-  - APISIX: 1 node = 2GB RAM, 2 CPU
-  - etcd: 1 node = 2GB RAM, 1 CPU
-  - **Total**: ~6GB RAM, 4 CPU (staging)
-- **Production**: 3x replicas = 18GB RAM, 12 CPU
-
----
-
-## ⚠️ Risk Mitigation
-
-| Risk | Mitigation |
-|------|-----------|
-| APISIX learning curve | Start with simple routes, gradual migration |
-| Consul network issues | Deploy single-node first, test health checks |
-| Service discovery latency | Cache lookups, TTL=30s |
-| Frontend compatibility | Test each portal separately |
-| Production rollout | Blue-green deployment, gradual traffic shift |
-
----
-
-## 📚 Documentation References
-
-1. **Full Implementation Plan**: [API_GATEWAY_AND_SERVICE_DISCOVERY_PLAN.md](./API_GATEWAY_AND_SERVICE_DISCOVERY_PLAN.md)
-2. **APISIX Docs**: https://apisix.apache.org/docs/apisix/getting-started/
-3. **Consul Docs**: https://developer.hashicorp.com/consul/docs
-4. **Current Architecture**: [CLAUDE.md](../CLAUDE.md) - Service Ports section
-
----
-
-## 📞 Contact
-
-**Plan Author**: Claude Code
-**Date**: 2025-10-24
-**Version**: 1.0
-**Status**: ✅ Ready for Team Review
-
----
-
-## 🎬 Quick Start Commands (After Team Approval)
+### 启动基础设施
 
 ```bash
-# 1. Deploy infrastructure
+# 1. 启动 Docker 容器（PostgreSQL, Redis, Kafka等）
+cd /home/eric/payment
+docker-compose up -d
+
+# 2. 验证基础设施
+docker-compose ps
+```
+
+### 启动所有微服务
+
+```bash
+# 方式1: 启动所有19个服务
 cd /home/eric/payment/backend
-docker-compose up -d consul etcd apisix apisix-dashboard
+./scripts/start-all-services.sh
 
-# 2. Verify services
-docker-compose ps | grep -E "consul|apisix|etcd"
+# 方式2: 只启动 Sprint 2 服务
+./scripts/manage-sprint2-services.sh start
 
-# 3. Access UIs
-# Consul: http://localhost:40500/ui
-# APISIX Dashboard: http://localhost:40000 (admin/admin)
-
-# 4. Test health check
-curl http://localhost:40500/v1/status/leader
-
-# 5. Proceed with Week 1 tasks in main plan
+# 方式3: 单独启动某个服务（开发模式）
+cd services/payment-gateway
+air -c .air.toml
 ```
 
 ---
 
-**Next Action**: Schedule team review meeting to discuss this plan and get approval to start Week 1 implementation. 🚀
+## 📋 服务清单（19个）
+
+| 服务 | 端口 | 数据库 | 功能 |
+|------|------|--------|------|
+| admin-service | 40001 | payment_admin | 平台管理 |
+| merchant-service | 40002 | payment_merchant | 商户管理 |
+| payment-gateway | 40003 | payment_gateway | 支付网关 |
+| order-service | 40004 | payment_order | 订单管理 |
+| channel-adapter | 40005 | payment_channel | 支付通道 |
+| risk-service | 40006 | payment_risk | 风控评估 |
+| accounting-service | 40007 | payment_accounting | 复式记账 |
+| notification-service | 40008 | payment_notify | 通知推送 |
+| analytics-service | 40009 | payment_analytics | 数据分析 |
+| config-service | 40010 | payment_config | 配置管理 |
+| merchant-auth-service | 40011 | payment_merchant_auth | 商户认证 |
+| merchant-config-service | 40012 | payment_merchant_config | 商户配置 |
+| settlement-service | 40013 | payment_settlement | 结算处理 |
+| withdrawal-service | 40014 | payment_withdrawal | 提现管理 |
+| kyc-service | 40015 | payment_kyc | KYC验证 |
+| cashier-service | 40016 | payment_cashier | 收银台 |
+| **reconciliation-service** | **40020** | **payment_reconciliation** | **对账系统** |
+| **dispute-service** | **40021** | **payment_dispute** | **拒付管理** |
+| **merchant-limit-service** | **40022** | **payment_merchant_limit** | **额度管理** |
+
+---
+
+## 🔧 常用命令速查
+
+| 任务 | 命令 |
+|------|------|
+| 启动所有服务 | `./scripts/start-all-services.sh` |
+| 查看服务状态 | `./scripts/status-all-services.sh` |
+| 停止所有服务 | `./scripts/stop-all-services.sh` |
+| 检查一致性 | `./scripts/check-consistency.sh` |
+| 初始化数据库 | `./scripts/init-db.sh` |
+| Sprint 2 管理 | `./scripts/manage-sprint2-services.sh {start\|stop\|status\|logs}` |
+
+---
+
+## 📚 主要文档
+
+1. **[MICROSERVICE_UNIFIED_PATTERNS.md](MICROSERVICE_UNIFIED_PATTERNS.md)** - 统一架构模式（必读）
+2. **[SERVICE_PORTS.md](SERVICE_PORTS.md)** - 端口分配表
+3. **[SPRINT2_BACKEND_COMPLETE.md](SPRINT2_BACKEND_COMPLETE.md)** - Sprint 2 技术文档
+4. **[CONSISTENCY_FINAL_REPORT.md](CONSISTENCY_FINAL_REPORT.md)** - 一致性报告
+
+---
+
+## 🌐 监控端点
+
+- **Prometheus**: http://localhost:40090
+- **Grafana**: http://localhost:40300 (admin/admin)
+- **Jaeger**: http://localhost:40686
+- **Health Check**: http://localhost:PORT/health
+- **Metrics**: http://localhost:PORT/metrics
+
+---
+
+**最后更新**: 2025-01-20 | **服务数量**: 19

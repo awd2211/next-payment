@@ -88,3 +88,20 @@ type ServiceRegistry struct {
 func (ServiceRegistry) TableName() string {
 	return "service_registries"
 }
+
+// ConfigAccessLog 配置访问审计日志（保留用于细粒度审计）
+type ConfigAccessLog struct {
+	ID          uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ConfigID    uuid.UUID `gorm:"type:uuid;not null;index:idx_config_access_log_config" json:"config_id"`
+	UserID      string    `gorm:"type:varchar(100);index:idx_config_access_log_user" json:"user_id"`
+	Action      string    `gorm:"type:varchar(50);not null" json:"action"` // read, write, delete
+	IPAddress   string    `gorm:"type:varchar(50)" json:"ip_address"`
+	UserAgent   string    `gorm:"type:text" json:"user_agent"`
+	Success     bool      `gorm:"default:true" json:"success"`
+	FailReason  string    `gorm:"type:text" json:"fail_reason,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+func (ConfigAccessLog) TableName() string {
+	return "config_access_logs"
+}

@@ -47,6 +47,8 @@ func main() {
 			&model.ConfigHistory{},
 			&model.FeatureFlag{},
 			&model.ServiceRegistry{},
+			&model.ConfigAccessLog{}, // 审计日志（保留）
+			// 注意：权限控制使用 admin-service 的 RBAC 系统，无需独立权限表
 		},
 
 		// 启用企业级功能(gRPC 默认关闭,使用 HTTP/REST)

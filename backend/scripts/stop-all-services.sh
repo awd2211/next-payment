@@ -17,7 +17,7 @@ echo -e "${YELLOW}========================================${NC}"
 # 日志目录
 LOG_DIR="/home/eric/payment/backend/logs"
 
-# 服务列表（所有16个微服务）
+# 服务列表（所有19个微服务）
 SERVICES=(
     "admin-service"
     "merchant-service"
@@ -34,7 +34,9 @@ SERVICES=(
     "settlement-service"
     "withdrawal-service"
     "kyc-service"
-    "cashier-service"
+    "reconciliation-service"
+    "dispute-service"
+    "merchant-limit-service"
 )
 
 # 停止函数

@@ -118,7 +118,9 @@ declare -A SERVICES=(
     ["settlement-service"]=40013
     ["withdrawal-service"]=40014
     ["kyc-service"]=40015
-    ["cashier-service"]=40016
+    ["reconciliation-service"]=40020
+    ["dispute-service"]=40021
+    ["merchant-limit-service"]=40022
 )
 
 # 日志目录
@@ -167,6 +169,9 @@ start_service() {
         "kyc-service") export DB_NAME=payment_kyc ;;
         "cashier-service") export DB_NAME=payment_cashier ;;
         "merchant-config-service") export DB_NAME=payment_merchant_config ;;
+        "reconciliation-service") export DB_NAME=payment_reconciliation ;;
+        "dispute-service") export DB_NAME=payment_dispute ;;
+        "merchant-limit-service") export DB_NAME=payment_merchant_limit ;;
     esac
 
     # payment-gateway 需要配置下游服务的 HTTPS 地址
