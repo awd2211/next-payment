@@ -1,0 +1,53 @@
+.loading-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  z-index: 9999;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-content .ant-spin {
+  color: #fff;
+}
+
+.loading-content .anticon-loading {
+  color: #fff !important;
+}
+
+.loading-tip {
+  margin-top: 24px;
+  font-size: 18px;
+  font-weight: 500;
+  color: #fff;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.loading-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  min-height: 300px;
+}
+
+.loading-inline .ant-spin {
+  color: #667eea;
+}
