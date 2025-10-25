@@ -17,6 +17,11 @@ import ApiKeys from './pages/ApiKeys'
 import CashierConfig from './pages/CashierConfig'
 import CashierCheckout from './pages/CashierCheckout'
 import Notifications from './pages/Notifications'
+import MerchantChannels from './pages/MerchantChannels'
+import Withdrawals from './pages/Withdrawals'
+import Analytics from './pages/Analytics'
+import Disputes from './pages/Disputes'
+import Reconciliation from './pages/Reconciliation'
 
 function App() {
   return (
@@ -46,6 +51,11 @@ function App() {
             <Route path="api-keys" element={<ApiKeys />} />
             <Route path="cashier-config" element={<CashierConfig />} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="channels" element={<MerchantChannels />} />
+            <Route path="withdrawals" element={<Withdrawals />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="disputes" element={<Disputes />} />
+            <Route path="reconciliation" element={<Reconciliation />} />
             <Route path="account" element={<Account />} />
           </Route>
         </Routes>

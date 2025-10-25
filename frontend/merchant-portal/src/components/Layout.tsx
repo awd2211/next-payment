@@ -22,6 +22,11 @@ import {
   BankOutlined,
   KeyOutlined,
   SettingOutlined,
+  ApiOutlined,
+  MoneyCollectOutlined,
+  BarChartOutlined,
+  ExclamationCircleOutlined,
+  ReconciliationOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -51,50 +56,112 @@ const Layout = () => {
   } = theme.useToken()
 
   const menuItems: MenuProps['items'] = [
+    // Dashboard - standalone
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
-      label: t('menu.dashboard'),
+      label: t('menu.dashboard') || '仪表板',
     },
+
+    // Payment Operations - 3 items
     {
-      key: '/create-payment',
-      icon: <PlusCircleOutlined />,
-      label: t('menu.createPayment'),
+      key: 'payment-group',
+      icon: <MoneyCollectOutlined />,
+      label: t('menu.paymentOperations') || '支付业务',
+      children: [
+        {
+          key: '/create-payment',
+          icon: <PlusCircleOutlined />,
+          label: t('menu.createPayment') || '发起支付',
+        },
+        {
+          key: '/transactions',
+          icon: <TransactionOutlined />,
+          label: t('menu.transactions') || '交易记录',
+        },
+        {
+          key: '/orders',
+          icon: <ShoppingOutlined />,
+          label: t('menu.orders') || '订单管理',
+        },
+      ],
     },
+
+    // Finance Management - 4 items
     {
-      key: '/transactions',
-      icon: <TransactionOutlined />,
-      label: t('menu.transactions'),
-    },
-    {
-      key: '/orders',
-      icon: <ShoppingOutlined />,
-      label: t('menu.orders'),
-    },
-    {
-      key: '/refunds',
-      icon: <RollbackOutlined />,
-      label: t('menu.refunds'),
-    },
-    {
-      key: '/settlements',
+      key: 'finance-group',
       icon: <BankOutlined />,
-      label: t('menu.settlement'),
+      label: t('menu.financeManagement') || '财务管理',
+      children: [
+        {
+          key: '/refunds',
+          icon: <RollbackOutlined />,
+          label: t('menu.refunds') || '退款管理',
+        },
+        {
+          key: '/settlements',
+          icon: <BankOutlined />,
+          label: t('menu.settlement') || '结算账户',
+        },
+        {
+          key: '/withdrawals',
+          icon: <MoneyCollectOutlined />,
+          label: t('menu.withdrawals') || '提现管理',
+        },
+        {
+          key: '/reconciliation',
+          icon: <ReconciliationOutlined />,
+          label: t('menu.reconciliation') || '对账记录',
+        },
+      ],
     },
+
+    // Service Management - 3 items
     {
-      key: '/api-keys',
-      icon: <KeyOutlined />,
-      label: t('menu.apiKeys'),
+      key: 'service-group',
+      icon: <ApiOutlined />,
+      label: t('menu.serviceManagement') || '服务管理',
+      children: [
+        {
+          key: '/channels',
+          icon: <ApiOutlined />,
+          label: t('menu.channels') || '支付渠道',
+        },
+        {
+          key: '/cashier-config',
+          icon: <SettingOutlined />,
+          label: t('menu.cashierConfig') || '收银台配置',
+        },
+        {
+          key: '/disputes',
+          icon: <ExclamationCircleOutlined />,
+          label: t('menu.disputes') || '争议处理',
+        },
+      ],
     },
+
+    // Data & Settings - 3 items
     {
-      key: '/cashier-config',
-      icon: <SettingOutlined />,
-      label: t('menu.cashierConfig') || '收银台配置',
-    },
-    {
-      key: '/account',
-      icon: <WalletOutlined />,
-      label: t('menu.account'),
+      key: 'data-group',
+      icon: <BarChartOutlined />,
+      label: t('menu.dataAndSettings') || '数据与设置',
+      children: [
+        {
+          key: '/analytics',
+          icon: <BarChartOutlined />,
+          label: t('menu.analytics') || '数据分析',
+        },
+        {
+          key: '/api-keys',
+          icon: <KeyOutlined />,
+          label: t('menu.apiKeys') || 'API密钥',
+        },
+        {
+          key: '/account',
+          icon: <WalletOutlined />,
+          label: t('menu.account') || '账户设置',
+        },
+      ],
     },
   ]
 

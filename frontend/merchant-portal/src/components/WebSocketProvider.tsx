@@ -130,7 +130,7 @@ const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
       return () => clearTimeout(timer)
     } else if (status === ConnectionStatus.CONNECTED) {
       // 静默关闭之前的错误提示
-      antNotification.close('ws-reconnecting')
+      antNotification.destroy('ws-reconnecting')
     }
   }, [status])
 
