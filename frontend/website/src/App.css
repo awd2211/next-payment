@@ -21,6 +21,7 @@ body {
 .app-content {
   flex: 1;
   padding-top: 64px;
+  position: relative;
 }
 
 a {
@@ -30,4 +31,60 @@ a {
 
 a:hover {
   color: #1890ff;
+}
+
+/* Page Transition Animations */
+.page-enter {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
+
+.page-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.page-exit-active {
+  opacity: 0;
+  transform: translateY(-30px);
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
+
+/* Alternative fade transition for route changes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Selection color */
+::selection {
+  background: #667eea;
+  color: #fff;
+}
+
+::-moz-selection {
+  background: #667eea;
+  color: #fff;
 }

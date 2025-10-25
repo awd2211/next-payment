@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Button, Drawer } from 'antd';
+import { Button, Drawer, Space } from 'antd';
 import { MenuOutlined } from '@ant-design/icons';
 import LanguageSwitch from '../LanguageSwitch';
+import ThemeSwitch from '../ThemeSwitch';
 import './style.css';
 
 const Header = () => {
@@ -12,10 +13,12 @@ const Header = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { key: 'home', path: '/', label: t('nav.home') },
-    { key: 'products', path: '/products', label: t('nav.products') },
-    { key: 'docs', path: '/docs', label: t('nav.docs') },
-    { key: 'pricing', path: '/pricing', label: t('nav.pricing') },
+    { key: 'home', path: '/', label: t('nav.home') || 'Home' },
+    { key: 'products', path: '/products', label: t('nav.products') || 'Products' },
+    { key: 'pricing', path: '/pricing', label: t('nav.pricing') || 'Pricing' },
+    { key: 'docs', path: '/docs', label: t('nav.docs') || 'Docs' },
+    { key: 'about', path: '/about', label: t('nav.about') || 'About' },
+    { key: 'contact', path: '/contact', label: t('nav.contact') || 'Contact' },
   ];
 
   const isActive = (path: string) => {
@@ -48,21 +51,24 @@ const Header = () => {
         </nav>
 
         <div className="header-actions">
-          <LanguageSwitch />
-          <Button type="link" href="http://localhost:5173" target="_blank">
-            {t('nav.login')}
-          </Button>
-          <Button type="primary" href="http://localhost:5173" target="_blank">
-            {t('nav.register')}
-          </Button>
+          <Space size="middle">
+            <ThemeSwitch />
+            <LanguageSwitch />
+            <Button type="link" href="http://localhost:5173" target="_blank">
+              {t('nav.login')}
+            </Button>
+            <Button type="primary" href="http://localhost:5173" target="_blank">
+              {t('nav.register')}
+            </Button>
 
-          {/* Mobile Menu Button */}
-          <Button
-            className="mobile-menu-btn"
-            type="text"
-            icon={<MenuOutlined />}
-            onClick={() => setMobileMenuOpen(true)}
-          />
+            {/* Mobile Menu Button */}
+            <Button
+              className="mobile-menu-btn"
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={() => setMobileMenuOpen(true)}
+            />
+          </Space>
         </div>
       </div>
 
