@@ -1,7 +1,7 @@
 // ==================== 通用类型 ====================
 
 export interface ApiResponse<T = any> {
-  code: number
+  code: number | string  // 支持数字 0 或字符串 "SUCCESS"
   message: string
   data?: T
   error?: {

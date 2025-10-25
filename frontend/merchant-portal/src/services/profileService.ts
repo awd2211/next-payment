@@ -60,28 +60,28 @@ export const profileService = {
    * 获取商户资料
    */
   getProfile: () => {
-    return request.get<{ data: MerchantProfile }>('/merchant/profile')
+    return request.get<MerchantProfile>('/merchant/profile')
   },
 
   /**
    * 更新商户资料
    */
   updateProfile: (data: UpdateProfileRequest) => {
-    return request.put<{ data: MerchantProfile }>('/merchant/profile', data)
+    return request.put<MerchantProfile>('/merchant/profile', data)
   },
 
   /**
    * 获取商户余额
    */
   getBalance: () => {
-    return request.get<{ data: MerchantBalance }>('/merchant/balance')
+    return request.get<MerchantBalance>('/merchant/balance')
   },
 
   /**
    * 获取商户统计信息
    */
   getStats: () => {
-    return request.get<{ data: MerchantStats }>('/merchant/stats')
+    return request.get<MerchantStats>('/merchant/stats')
   },
 
   /**

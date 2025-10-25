@@ -42,14 +42,14 @@ export const feeConfigService = {
     payment_method?: string
     is_active?: boolean
   }) => {
-    return request.get<{ data: FeeConfig[] }>('/merchant/fee-configs', { params })
+    return request.get<FeeConfig[]>('/merchant/fee-configs', { params })
   },
 
   /**
    * 获取特定渠道的费率配置
    */
   getByChannel: (channel: string, paymentMethod?: string) => {
-    return request.get<{ data: FeeConfig }>('/merchant/fee-configs/channel', {
+    return request.get<FeeConfig>('/merchant/fee-configs/channel', {
       params: { channel, payment_method: paymentMethod }
     })
   },
@@ -63,7 +63,7 @@ export const feeConfigService = {
     channel: string
     payment_method?: string
   }) => {
-    return request.post<{ data: FeeCalculation }>('/merchant/fee-configs/calculate', data)
+    return request.post<FeeCalculation>('/merchant/fee-configs/calculate', data)
   },
 
   /**

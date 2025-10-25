@@ -25,14 +25,6 @@ import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
 
-interface Transaction {
-  id: string
-  order_no: string
-  amount: number
-  status: string
-  created_at: string
-}
-
 interface TrendData {
   date: string
   value: number
@@ -83,8 +75,8 @@ const Dashboard = () => {
       const response = await dashboardService.getDashboard()
       console.log('Dashboard data loaded:', response)
 
-      if (response.data) {
-        const data = response.data
+      if (response) {
+        const data = response
 
         // 更新今日数据
         setTodayStats({
@@ -136,62 +128,62 @@ const Dashboard = () => {
     }
   }
 
-  const loadStats = async () => {
+  const _loadStats = async () => {
     try {
       const response = await paymentService.getStats({})
-      if (response.data) {
-        setStats(response.data)
+      if (response) {
+        setStats(response)
       }
     } catch (error) {
       // Error handled by interceptor
     }
   }
 
-  const loadTodayStats = async () => {
+  const _loadTodayStats = async () => {
     try {
       const today = dayjs()
       const response = await paymentService.getStats({
         start_time: today.startOf('day').toISOString(),
         end_time: today.endOf('day').toISOString(),
       })
-      if (response.data) {
-        setTodayStats(response.data)
+      if (response) {
+        setTodayStats(response)
       }
     } catch (error) {
       // Error handled by interceptor
     }
   }
 
-  const loadMonthStats = async () => {
+  const _loadMonthStats = async () => {
     try {
       const month = dayjs()
       const response = await paymentService.getStats({
         start_time: month.startOf('month').toISOString(),
         end_time: month.endOf('month').toISOString(),
       })
-      if (response.data) {
-        setMonthStats(response.data)
+      if (response) {
+        setMonthStats(response)
       }
     } catch (error) {
       // Error handled by interceptor
     }
   }
 
-  const loadRecentPayments = async () => {
+  const _loadRecentPayments = async () => {
     try {
       const response = await paymentService.list({
         page: 1,
         page_size: 5,
       })
-      if (response.data && response.data.list) {
-        setRecentPayments(response.data.list)
+      if (response && response.list) {
+        setRecentPayments(response.list)
       }
     } catch (error) {
       // Error handled by interceptor
     }
   }
 
-  const loadTrendData = async () => {
+  const _loadTrendData = async () => {
     setLoading(true)
     try {
       // Get data for last 7 days
@@ -206,16 +198,16 @@ const Dashboard = () => {
           end_time: endTime,
         })
 
-        if (response.data) {
+        if (response) {
           const dateStr = date.format('MM-DD')
           data.push({
             date: dateStr,
-            value: response.data.total_amount / 100,
+            value: response.total_amount / 100,
             type: t('dashboard.revenueLabel'),
           })
           data.push({
             date: dateStr,
-            value: response.data.total_count,
+            value: response.total_count,
             type: t('dashboard.ordersLabel'),
           })
         }
@@ -228,7 +220,7 @@ const Dashboard = () => {
     }
   }
 
-  const loadChannelData = async () => {
+  const _loadChannelData = async () => {
     try {
       // Fetch payments grouped by channel
       const channels = ['stripe', 'paypal', 'alipay', 'wechat']
@@ -241,12 +233,12 @@ const Dashboard = () => {
           channel,
         })
 
-        if (response.data && response.data.total > 0) {
+        if (response && response.total > 0) {
           data.push({
             channel: channel === 'stripe' ? 'Stripe' :
                      channel === 'paypal' ? 'PayPal' :
                      channel === 'alipay' ? t('dashboard.alipay') : t('dashboard.wechat'),
-            value: response.data.total,
+            value: response.total,
           })
         }
       }
@@ -256,7 +248,7 @@ const Dashboard = () => {
     }
   }
 
-  const loadMethodData = async () => {
+  const _loadMethodData = async () => {
     try {
       // Fetch payments grouped by method
       const methods = ['card', 'bank_transfer', 'e_wallet']
@@ -269,11 +261,11 @@ const Dashboard = () => {
           method,
         })
 
-        if (response.data && response.data.total > 0) {
+        if (response && response.total > 0) {
           data.push({
             channel: method === 'card' ? t('dashboard.card') :
                      method === 'bank_transfer' ? t('dashboard.bankTransfer') : t('dashboard.eWallet'),
-            value: response.data.total,
+            value: response.total,
           })
         }
       }

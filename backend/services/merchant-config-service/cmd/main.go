@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/payment-platform/pkg/app"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/logger"
 	"payment-platform/merchant-config-service/internal/handler"
@@ -90,6 +91,12 @@ func main() {
 	logger.Info("路由注册完成")
 
 	// 7. 启动HTTP服务（gRPC已禁用）
+	// JWT 认证中间件
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	_ = jwtManager // 预留给需要认证的路由使用
+
+	// 启动服务（优雅关闭）
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal("服务启动失败: " + err.Error())
 	}
@@ -101,23 +108,9 @@ func main() {
 // Bootstrap版本: 99 行
 // 减少: 62 行 (38.5%)
 //
-// 自动获得的新功能:
-// ✅ 统一的日志初始化和优雅关闭 (logger.Sync)
-// ✅ 数据库连接池配置和健康检查
-// ✅ Redis连接管理
-// ✅ 完整的Prometheus指标收集 (/metrics端点)
-// ✅ Jaeger分布式追踪 (W3C上下文传播)
-// ✅ 全局中间件栈 (CORS, RequestID, Logger, Metrics, Tracing)
-// ✅ 限流中间件 (Redis支持)
-// ✅ 增强的健康检查端点 (/health，包含依赖状态)
-// ✅ 优雅关闭 (SIGINT/SIGTERM处理，资源清理)
-// ✅ gRPC服务器自动管理 (独立goroutine)
-// ✅ 双协议支持 (HTTP + gRPC同时运行)
-//
-// 保留的业务逻辑:
-// ✅ 3个Repository (FeeConfig, TransactionLimit, ChannelConfig)
-// ✅ 3个Service层
-// ✅ ConfigHandler统一管理
-// ✅ 完整的路由注册逻辑
-// ✅ Swagger文档UI
+// 主要简化:
+// 1. 使用 Bootstrap 自动初始化 DB, Redis, Logger, Router, Middleware
+// 2. 自动启用 Metrics, Tracing, Health, RateLimit
+// 3. 自动配置 CORS, Logger, RequestID 中间件
+// 4. 统一优雅关闭逻辑
 // ============================================================

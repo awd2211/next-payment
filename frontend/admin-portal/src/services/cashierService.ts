@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_CASHIER_API_BASE_URL || 'http://localhost:40016/api/v1'
+// 使用相对路径，通过 Vite proxy → Kong gateway → cashier-service
+// 不要直连后端服务！
+const API_BASE_URL = import.meta.env.VITE_CASHIER_API_BASE_URL || '/api/v1'
 
 const getAuthToken = () => {
   return localStorage.getItem('token') || ''

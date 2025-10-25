@@ -15,7 +15,6 @@ interface PageHeaderProps {
   subtitle?: string
   breadcrumbs?: BreadcrumbItem[]
   extra?: ReactNode
-  showBackButton?: boolean
 }
 
 const PageHeader = ({
@@ -23,7 +22,6 @@ const PageHeader = ({
   subtitle,
   breadcrumbs,
   extra,
-  showBackButton,
 }: PageHeaderProps) => {
   const navigate = useNavigate()
 
@@ -44,9 +42,8 @@ const PageHeader = ({
             <Breadcrumb.Item
               key={index}
               onClick={() => item.path && navigate(item.path)}
-              style={{ cursor: item.path ? 'pointer' : 'default' }}
             >
-              {index === 0 && <HomeOutlined />}
+              {index === 0 && <HomeOutlined style={{ marginRight: 4 }} />}
               {item.title}
             </Breadcrumb.Item>
           ))}

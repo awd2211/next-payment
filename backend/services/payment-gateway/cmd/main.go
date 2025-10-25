@@ -120,7 +120,7 @@ func main() {
 
 	// 5. 初始化Kafka Brokers（可选，如果未配置则为nil）
 	var kafkaBrokers []string
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
 		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
@@ -413,7 +413,7 @@ func main() {
 
 	// 商户后台查询路由（JWT认证 - 用于商户后台界面）
 	// 创建JWT Manager用于验证token
-	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

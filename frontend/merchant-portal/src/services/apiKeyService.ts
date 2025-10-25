@@ -48,14 +48,14 @@ export const apiKeyService = {
    * 注意：API Key和Secret只在创建时返回一次，请妥善保管
    */
   createAPIKey: (data: CreateAPIKeyInput) => {
-    return request.post<{ data: CreateAPIKeyResponse }>('/api-keys', data)
+    return request.post<CreateAPIKeyResponse>('/api-keys', data)
   },
 
   /**
    * 列出商户的所有API Keys
    */
   listAPIKeys: () => {
-    return request.get<{ data: APIKey[] }>('/api-keys')
+    return request.get<APIKey[]>('/api-keys')
   },
 
   /**
@@ -77,7 +77,7 @@ export const apiKeyService = {
    * 启用双因素认证
    */
   enable2FA: () => {
-    return request.post<{ data: { qr_code: string; secret: string } }>('/security/2fa/enable')
+    return request.post<{ qr_code: string; secret: string }>('/security/2fa/enable')
   },
 
   /**
@@ -98,13 +98,13 @@ export const apiKeyService = {
    * 获取安全设置
    */
   getSecuritySettings: () => {
-    return request.get<{ data: SecuritySettings }>('/security/settings')
+    return request.get<SecuritySettings>('/security/settings')
   },
 
   /**
    * 更新安全设置
    */
   updateSecuritySettings: (data: Partial<SecuritySettings>) => {
-    return request.put<{ data: SecuritySettings }>('/security/settings', data)
+    return request.put<SecuritySettings>('/security/settings', data)
   },
 }

@@ -150,19 +150,19 @@ export interface ExchangeRate {
 export const channelService = {
   // Admin Channel Management
   listAdminChannels: (params?: ListChannelsParams) => {
-    return request.get<{ data: Channel[] }>('/admin/channels', { params })
+    return request.get<Channel[]>('/admin/channels', { params })
   },
 
   getAdminChannel: (code: string) => {
-    return request.get<{ data: Channel }>(`/admin/channels/${code}`)
+    return request.get<Channel>(`/admin/channels/${code}`)
   },
 
   createAdminChannel: (data: CreateChannelRequest) => {
-    return request.post<{ data: Channel }>('/admin/channels', data)
+    return request.post<Channel>('/admin/channels', data)
   },
 
   updateAdminChannel: (code: string, data: UpdateChannelRequest) => {
-    return request.put<{ data: Channel }>(`/admin/channels/${code}`, data)
+    return request.put<Channel>(`/admin/channels/${code}`, data)
   },
 
   deleteAdminChannel: (code: string) => {
@@ -171,11 +171,11 @@ export const channelService = {
 
   // Channel Payment Operations
   createChannelPayment: (data: CreateChannelPaymentRequest) => {
-    return request.post<{ data: ChannelPaymentResponse }>('/channel/payments', data)
+    return request.post<ChannelPaymentResponse>('/channel/payments', data)
   },
 
   queryChannelPayment: (paymentNo: string) => {
-    return request.get<{ data: ChannelPaymentResponse }>(`/channel/payments/${paymentNo}`)
+    return request.get<ChannelPaymentResponse>(`/channel/payments/${paymentNo}`)
   },
 
   cancelChannelPayment: (paymentNo: string) => {
@@ -199,7 +199,7 @@ export const channelService = {
 
   // Pre-authorization (Stripe specific)
   createPreAuth: (data: PreAuthRequest) => {
-    return request.post<{ data: PreAuthResponse }>('/channel/pre-auth', data)
+    return request.post<PreAuthResponse>('/channel/pre-auth', data)
   },
 
   capturePreAuth: (data: {
@@ -230,13 +230,13 @@ export const channelService = {
 
   // Exchange Rates
   getExchangeRates: (fromCurrency?: string, toCurrency?: string) => {
-    return request.get<{ data: ExchangeRate[] }>('/exchange-rates', {
+    return request.get<ExchangeRate[]>('/exchange-rates', {
       params: { from_currency: fromCurrency, to_currency: toCurrency }
     })
   },
 
   getExchangeRate: (fromCurrency: string, toCurrency: string) => {
-    return request.get<{ data: ExchangeRate }>('/exchange-rates/convert', {
+    return request.get<ExchangeRate>('/exchange-rates/convert', {
       params: { from: fromCurrency, to: toCurrency }
     })
   },

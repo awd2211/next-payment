@@ -105,7 +105,7 @@ func main() {
 	emailTemplateRepo := repository.NewEmailTemplateRepository(application.DB)
 
 	// 4. 初始化 JWT Manager
-	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 
 	// 5. 初始化 Service

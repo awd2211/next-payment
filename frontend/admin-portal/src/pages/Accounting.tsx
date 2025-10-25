@@ -32,13 +32,12 @@ export default function Accounting() {
         end_date: dateRange[1],
         currency,
       })
-      if (response.code === 0 && response.data) {
-        setEntries(response.data.list)
-      } else {
-        message.error(response.error?.message || '加载失败')
+      // 响应拦截器已解包，直接使用数据
+      if (response && response.list) {
+        setEntries(response.list)
       }
     } catch (error) {
-      message.error('加载失败')
+      // 错误已被拦截器处理并显示
       console.error('Failed to fetch accounting entries:', error)
     } finally {
       setLoading(false)
@@ -52,8 +51,9 @@ export default function Accounting() {
         end_date: dateRange[1],
         currency,
       })
-      if (response.code === 0 && response.data) {
-        setSummary(response.data)
+      // 响应拦截器已解包，直接使用数据
+      if (response) {
+        setSummary(response)
       }
     } catch (error) {
       console.error('Failed to fetch accounting summary:', error)

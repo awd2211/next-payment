@@ -99,8 +99,44 @@ instance.interceptors.request.use(
 // 响应拦截器
 instance.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>): any => {
-    // 直接返回data字段
-    return response.data
+    const data = response.data
+    console.log('[Response Interceptor] Raw response:', data)
+
+    // 如果响应包含 code 字段，说明是标准的 ApiResponse 格式
+    if (data && typeof data === 'object' && 'code' in data) {
+      // 检查是否成功响应（code 可能是数字 0 或字符串 "SUCCESS"）
+      const isSuccess = data.code === 0 || data.code === 'SUCCESS'
+
+      if (!isSuccess) {
+        // 如果不是成功响应，构造一个 AxiosError 兼容的错误对象
+        const error: any = new Error(data.message || '请求失败')
+        error.name = 'AxiosError'
+        error.code = data.code
+        error.response = {
+          ...response,
+          data: data,
+          status: response.status  // 保持原始 HTTP 状态码（可能是 200）
+        }
+        error.isAxiosError = true
+        console.log('[Response Interceptor] Rejecting non-success response:', data)
+        return Promise.reject(error)
+      }
+
+      // 解包 data 字段
+      let result = data.data
+
+      // 有些接口（如 merchant-service）返回双层嵌套 {data: {data: {...}}}
+      // 需要再解包一层
+      if (result && typeof result === 'object' && 'data' in result && !('list' in result)) {
+        result = result.data
+      }
+
+      console.log('[Response Interceptor] Unwrapped result:', result)
+      return result
+    }
+    // 非标准格式：直接返回整个响应数据
+    console.log('[Response Interceptor] Returning raw data (no code field)')
+    return data
   },
   async (error: AxiosError<ApiResponse>) => {
     if (!error.response) {
@@ -207,47 +243,54 @@ function getErrorMessage(status: number): string {
 
 /**
  * 封装的请求方法
+ * 注意：响应拦截器已经解包了 ApiResponse，直接返回 T 类型数据
  */
 class Request {
   /**
    * GET请求
+   * 注意：响应拦截器已经解包了 ApiResponse，直接返回 T 类型数据
    */
-  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return instance.get(url, config)
   }
 
   /**
    * POST请求
+   * 注意：响应拦截器已经解包了 ApiResponse，直接返回 T 类型数据
    */
-  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     return instance.post(url, data, config)
   }
 
   /**
    * PUT请求
+   * 注意：响应拦截器已经解包了 ApiResponse，直接返回 T 类型数据
    */
-  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     return instance.put(url, data, config)
   }
 
   /**
    * DELETE请求
+   * 注意：响应拦截器已经解包了 ApiResponse，直接返回 T 类型数据
    */
-  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return instance.delete(url, config)
   }
 
   /**
    * PATCH请求
+   * 注意：响应拦截器已经解包了 ApiResponse，直接返回 T 类型数据
    */
-  patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     return instance.patch(url, data, config)
   }
 
   /**
    * 上传文件
+   * 注意：响应拦截器已经解包了 ApiResponse，直接返回 T 类型数据
    */
-  upload<T = any>(url: string, formData: FormData, onProgress?: (progress: number) => void): Promise<ApiResponse<T>> {
+  upload<T = any>(url: string, formData: FormData, onProgress?: (progress: number) => void): Promise<T> {
     return instance.post(url, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

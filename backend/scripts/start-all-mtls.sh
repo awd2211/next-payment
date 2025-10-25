@@ -155,6 +155,9 @@ SERVICES=(
 export ENABLE_MTLS=true
 export TLS_CA_FILE="$(pwd)/certs/ca/ca-cert.pem"
 
+# 统一的 JWT 密钥（所有微服务共享，支持跨服务认证）
+export JWT_SECRET="payment-platform-secret-key-2024"
+
 # 启动所有服务
 for service_info in "${SERVICES[@]}"; do
     SERVICE_NAME="${service_info%:*}"

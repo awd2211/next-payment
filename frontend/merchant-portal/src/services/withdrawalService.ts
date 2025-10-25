@@ -89,7 +89,7 @@ export const withdrawalService = {
    * 获取单个提现申请详情
    */
   getById: (id: string) => {
-    return request.get<{ data: Withdrawal }>(`/withdrawals/${id}`)
+    return request.get<Withdrawal>(`/withdrawals/${id}`)
   },
 
   /**
@@ -131,7 +131,7 @@ export const withdrawalService = {
    * 获取提现统计信息
    */
   getStats: (params?: { start_time?: string; end_time?: string; currency?: string }) => {
-    return request.get<{ data: WithdrawalStats }>('/withdrawals/stats', { params })
+    return request.get<WithdrawalStats>('/withdrawals/stats', { params })
   },
 
   /**

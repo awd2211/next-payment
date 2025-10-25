@@ -91,7 +91,7 @@ func Bootstrap(cfg ServiceConfig) (*App, error) {
 	// 3. 初始化数据库
 	dbConfig := db.Config{
 		Host:     config.GetEnv("DB_HOST", "localhost"),
-		Port:     config.GetEnvInt("DB_PORT", 5432),
+		Port:     config.GetEnvInt("DB_PORT", 40432),  // Docker compose PostgreSQL port
 		User:     config.GetEnv("DB_USER", "postgres"),
 		Password: config.GetEnv("DB_PASSWORD", "postgres"),
 		DBName:   config.GetEnv("DB_NAME", cfg.DBName),
@@ -122,6 +122,7 @@ func Bootstrap(cfg ServiceConfig) (*App, error) {
 
 	app := &App{
 		DB:          database,
+		Logger:      logger.Log,
 		Config:      cfg,
 		Environment: env,
 	}
@@ -130,7 +131,7 @@ func Bootstrap(cfg ServiceConfig) (*App, error) {
 	if cfg.EnableRedis {
 		redisConfig := db.RedisConfig{
 			Host:     config.GetEnv("REDIS_HOST", "localhost"),
-			Port:     config.GetEnvInt("REDIS_PORT", 6379),
+			Port:     config.GetEnvInt("REDIS_PORT", 40379),  // Docker compose Redis port
 			Password: config.GetEnv("REDIS_PASSWORD", ""),
 			DB:       config.GetEnvInt("REDIS_DB", 0),
 		}

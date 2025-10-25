@@ -50,7 +50,7 @@ const { RangePicker } = DatePicker
 const Orders = () => {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
-  const [statsLoading, setStatsLoading] = useState(false)
+  const [_statsLoading, setStatsLoading] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -68,7 +68,7 @@ const Orders = () => {
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null)
 
   // 计算激活的过滤器数量
-  const activeFilterCount = [
+  const _activeFilterCount = [
     merchantOrderIdFilter,
     statusFilter,
     customerEmailFilter,
@@ -103,7 +103,7 @@ const Orders = () => {
       })
       console.log('Orders response:', response)
       // 安全处理响应数据，兼容不同的数据结构
-      const ordersData = response.data
+      const ordersData = response
       if (ordersData) {
         // 如果data直接是数组，使用它；否则使用data.list
         const ordersList = Array.isArray(ordersData) ? ordersData : (ordersData.list || [])
@@ -132,8 +132,8 @@ const Orders = () => {
     setStatsLoading(true)
     try {
       const response = await orderService.getStats({})
-      if (response.data) {
-        setStats(response.data)
+      if (response) {
+        setStats(response)
       }
     } catch (error) {
       // Error handled by interceptor
@@ -142,7 +142,7 @@ const Orders = () => {
     }
   }
 
-  const handleClearFilters = () => {
+  const _handleClearFilters = () => {
     setMerchantOrderIdFilter('')
     setStatusFilter(undefined)
     setCustomerEmailFilter('')

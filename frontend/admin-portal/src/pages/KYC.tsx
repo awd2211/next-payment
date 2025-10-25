@@ -21,13 +21,12 @@ export default function KYC() {
     setLoading(true)
     try {
       const response = await kycService.list({ page: 1, page_size: 20 })
-      if (response.code === 0 && response.data) {
-        setData(response.data.list)
-      } else {
-        message.error(response.error?.message || '加载失败')
+      // 响应拦截器已解包，直接使用数据
+      if (response && response.list) {
+        setData(response.list)
       }
     } catch (error) {
-      message.error('加载失败')
+      // 错误已被拦截器处理并显示
       console.error('Failed to fetch KYC applications:', error)
     } finally {
       setLoading(false)

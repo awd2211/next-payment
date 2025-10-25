@@ -78,7 +78,7 @@ export const kycService = {
    * 获取单个KYC申请详情
    */
   getById: (id: string) => {
-    return request.get<{ data: KYCApplication }>(`/kyc/applications/${id}`)
+    return request.get<KYCApplication>(`/kyc/applications/${id}`)
   },
 
   /**
@@ -106,7 +106,7 @@ export const kycService = {
    * 获取KYC统计信息
    */
   getStats: () => {
-    return request.get<{ data: KYCStats }>('/kyc/stats')
+    return request.get<KYCStats>('/kyc/stats')
   },
 
   /**
@@ -120,7 +120,7 @@ export const kycService = {
    * 获取商户的KYC历史记录
    */
   getHistory: (merchantId: string) => {
-    return request.get<{ data: KYCApplication[] }>(`/kyc/merchants/${merchantId}/history`)
+    return request.get<KYCApplication[]>(`/kyc/merchants/${merchantId}/history`)
   },
 }
 

@@ -153,14 +153,15 @@ function App() {
               </Suspense>
             }
           />
-          <Route
+          {/* 暂时禁用 - 后端 API 未实现 */}
+          {/* <Route
             path="channels"
             element={
               <Suspense fallback={<PageLoading />}>
                 <Channels />
               </Suspense>
             }
-          />
+          /> */}
           <Route
             path="accounting"
             element={

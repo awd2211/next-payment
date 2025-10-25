@@ -38,7 +38,7 @@ export const transactionLimitService = {
     limit_type?: string
     currency?: string
   }) => {
-    return request.get<{ data: TransactionLimit[] }>('/merchant/transaction-limits', { params })
+    return request.get<TransactionLimit[]>('/merchant/transaction-limits', { params })
   },
 
   /**
@@ -48,7 +48,7 @@ export const transactionLimitService = {
     limit_type?: string
     currency?: string
   }) => {
-    return request.get<{ data: LimitStatus[] }>('/merchant/transaction-limits/status', { params })
+    return request.get<LimitStatus[]>('/merchant/transaction-limits/status', { params })
   },
 
   /**

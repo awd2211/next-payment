@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, DatePicker, Select, Space, Tabs } from 'antd'
+import { Card, Row, Col, Statistic, DatePicker, Space, Tabs } from 'antd'
 import {
   LineChart,
   Line,
@@ -30,7 +30,7 @@ const { RangePicker } = DatePicker
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']
 
 export default function Analytics() {
-  const [loading, setLoading] = useState(false)
+  const [_loading, setLoading] = useState(false)
   const [dateRange, setDateRange] = useState<[string, string]>([
     dayjs().subtract(30, 'days').format('YYYY-MM-DD'),
     dayjs().format('YYYY-MM-DD'),

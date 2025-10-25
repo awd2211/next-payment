@@ -11,10 +11,11 @@ import type { DashboardData } from '@payment/shared/types'
 export const getDashboardData = async (
   timePeriod: 'today' | '7days' | '30days' = 'today',
 ): Promise<DashboardData> => {
+  // 响应拦截器已解包，直接返回数据
   const response = await request.get<DashboardData>('/dashboard', {
     params: { period: timePeriod },
   })
-  return response.data!
+  return response
 }
 
 /**

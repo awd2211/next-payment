@@ -79,14 +79,14 @@ export const riskService = {
    * Get risk alert detail
    */
   getAlert: (id: string) => {
-    return request.get<{ data: RiskAlert }>(`/merchant/risk/alerts/${id}`)
+    return request.get<RiskAlert>(`/merchant/risk/alerts/${id}`)
   },
 
   /**
    * Get risk assessment for a payment
    */
   getAssessment: (paymentNo: string) => {
-    return request.get<{ data: RiskAssessment }>(`/merchant/risk/assessments/${paymentNo}`)
+    return request.get<RiskAssessment>(`/merchant/risk/assessments/${paymentNo}`)
   },
 
   /**

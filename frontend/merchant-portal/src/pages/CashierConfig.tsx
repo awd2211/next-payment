@@ -46,7 +46,7 @@ const CashierConfigPage = () => {
   const { t } = useTranslation()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
-  const [config, setConfig] = useState<CashierConfig | null>(null)
+  const [_config, setConfig] = useState<CashierConfig | null>(null)
   const [analytics, setAnalytics] = useState<any>(null)
   const [paymentLinkModalVisible, setPaymentLinkModalVisible] = useState(false)
   const [generatedLink, setGeneratedLink] = useState('')

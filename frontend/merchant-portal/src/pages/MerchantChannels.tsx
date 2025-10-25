@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card, Table, Button, Tag, Modal, Form, Input, Switch, Space, message, Alert } from 'antd'
-import { PlusOutlined, EditOutlined, ApiOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { EditOutlined, ApiOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 
 interface MerchantChannel {

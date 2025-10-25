@@ -53,9 +53,10 @@ const Roles = () => {
     setLoading(true)
     try {
       const response = await roleService.list({ page, page_size: pageSize })
-      if (response?.data) {
-        setRoles(response.data.data || [])
-        setTotal(response.data.pagination?.total || 0)
+      // 响应拦截器已解包，直接使用数据
+      if (response) {
+        setRoles(response.data || [])
+        setTotal(response.pagination?.total || 0)
       }
     } catch (error) {
       // Error handled by interceptor

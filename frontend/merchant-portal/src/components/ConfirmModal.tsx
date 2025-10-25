@@ -1,7 +1,7 @@
 import { Modal, ModalProps } from 'antd'
 import { ExclamationCircleOutlined } from '@ant-design/icons'
 
-interface ConfirmModalConfig extends Omit<ModalProps, 'open'> {
+interface ConfirmModalConfig extends Omit<ModalProps, 'open' | 'width'> {
   title?: string
   content?: string
   onOk?: () => void | Promise<void>
@@ -9,6 +9,7 @@ interface ConfirmModalConfig extends Omit<ModalProps, 'open'> {
   okText?: string
   cancelText?: string
   danger?: boolean
+  width?: string | number
 }
 
 /**

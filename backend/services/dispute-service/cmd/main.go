@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/payment-platform/pkg/app"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 
 	"payment-platform/dispute-service/internal/client"
@@ -53,6 +54,11 @@ func main() {
 
 	// Create handler
 	disputeHandler := handler.NewDisputeHandler(disputeService)
+
+	// JWT 认证中间件
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	_ = jwtManager // 预留给需要认证的路由使用
 
 	// Register routes
 	api := application.Router.Group("/api/v1")

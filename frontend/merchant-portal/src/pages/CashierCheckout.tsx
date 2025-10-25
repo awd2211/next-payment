@@ -55,7 +55,7 @@ const CashierCheckout = () => {
   const [selectedChannel, setSelectedChannel] = useState<string>('')
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failed'>('pending')
   const [errorMessage, setErrorMessage] = useState<string>('')
-  const [pageLoadTime] = useState(Date.now())
+  const [_pageLoadTime] = useState(Date.now())
 
   useEffect(() => {
     if (!sessionToken) {

@@ -137,7 +137,7 @@ func main() {
 
 	// Kafka Brokers配置 (用于事件消费)
 	var kafkaBrokers []string
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
 		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
@@ -148,7 +148,7 @@ func main() {
 
 		// 获取Kafka配置
 		if len(kafkaBrokers) == 0 {
-			kafkaBrokers = strings.Split(config.GetEnv("KAFKA_BROKERS", "localhost:9092"), ",")
+			kafkaBrokers = strings.Split(config.GetEnv("KAFKA_BROKERS", "localhost:40092"), ",")
 		}
 
 		// 创建邮件生产者
@@ -223,7 +223,7 @@ func main() {
 	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// 9. 初始化JWT管理器
-	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 
 	// JWT认证中间件

@@ -21,9 +21,9 @@ const Login = () => {
       const response = await merchantService.login(values)
       console.log('Login response:', response)
 
-      // 后端返回的数据结构是 {data: {data: {token, merchant}}}
-      if (response.data?.data) {
-        const { token, merchant } = response.data.data
+      // 响应拦截器已解包，直接获取 LoginResponse 数据
+      if (response && response.token) {
+        const { token, merchant } = response
 
         console.log('Saving auth:', { token: token ? 'exists' : 'null', merchant })
 
@@ -65,8 +65,8 @@ const Login = () => {
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
           borderRadius: 12,
           overflow: 'hidden',
+          border: 'none',
         }}
-        bordered={false}
       >
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <Title level={2} style={{ marginBottom: 8, fontWeight: 600 }}>
@@ -133,6 +133,15 @@ const Login = () => {
             </Button>
           </Form.Item>
         </Form>
+
+        <div style={{ textAlign: 'center', marginTop: 24, paddingTop: 24, borderTop: '1px solid #f0f0f0' }}>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+            测试账户
+          </Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            test@example.com / Password123
+          </Text>
+        </div>
       </Card>
     </div>
   )

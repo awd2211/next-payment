@@ -60,7 +60,7 @@ const Transactions = () => {
   const [detailDrawerVisible, setDetailDrawerVisible] = useState(false)
   const [refundModalVisible, setRefundModalVisible] = useState(false)
   const [refundForm] = Form.useForm()
-  const [filterVisible, setFilterVisible] = useState(false)
+  const [_filterVisible, _setFilterVisible] = useState(false)
 
   // Filter states
   const [orderIdFilter, setOrderIdFilter] = useState('')
@@ -105,9 +105,9 @@ const Transactions = () => {
         start_time: dateRange?.[0]?.toISOString(),
         end_time: dateRange?.[1]?.toISOString(),
       })
-      // 修复：response.data 包含 list 和 total
-      setPayments(response.data?.list || [])
-      setTotal(response.data?.total || 0)
+      // 修复：response 包含 list 和 total
+      setPayments(response?.list || [])
+      setTotal(response?.total || 0)
     } catch (error) {
       // Error handled by interceptor
       console.error('Failed to load payments:', error)
@@ -128,8 +128,8 @@ const Transactions = () => {
     setStatsLoading(true)
     try {
       const response = await paymentService.getStats({})
-      if (response.data) {
-        setStats(response.data)
+      if (response) {
+        setStats(response)
       }
     } catch (error) {
       // Stats API 可能不存在，暂时忽略错误
@@ -213,7 +213,7 @@ const Transactions = () => {
     }
   }
 
-  const resetFilters = () => {
+  const _resetFilters = () => {
     setOrderIdFilter('')
     setStatusFilter(undefined)
     setChannelFilter(undefined)

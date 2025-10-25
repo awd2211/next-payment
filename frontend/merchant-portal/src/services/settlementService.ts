@@ -67,7 +67,7 @@ export const settlementService = {
 
   // 获取结算统计
   getStats: (params: SettlementStatsParams) => {
-    return request.get<{ data: SettlementStats }>('/settlements/stats', { params })
+    return request.get<SettlementStats>('/settlements/stats', { params })
   },
 
   // 创建结算单

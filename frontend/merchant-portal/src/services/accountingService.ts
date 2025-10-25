@@ -199,11 +199,11 @@ export interface CurrencyConversion {
 export const accountingService = {
   // Account Management
   createAccount: (data: Partial<Account>) => {
-    return request.post<{ data: Account }>('/accounts', data)
+    return request.post<Account>('/accounts', data)
   },
 
   getAccount: (id: string) => {
-    return request.get<{ data: Account }>(`/accounts/${id}`)
+    return request.get<Account>(`/accounts/${id}`)
   },
 
   listAccounts: (params?: { page?: number; page_size?: number; merchant_id?: string }) => {
@@ -227,11 +227,11 @@ export const accountingService = {
     transaction_type: string
     description?: string
   }) => {
-    return request.post<{ data: Transaction }>('/transactions', data)
+    return request.post<Transaction>('/transactions', data)
   },
 
   getTransaction: (transactionNo: string) => {
-    return request.get<{ data: Transaction }>(`/transactions/${transactionNo}`)
+    return request.get<Transaction>(`/transactions/${transactionNo}`)
   },
 
   listTransactions: (params?: {
@@ -254,11 +254,11 @@ export const accountingService = {
     currency: string
     settlement_date?: string
   }) => {
-    return request.post<{ data: Settlement }>('/settlements', data)
+    return request.post<Settlement>('/settlements', data)
   },
 
   getSettlement: (settlementNo: string) => {
-    return request.get<{ data: Settlement }>(`/settlements/${settlementNo}`)
+    return request.get<Settlement>(`/settlements/${settlementNo}`)
   },
 
   listSettlements: (params?: {
@@ -281,11 +281,11 @@ export const accountingService = {
     currency: string
     bank_account_id: string
   }) => {
-    return request.post<{ data: Withdrawal }>('/withdrawals', data)
+    return request.post<Withdrawal>('/withdrawals', data)
   },
 
   getWithdrawal: (withdrawalNo: string) => {
-    return request.get<{ data: Withdrawal }>(`/withdrawals/${withdrawalNo}`)
+    return request.get<Withdrawal>(`/withdrawals/${withdrawalNo}`)
   },
 
   listWithdrawals: (params?: {
@@ -329,11 +329,11 @@ export const accountingService = {
     due_date: string
     items?: any[]
   }) => {
-    return request.post<{ data: Invoice }>('/invoices', data)
+    return request.post<Invoice>('/invoices', data)
   },
 
   getInvoice: (invoiceNo: string) => {
-    return request.get<{ data: Invoice }>(`/invoices/${invoiceNo}`)
+    return request.get<Invoice>(`/invoices/${invoiceNo}`)
   },
 
   listInvoices: (params?: {
@@ -363,11 +363,11 @@ export const accountingService = {
     end_date: string
     merchant_id?: string
   }) => {
-    return request.post<{ data: Reconciliation }>('/reconciliations', data)
+    return request.post<Reconciliation>('/reconciliations', data)
   },
 
   getReconciliation: (reconciliationNo: string) => {
-    return request.get<{ data: Reconciliation }>(`/reconciliations/${reconciliationNo}`)
+    return request.get<Reconciliation>(`/reconciliations/${reconciliationNo}`)
   },
 
   listReconciliations: (params?: {
@@ -414,11 +414,11 @@ export const accountingService = {
     to_currency: string
     from_amount: number
   }) => {
-    return request.post<{ data: CurrencyConversion }>('/conversions', data)
+    return request.post<CurrencyConversion>('/conversions', data)
   },
 
   getConversion: (conversionNo: string) => {
-    return request.get<{ data: CurrencyConversion }>(`/conversions/${conversionNo}`)
+    return request.get<CurrencyConversion>(`/conversions/${conversionNo}`)
   },
 
   listConversions: (params?: {

@@ -75,9 +75,10 @@ const AuditLogs = () => {
         start_time: dateRange?.[0]?.toISOString(),
         end_time: dateRange?.[1]?.toISOString(),
       })
-      if (response?.data) {
-        setLogs(response.data.data || [])
-        setTotal(response.data.pagination?.total || 0)
+      // 响应拦截器已解包，直接使用数据
+      if (response) {
+        setLogs(response.data || [])
+        setTotal(response.pagination?.total || 0)
       }
     } catch (error) {
       // Error handled by interceptor
@@ -89,8 +90,9 @@ const AuditLogs = () => {
   const loadStats = async () => {
     try {
       const response = await auditLogService.getStats({})
-      if (response?.data?.data) {
-        setStats(response.data.data)
+      // 响应拦截器已解包，直接使用数据
+      if (response && response.data) {
+        setStats(response.data)
       }
     } catch (error) {
       // Error handled by interceptor

@@ -89,19 +89,19 @@ export interface CreateChannelConfigInput {
 export const configService = {
   // ========== 费率配置 ==========
   listFeeConfigs: (merchantId: string) => {
-    return request.get<{ data: FeeConfig[] }>(`/fee-configs/merchant/${merchantId}`)
+    return request.get<FeeConfig[]>(`/fee-configs/merchant/${merchantId}`)
   },
 
   getFeeConfig: (id: string) => {
-    return request.get<{ data: FeeConfig }>(`/fee-configs/${id}`)
+    return request.get<FeeConfig>(`/fee-configs/${id}`)
   },
 
   createFeeConfig: (data: CreateFeeConfigInput) => {
-    return request.post<{ data: FeeConfig }>('/fee-configs', data)
+    return request.post<FeeConfig>('/fee-configs', data)
   },
 
   updateFeeConfig: (id: string, data: Partial<CreateFeeConfigInput>) => {
-    return request.put<{ data: FeeConfig }>(`/fee-configs/${id}`, data)
+    return request.put<FeeConfig>(`/fee-configs/${id}`, data)
   },
 
   deleteFeeConfig: (id: string) => {
@@ -109,7 +109,7 @@ export const configService = {
   },
 
   calculateFee: (amount: number, channel: string, paymentMethod: string) => {
-    return request.post<{ data: { fee: number; total: number } }>('/fee-configs/calculate-fee', {
+    return request.post<{ fee: number; total: number }>('/fee-configs/calculate-fee', {
       amount,
       channel,
       payment_method: paymentMethod,
@@ -118,19 +118,19 @@ export const configService = {
 
   // ========== 交易限额 ==========
   listTransactionLimits: (merchantId: string) => {
-    return request.get<{ data: TransactionLimit[] }>(`/transaction-limits/merchant/${merchantId}`)
+    return request.get<TransactionLimit[]>(`/transaction-limits/merchant/${merchantId}`)
   },
 
   getTransactionLimit: (id: string) => {
-    return request.get<{ data: TransactionLimit }>(`/transaction-limits/${id}`)
+    return request.get<TransactionLimit>(`/transaction-limits/${id}`)
   },
 
   createTransactionLimit: (data: CreateTransactionLimitInput) => {
-    return request.post<{ data: TransactionLimit }>('/transaction-limits', data)
+    return request.post<TransactionLimit>('/transaction-limits', data)
   },
 
   updateTransactionLimit: (id: string, data: Partial<CreateTransactionLimitInput>) => {
-    return request.put<{ data: TransactionLimit }>(`/transaction-limits/${id}`, data)
+    return request.put<TransactionLimit>(`/transaction-limits/${id}`, data)
   },
 
   deleteTransactionLimit: (id: string) => {
@@ -138,7 +138,7 @@ export const configService = {
   },
 
   checkLimit: (amount: number, currency: string) => {
-    return request.post<{ data: { allowed: boolean; reason?: string } }>('/transaction-limits/check-limit', {
+    return request.post<{ allowed: boolean; reason?: string }>('/transaction-limits/check-limit', {
       amount,
       currency,
     })
@@ -146,23 +146,23 @@ export const configService = {
 
   // ========== 渠道配置 ==========
   listChannelConfigs: (merchantId: string) => {
-    return request.get<{ data: ChannelConfig[] }>(`/channel-configs/merchant/${merchantId}`)
+    return request.get<ChannelConfig[]>(`/channel-configs/merchant/${merchantId}`)
   },
 
   getChannelConfig: (id: string) => {
-    return request.get<{ data: ChannelConfig }>(`/channel-configs/${id}`)
+    return request.get<ChannelConfig>(`/channel-configs/${id}`)
   },
 
   getMerchantChannel: (merchantId: string, channel: string) => {
-    return request.get<{ data: ChannelConfig }>(`/channel-configs/merchant/${merchantId}/channel/${channel}`)
+    return request.get<ChannelConfig>(`/channel-configs/merchant/${merchantId}/channel/${channel}`)
   },
 
   createChannelConfig: (data: CreateChannelConfigInput) => {
-    return request.post<{ data: ChannelConfig }>('/channel-configs', data)
+    return request.post<ChannelConfig>('/channel-configs', data)
   },
 
   updateChannelConfig: (id: string, data: Partial<CreateChannelConfigInput>) => {
-    return request.put<{ data: ChannelConfig }>(`/channel-configs/${id}`, data)
+    return request.put<ChannelConfig>(`/channel-configs/${id}`, data)
   },
 
   deleteChannelConfig: (id: string) => {
@@ -170,10 +170,10 @@ export const configService = {
   },
 
   enableChannel: (id: string) => {
-    return request.post<{ data: ChannelConfig }>(`/channel-configs/${id}/enable`)
+    return request.post<ChannelConfig>(`/channel-configs/${id}/enable`)
   },
 
   disableChannel: (id: string) => {
-    return request.post<{ data: ChannelConfig }>(`/channel-configs/${id}/disable`)
+    return request.post<ChannelConfig>(`/channel-configs/${id}/disable`)
   },
 }

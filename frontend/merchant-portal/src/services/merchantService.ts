@@ -96,11 +96,11 @@ export interface LoginResponse {
 
 export const merchantService = {
   login: (data: LoginRequest) => {
-    return request.post<{ data: LoginResponse }>('/merchant/login', data)
+    return request.post<LoginResponse>('/merchant/login', data)
   },
 
   getProfile: () => {
-    return request.get<{ data: Merchant }>('/merchant/profile')
+    return request.get<Merchant>('/merchant/profile')
   },
 
   updateProfile: (data: UpdateMerchantRequest) => {
@@ -108,15 +108,15 @@ export const merchantService = {
   },
 
   getBalance: () => {
-    return request.get<{ data: MerchantBalance }>('/merchant/balance')
+    return request.get<MerchantBalance>('/merchant/balance')
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return request.get<{ data: MerchantStats }>('/merchant/stats', { params })
+    return request.get<MerchantStats>('/merchant/stats', { params })
   },
 
   regenerateApiKey: () => {
-    return request.post<{ data: RegenerateApiKeyResponse }>('/merchant/regenerate-api-key')
+    return request.post<RegenerateApiKeyResponse>('/merchant/regenerate-api-key')
   },
 
   changePassword: (data: { old_password: string; new_password: string }) => {

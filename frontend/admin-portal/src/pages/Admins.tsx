@@ -55,9 +55,10 @@ const Admins = () => {
         keyword: searchKeyword,
         status: statusFilter,
       })
-      if (response?.data) {
-        setAdmins(response.data.data || [])
-        setTotal(response.data.pagination?.total || 0)
+      // 响应拦截器已解包，直接使用数据
+      if (response) {
+        setAdmins(response.data || [])
+        setTotal(response.pagination?.total || 0)
       }
     } catch (error) {
       // Error handled by interceptor

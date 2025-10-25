@@ -59,7 +59,7 @@ func main() {
 	cashierHandler := handler.NewCashierHandler(cashierService)
 
 	// 5. 设置 JWT 认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key")
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

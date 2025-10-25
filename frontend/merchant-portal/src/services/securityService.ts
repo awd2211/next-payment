@@ -75,7 +75,7 @@ export const securityService = {
   },
 
   getSecurityEvent: (id: string) => {
-    return request.get<{ data: SecurityEvent }>(`/security/events/${id}`)
+    return request.get<SecurityEvent>(`/security/events/${id}`)
   },
 
   // Login Attempts
@@ -84,16 +84,16 @@ export const securityService = {
   },
 
   getLoginAttempt: (id: string) => {
-    return request.get<{ data: LoginAttempt }>(`/security/login-attempts/${id}`)
+    return request.get<LoginAttempt>(`/security/login-attempts/${id}`)
   },
 
   // IP Whitelist
   addIPToWhitelist: (data: { ip_address: string; description?: string }) => {
-    return request.post<{ data: IPWhitelist }>('/security/ip-whitelist', data)
+    return request.post<IPWhitelist>('/security/ip-whitelist', data)
   },
 
   listIPWhitelist: (adminId?: string) => {
-    return request.get<{ data: IPWhitelist[] }>('/security/ip-whitelist', {
+    return request.get<IPWhitelist[]>('/security/ip-whitelist', {
       params: { admin_id: adminId }
     })
   },
@@ -103,18 +103,18 @@ export const securityService = {
   },
 
   checkIPWhitelisted: (ipAddress: string) => {
-    return request.get<{ data: { is_whitelisted: boolean } }>('/security/ip-whitelist/check', {
+    return request.get<{ is_whitelisted: boolean }>('/security/ip-whitelist/check', {
       params: { ip_address: ipAddress }
     })
   },
 
   // Security Settings
   getSecuritySettings: () => {
-    return request.get<{ data: SecuritySettings }>('/security/settings')
+    return request.get<SecuritySettings>('/security/settings')
   },
 
   updateSecuritySettings: (data: Partial<SecuritySettings>) => {
-    return request.put<{ data: SecuritySettings }>('/security/settings', data)
+    return request.put<SecuritySettings>('/security/settings', data)
   },
 
   // Account Security

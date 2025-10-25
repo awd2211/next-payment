@@ -48,14 +48,14 @@ export const authService = {
    * 商户登录
    */
   login: (data: LoginRequest) => {
-    return request.post<{ data: LoginResponse }>('/merchant/login', data)
+    return request.post<LoginResponse>('/merchant/login', data)
   },
 
   /**
    * 商户注册
    */
   register: (data: RegisterRequest) => {
-    return request.post<{ data: LoginResponse }>('/merchant/register', data)
+    return request.post<LoginResponse>('/merchant/register', data)
   },
 
   /**
@@ -104,7 +104,7 @@ export const authService = {
    * 刷新Token
    */
   refreshToken: (refreshToken: string) => {
-    return request.post<{ data: { token: string; refresh_token: string } }>('/auth/refresh', {
+    return request.post<{ token: string; refresh_token: string }>('/auth/refresh', {
       refresh_token: refreshToken,
     })
   },

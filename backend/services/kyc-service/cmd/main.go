@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/payment-platform/pkg/app"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
@@ -87,6 +88,13 @@ func main() {
 
 	// 6. 注册 KYC 路由
 	kycHandler.RegisterRoutes(application.Router)
+
+	// JWT 认证中间件
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	_ = jwtManager // 预留给需要认证的路由使用
+
+
 
 	// 7. 启动服务（仅 HTTP，优雅关闭）
 	if err := application.RunWithGracefulShutdown(); err != nil {

@@ -93,14 +93,14 @@ export const reportService = {
    * Create a new report
    */
   create: (data: CreateReportRequest) => {
-    return request.post<{ data: Report }>('/merchant/reports', data)
+    return request.post<Report>('/merchant/reports', data)
   },
 
   /**
    * Get report detail
    */
   getDetail: (reportNo: string) => {
-    return request.get<{ data: Report }>(`/merchant/reports/${reportNo}`)
+    return request.get<Report>(`/merchant/reports/${reportNo}`)
   },
 
   /**
@@ -123,28 +123,28 @@ export const reportService = {
    * Get report templates
    */
   getTemplates: () => {
-    return request.get<{ data: ReportTemplate[] }>('/merchant/reports/templates')
+    return request.get<ReportTemplate[]>('/merchant/reports/templates')
   },
 
   /**
    * Get scheduled reports
    */
   listScheduled: (params?: { page?: number; page_size?: number }) => {
-    return request.get<{ data: { list: ScheduledReport[]; total: number } }>('/merchant/reports/scheduled', { params })
+    return request.get<{ list: ScheduledReport[]; total: number }>('/merchant/reports/scheduled', { params })
   },
 
   /**
    * Create scheduled report
    */
   createScheduled: (data: CreateScheduledReportRequest) => {
-    return request.post<{ data: ScheduledReport }>('/merchant/reports/scheduled', data)
+    return request.post<ScheduledReport>('/merchant/reports/scheduled', data)
   },
 
   /**
    * Update scheduled report
    */
   updateScheduled: (id: string, data: Partial<CreateScheduledReportRequest>) => {
-    return request.put<{ data: ScheduledReport }>(`/merchant/reports/scheduled/${id}`, data)
+    return request.put<ScheduledReport>(`/merchant/reports/scheduled/${id}`, data)
   },
 
   /**
@@ -165,14 +165,14 @@ export const reportService = {
    * Run scheduled report immediately
    */
   runScheduled: (id: string) => {
-    return request.post<{ data: Report }>(`/merchant/reports/scheduled/${id}/run`)
+    return request.post<Report>(`/merchant/reports/scheduled/${id}/run`)
   },
 
   /**
    * Get available report fields
    */
   getFields: (reportType: string) => {
-    return request.get<{ data: string[] }>(`/merchant/reports/fields/${reportType}`)
+    return request.get<string[]>(`/merchant/reports/fields/${reportType}`)
   },
 
   /**

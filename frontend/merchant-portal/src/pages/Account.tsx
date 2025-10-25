@@ -10,7 +10,6 @@ import {
   Select,
   Table,
   Space,
-  Descriptions,
   Modal,
   message,
   Alert,
@@ -39,7 +38,6 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
 import { validatePasswordStrength } from '../utils/security'
-import { merchantService } from '../services/merchantService'
 import dayjs from 'dayjs'
 
 const { Title, Text, Paragraph } = Typography

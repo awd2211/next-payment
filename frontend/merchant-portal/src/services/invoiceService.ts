@@ -84,7 +84,7 @@ export const invoiceService = {
    * Get invoice summary
    */
   getSummary: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get<{ data: InvoiceSummary }>('/merchant/invoices/summary', { params })
+    return request.get<InvoiceSummary>('/merchant/invoices/summary', { params })
   },
 
   /**
@@ -117,14 +117,14 @@ export const invoiceService = {
    * Get invoice items detail
    */
   getItems: (invoiceNo: string) => {
-    return request.get<{ data: InvoiceItem[] }>(`/merchant/invoices/${invoiceNo}/items`)
+    return request.get<InvoiceItem[]>(`/merchant/invoices/${invoiceNo}/items`)
   },
 
   /**
    * Get upcoming invoice preview
    */
   getUpcoming: () => {
-    return request.get<{ data: Invoice }>('/merchant/invoices/upcoming')
+    return request.get<Invoice>('/merchant/invoices/upcoming')
   },
 
   /**

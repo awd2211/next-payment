@@ -78,14 +78,14 @@ export const auditLogService = {
    * Get audit log detail by ID
    */
   getById: (id: string) => {
-    return request.get<{ data: AuditLogDetail }>(`/merchant/audit-logs/${id}`)
+    return request.get<AuditLogDetail>(`/merchant/audit-logs/${id}`)
   },
 
   /**
    * Get audit log statistics
    */
   getStats: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get<{ data: AuditLogStats }>('/merchant/audit-logs/stats', { params })
+    return request.get<AuditLogStats>('/merchant/audit-logs/stats', { params })
   },
 
   /**

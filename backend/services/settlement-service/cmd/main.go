@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/payment-platform/pkg/app"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
@@ -129,7 +130,7 @@ func main() {
 
 	// 5. 初始化Kafka EventPublisher (新增: 事件驱动架构)
 	var eventPublisher *kafka.EventPublisher
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 		eventPublisher = kafka.NewEventPublisher(kafkaBrokers)
@@ -166,21 +167,26 @@ func main() {
 	}
 	logger.Info("Settlement Saga Service 初始化完成")
 
-	// 7. 初始化Handler
+	// 7. 初始化 JWT Manager（用于认证）
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	authMiddleware := middleware.AuthMiddleware(jwtManager)
+
+	// 8. 初始化Handler
 	settlementHandler := handler.NewSettlementHandler(settlementService)
 	settlementAccountHandler := handler.NewSettlementAccountHandler(settlementAccountService)
 
-	// 8. 注册Swagger UI
+	// 9. 注册Swagger UI
 	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// 9. 注册路由
+	// 10. 注册路由
 	settlementHandler.RegisterRoutes(application.Router)
 
 	// 注册结算账户路由
 	handler.RegisterSettlementAccountRoutes(
 		application.Router.Group("/api/v1"),
 		settlementAccountHandler,
-		middleware.AuthMiddleware(nil),
+		authMiddleware,
 	)
 
 	// 9. 启动HTTP服务（gRPC已禁用）

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/payment-platform/pkg/app"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
@@ -89,6 +90,13 @@ func main() {
 	// configGrpcServer := grpcServer.NewConfigServer(configService)
 	// pb.RegisterConfigServiceServer(application.GRPCServer, configGrpcServer)
 	// logger.Info(fmt.Sprintf("gRPC Server 已注册，将监听端口 %d", config.GetEnvInt("GRPC_PORT", 50010)))
+
+	// JWT 认证中间件
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	_ = jwtManager // 预留给需要认证的路由使用
+
+
 
 	// 8. 启动服务（仅 HTTP，优雅关闭）
 	if err := application.RunWithGracefulShutdown(); err != nil {

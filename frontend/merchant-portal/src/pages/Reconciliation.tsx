@@ -59,7 +59,7 @@ interface UnmatchedItem {
 
 export default function Reconciliation() {
   const [loading, setLoading] = useState(false)
-  const [records, setRecords] = useState<ReconciliationRecord[]>([
+  const [records, _setRecords] = useState<ReconciliationRecord[]>([
     {
       id: '1',
       recon_no: 'REC-2024-02-01',

@@ -87,7 +87,7 @@ func main() {
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 
 	// 6. 初始化JWT Manager
-	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key")
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

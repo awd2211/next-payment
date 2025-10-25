@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/payment-platform/pkg/app"
+	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
@@ -73,7 +74,7 @@ func main() {
 
 	// 启动事件消费Workers (消费所有业务事件进行统计分析)
 	var kafkaBrokers []string
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "")
+	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
 		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
@@ -114,6 +115,12 @@ func main() {
 		logger.Info("未配置Kafka Brokers，事件消费Workers未启动")
 	}
 
+	// JWT 认证中间件
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
+	_ = jwtManager // 预留给需要认证的路由使用
+
+	// 启动服务（优雅关闭）
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal(fmt.Sprintf("服务启动失败: %v", err))
 	}

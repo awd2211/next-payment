@@ -85,7 +85,7 @@ export const notificationService = {
   },
 
   getTemplate: (id: string) => {
-    return request.get<{ data: EmailTemplate }>(`/email-templates/${id}`)
+    return request.get<EmailTemplate>(`/email-templates/${id}`)
   },
 
   listTemplates: (params: ListTemplatesParams) => {
@@ -106,7 +106,7 @@ export const notificationService = {
   },
 
   getNotification: (id: string) => {
-    return request.get<{ data: Notification }>(`/notifications/${id}`)
+    return request.get<Notification>(`/notifications/${id}`)
   },
 }
 

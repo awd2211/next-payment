@@ -19,13 +19,12 @@ export default function Channels() {
     setLoading(true)
     try {
       const response = await channelService.list({ page: 1, page_size: 50 })
-      if (response.code === 0 && response.data) {
-        setData(response.data.list)
-      } else {
-        message.error(response.error?.message || '加载失败')
+      // 响应拦截器已解包，直接使用数据
+      if (response && response.list) {
+        setData(response.list)
       }
     } catch (error) {
-      message.error('加载失败')
+      // 错误已被拦截器处理并显示
       console.error('Failed to fetch channels:', error)
     } finally {
       setLoading(false)
@@ -55,15 +54,11 @@ export default function Channels() {
       content: `确定要删除支付渠道 "${record.channel_name}" 吗?`,
       onOk: async () => {
         try {
-          const response = await channelService.delete(record.id)
-          if (response.code === 0) {
-            message.success('删除成功')
-            fetchData()
-          } else {
-            message.error(response.error?.message || '删除失败')
-          }
+          await channelService.delete(record.id)
+          message.success('删除成功')
+          fetchData()
         } catch (error) {
-          message.error('删除失败')
+          // 错误已被拦截器处理并显示
           console.error('Failed to delete channel:', error)
         }
       },
@@ -72,15 +67,11 @@ export default function Channels() {
 
   const handleToggleStatus = async (record: Channel, enabled: boolean) => {
     try {
-      const response = await channelService.toggleEnable(record.id, enabled)
-      if (response.code === 0) {
-        message.success(`已${enabled ? '启用' : '禁用'}渠道`)
-        fetchData()
-      } else {
-        message.error(response.error?.message || '操作失败')
-      }
+      await channelService.toggleEnable(record.id, enabled)
+      message.success(`已${enabled ? '启用' : '禁用'}渠道`)
+      fetchData()
     } catch (error) {
-      message.error('操作失败')
+      // 错误已被拦截器处理并显示
       console.error('Failed to toggle channel status:', error)
     }
   }
@@ -124,16 +115,13 @@ export default function Channels() {
         response = await channelService.create(createData)
       }
 
-      if (response.code === 0) {
-        message.success(editingRecord ? '更新成功' : '创建成功')
-        setModalVisible(false)
-        form.resetFields()
-        fetchData()
-      } else {
-        message.error(response.error?.message || '操作失败')
-      }
+      // 响应拦截器已解包，成功则执行
+      message.success(editingRecord ? '更新成功' : '创建成功')
+      setModalVisible(false)
+      form.resetFields()
+      fetchData()
     } catch (error) {
-      message.error('操作失败')
+      // 错误已被拦截器处理并显示
       console.error('Failed to save channel:', error)
     }
   }

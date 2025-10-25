@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Form, Input, Button, Switch, message, Divider, QRCode, Space, List, Tag, Modal } from 'antd'
+import { Card, Form, Input, Button, message, Divider, QRCode, Space, List, Tag, Modal } from 'antd'
 import { SafetyOutlined, LockOutlined, MobileOutlined, GlobalOutlined } from '@ant-design/icons'
 
 export default function SecuritySettings() {
@@ -82,7 +82,7 @@ export default function SecuritySettings() {
 
   const handleRevokeSession = async (sessionId: string) => {
     try {
-      // TODO: 调用 apiKeyService.revokeSession(sessionId)
+      // TODO: 调用 apiKeyService.revokeSession(_sessionId)
       message.success('会话已撤销')
       fetchSessions()
     } catch (error) {

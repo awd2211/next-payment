@@ -35,8 +35,9 @@ const SystemConfigs = () => {
     setLoading(true)
     try {
       const response = await systemConfigService.listGrouped()
-      if (response?.data?.data) {
-        setConfigs(response.data.data.configs || {})
+      // 响应拦截器已解包，直接使用数据
+      if (response && response.data) {
+        setConfigs(response.data.configs || {})
       }
     } catch (error) {
       // Error handled by interceptor

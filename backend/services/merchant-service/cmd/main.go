@@ -78,7 +78,7 @@ func main() {
 	logger.Info("正在启动 Merchant Service (Phase 10 清理后)...")
 
 	// 2. 初始化JWT Manager
-	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 
 	// 3. 初始化Repository（仅保留核心）
