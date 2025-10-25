@@ -55,8 +55,10 @@ const Admins = () => {
         keyword: searchKeyword,
         status: statusFilter,
       })
-      setAdmins(response.data)
-      setTotal(response.pagination.total)
+      if (response?.data) {
+        setAdmins(response.data.data || [])
+        setTotal(response.data.pagination?.total || 0)
+      }
     } catch (error) {
       // Error handled by interceptor
     } finally {

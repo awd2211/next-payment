@@ -12,20 +12,19 @@ import {
   Select,
   Input,
   DatePicker,
-  Modal,
   Descriptions,
   Drawer,
+  message,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
-  SearchOutlined,
   EyeOutlined,
   FileTextOutlined,
   UserOutlined,
   ApiOutlined,
   SafetyOutlined,
-  ClockCircleOutlined,
   DownloadOutlined,
+  SearchOutlined,
 } from '@ant-design/icons'
 import { auditLogService, AuditLog, AuditLogStats } from '../services/auditLogService'
 import dayjs from 'dayjs'
@@ -76,8 +75,10 @@ const AuditLogs = () => {
         start_time: dateRange?.[0]?.toISOString(),
         end_time: dateRange?.[1]?.toISOString(),
       })
-      setLogs(response.data)
-      setTotal(response.pagination.total)
+      if (response?.data) {
+        setLogs(response.data.data || [])
+        setTotal(response.data.pagination?.total || 0)
+      }
     } catch (error) {
       // Error handled by interceptor
     } finally {
@@ -88,7 +89,9 @@ const AuditLogs = () => {
   const loadStats = async () => {
     try {
       const response = await auditLogService.getStats({})
-      setStats(response.data)
+      if (response?.data?.data) {
+        setStats(response.data.data)
+      }
     } catch (error) {
       // Error handled by interceptor
     }

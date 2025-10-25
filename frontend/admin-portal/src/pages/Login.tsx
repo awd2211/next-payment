@@ -16,7 +16,9 @@ const Login = () => {
     setLoading(true)
     try {
       const response = await authService.login(values)
-      setAuth(response.token, response.refresh_token, response.admin)
+      if (response.data) {
+        setAuth(response.data.token, response.data.refresh_token, response.data.admin)
+      }
       message.success('登录成功')
       navigate('/dashboard')
     } catch (error) {

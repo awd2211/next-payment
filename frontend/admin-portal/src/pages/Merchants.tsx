@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react'
 import {
   Typography,
-  Table,
   Button,
-  Modal,
   Form,
   Input,
   Select,
   Space,
   Tag,
   message,
-  Popconfirm,
   Dropdown,
   Card,
   Row,
   Col,
   Statistic,
+  Modal,
+  Table,
+  Popconfirm,
 } from 'antd'
 import {
   PlusOutlined,
@@ -37,7 +37,6 @@ import { merchantService, Merchant, CreateMerchantRequest, UpdateMerchantRequest
 import dayjs from 'dayjs'
 
 const { Title } = Typography
-const { TextArea } = Input
 
 const Merchants = () => {
   const [loading, setLoading] = useState(false)
@@ -76,8 +75,10 @@ const Merchants = () => {
         status: statusFilter,
         kyc_status: kycStatusFilter,
       })
-      setMerchants(response.data.list || [])
-      setTotal(response.data.total)
+      if (response?.data?.data) {
+        setMerchants(response.data.data.list || [])
+        setTotal(response.data.data.total || 0)
+      }
     } catch (error) {
       // Error handled by interceptor
     } finally {
@@ -511,8 +512,8 @@ const Merchants = () => {
           pageSize: pageSize,
           total: total,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, pageSize) => {
+          showTotal: (total: number) => `共 ${total} 条`,
+          onChange: (page: number, pageSize: number) => {
             setPage(page)
             setPageSize(pageSize)
           },

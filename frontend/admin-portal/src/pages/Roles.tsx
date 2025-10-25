@@ -53,8 +53,10 @@ const Roles = () => {
     setLoading(true)
     try {
       const response = await roleService.list({ page, page_size: pageSize })
-      setRoles(response.data)
-      setTotal(response.pagination.total)
+      if (response?.data) {
+        setRoles(response.data.data || [])
+        setTotal(response.data.pagination?.total || 0)
+      }
     } catch (error) {
       // Error handled by interceptor
     } finally {

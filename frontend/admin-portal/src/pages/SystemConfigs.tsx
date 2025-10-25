@@ -35,7 +35,9 @@ const SystemConfigs = () => {
     setLoading(true)
     try {
       const response = await systemConfigService.listGrouped()
-      setConfigs(response.data.configs)
+      if (response?.data?.data) {
+        setConfigs(response.data.data.configs || {})
+      }
     } catch (error) {
       // Error handled by interceptor
     } finally {
