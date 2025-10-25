@@ -3,6 +3,7 @@ import request from './request'
 export interface Merchant {
   id: string
   name: string
+  email: string
   code: string
   type: string
   status: string

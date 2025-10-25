@@ -128,7 +128,9 @@ const Transactions = () => {
     setStatsLoading(true)
     try {
       const response = await paymentService.getStats({})
-      setStats(response.data)
+      if (response.data) {
+        setStats(response.data)
+      }
     } catch (error) {
       // Stats API 可能不存在，暂时忽略错误
       console.log('Stats API not available yet')

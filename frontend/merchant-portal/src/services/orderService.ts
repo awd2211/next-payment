@@ -72,13 +72,10 @@ export interface ListOrdersParams {
 }
 
 export interface ListOrdersResponse {
-  data: Order[]
-  pagination: {
-    page: number
-    page_size: number
-    total: number
-    total_page: number
-  }
+  list: Order[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface CreateOrderRequest {
@@ -113,6 +110,6 @@ export const orderService = {
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return request.get<{ data: OrderStats }>('/orders/stats', { params })
+    return request.get<OrderStats>('/orders/stats', { params })
   },
 }

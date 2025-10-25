@@ -157,7 +157,7 @@ export const safeJSONParse = <T = any>(str: string, defaultValue: T): T => {
  */
 export const preventClickjacking = (): void => {
   if (window.self !== window.top) {
-    window.top!.location = window.self.location
+    window.top!.location.href = window.self.location.href
   }
 }
 

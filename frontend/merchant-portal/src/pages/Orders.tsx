@@ -108,7 +108,7 @@ const Orders = () => {
         // 如果data直接是数组，使用它；否则使用data.list
         const ordersList = Array.isArray(ordersData) ? ordersData : (ordersData.list || [])
         setOrders(ordersList)
-        setTotal(ordersData.total || response.pagination?.total || 0)
+        setTotal(ordersData.total || 0)
       } else {
         setOrders([])
         setTotal(0)
@@ -132,7 +132,9 @@ const Orders = () => {
     setStatsLoading(true)
     try {
       const response = await orderService.getStats({})
-      setStats(response.data)
+      if (response.data) {
+        setStats(response.data)
+      }
     } catch (error) {
       // Error handled by interceptor
     } finally {

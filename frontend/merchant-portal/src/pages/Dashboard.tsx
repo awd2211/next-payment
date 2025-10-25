@@ -92,7 +92,10 @@ const Dashboard = () => {
           total_amount: data.today_amount || 0,
           success_count: Math.floor((data.today_payments || 0) * (data.today_success_rate || 0)),
           failed_count: 0,
+          pending_count: 0,
           success_rate: data.today_success_rate || 0,
+          today_amount: data.today_amount || 0,
+          today_count: data.today_payments || 0,
         })
 
         // 更新本月数据
@@ -101,7 +104,10 @@ const Dashboard = () => {
           total_amount: data.month_amount || 0,
           success_count: Math.floor((data.month_payments || 0) * (data.month_success_rate || 0)),
           failed_count: 0,
+          pending_count: 0,
           success_rate: data.month_success_rate || 0,
+          today_amount: 0,
+          today_count: 0,
         })
 
         // 更新趋势数据
@@ -133,7 +139,9 @@ const Dashboard = () => {
   const loadStats = async () => {
     try {
       const response = await paymentService.getStats({})
-      setStats(response.data)
+      if (response.data) {
+        setStats(response.data)
+      }
     } catch (error) {
       // Error handled by interceptor
     }
@@ -146,7 +154,9 @@ const Dashboard = () => {
         start_time: today.startOf('day').toISOString(),
         end_time: today.endOf('day').toISOString(),
       })
-      setTodayStats(response.data)
+      if (response.data) {
+        setTodayStats(response.data)
+      }
     } catch (error) {
       // Error handled by interceptor
     }
@@ -159,7 +169,9 @@ const Dashboard = () => {
         start_time: month.startOf('month').toISOString(),
         end_time: month.endOf('month').toISOString(),
       })
-      setMonthStats(response.data)
+      if (response.data) {
+        setMonthStats(response.data)
+      }
     } catch (error) {
       // Error handled by interceptor
     }
@@ -171,7 +183,9 @@ const Dashboard = () => {
         page: 1,
         page_size: 5,
       })
-      setRecentPayments(response.data)
+      if (response.data && response.data.list) {
+        setRecentPayments(response.data.list)
+      }
     } catch (error) {
       // Error handled by interceptor
     }
@@ -192,17 +206,19 @@ const Dashboard = () => {
           end_time: endTime,
         })
 
-        const dateStr = date.format('MM-DD')
-        data.push({
-          date: dateStr,
-          value: response.data.total_amount / 100,
-          type: t('dashboard.revenueLabel'),
-        })
-        data.push({
-          date: dateStr,
-          value: response.data.total_count,
-          type: t('dashboard.ordersLabel'),
-        })
+        if (response.data) {
+          const dateStr = date.format('MM-DD')
+          data.push({
+            date: dateStr,
+            value: response.data.total_amount / 100,
+            type: t('dashboard.revenueLabel'),
+          })
+          data.push({
+            date: dateStr,
+            value: response.data.total_count,
+            type: t('dashboard.ordersLabel'),
+          })
+        }
       }
       setTrendData(data)
     } catch (error) {
@@ -225,12 +241,12 @@ const Dashboard = () => {
           channel,
         })
 
-        if (response.pagination.total > 0) {
+        if (response.data && response.data.total > 0) {
           data.push({
             channel: channel === 'stripe' ? 'Stripe' :
                      channel === 'paypal' ? 'PayPal' :
                      channel === 'alipay' ? t('dashboard.alipay') : t('dashboard.wechat'),
-            value: response.pagination.total,
+            value: response.data.total,
           })
         }
       }
@@ -253,11 +269,11 @@ const Dashboard = () => {
           method,
         })
 
-        if (response.pagination.total > 0) {
+        if (response.data && response.data.total > 0) {
           data.push({
             channel: method === 'card' ? t('dashboard.card') :
                      method === 'bank_transfer' ? t('dashboard.bankTransfer') : t('dashboard.eWallet'),
-            value: response.pagination.total,
+            value: response.data.total,
           })
         }
       }

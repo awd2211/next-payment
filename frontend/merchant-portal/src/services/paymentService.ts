@@ -46,13 +46,10 @@ export interface ListPaymentsParams {
 }
 
 export interface ListPaymentsResponse {
-  data: Payment[]
-  pagination: {
-    page: number
-    page_size: number
-    total: number
-    total_page: number
-  }
+  list: Payment[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export const paymentService = {
@@ -65,7 +62,7 @@ export const paymentService = {
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return request.get<{ data: PaymentStats }>('/merchant/payments/stats', { params })
+    return request.get<PaymentStats>('/merchant/payments/stats', { params })
   },
 
   refund: (id: string, data: { amount?: number; reason: string }) => {
