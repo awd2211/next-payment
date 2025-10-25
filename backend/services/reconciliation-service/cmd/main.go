@@ -4,6 +4,8 @@ import (
 	"log"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/config"
 
@@ -26,6 +28,10 @@ func main() {
 			&model.ReconciliationTask{},
 			&model.ReconciliationRecord{},
 			&model.ChannelSettlementFile{},
+			&model.ReconciliationDifference{},
+			&model.ReconciliationReport{},
+			&model.InternalTransaction{},
+			&model.ChannelTransaction{},
 		},
 
 		// Feature flags
@@ -76,6 +82,16 @@ func main() {
 	// Register routes
 	api := application.Router.Group("/api/v1")
 	reconHandler.RegisterRoutes(api)
+
+	// TODO: Automation features (scheduler, detector, notifier) will be integrated later
+	// The extended models are ready for automation features:
+	// - ReconciliationDifference for detailed difference tracking
+	// - ReconciliationReport for daily reports
+	// - InternalTransaction and ChannelTransaction for transaction storage
+
+	application.Logger.Info("Reconciliation service initialized successfully",
+		zap.String("version", "1.0.0"),
+		zap.Bool("automation_enabled", false))
 
 	// Start service with graceful shutdown
 	application.RunWithGracefulShutdown()

@@ -15,6 +15,7 @@ type SettlementRepository interface {
 	Update(ctx context.Context, settlement *model.Settlement) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Settlement, error)
 	GetBySettlementNo(ctx context.Context, settlementNo string) (*model.Settlement, error)
+	GetByMerchantAndDate(ctx context.Context, merchantID uuid.UUID, startDate, endDate time.Time) (*model.Settlement, error)
 	List(ctx context.Context, query *SettlementQuery) ([]*model.Settlement, int64, error)
 	CreateItem(ctx context.Context, item *model.SettlementItem) error
 	CreateItems(ctx context.Context, items []*model.SettlementItem) error
@@ -66,6 +67,17 @@ func (r *settlementRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 func (r *settlementRepository) GetBySettlementNo(ctx context.Context, settlementNo string) (*model.Settlement, error) {
 	var settlement model.Settlement
 	err := r.db.WithContext(ctx).Where("settlement_no = ?", settlementNo).First(&settlement).Error
+	if err != nil {
+		return nil, err
+	}
+	return &settlement, nil
+}
+
+func (r *settlementRepository) GetByMerchantAndDate(ctx context.Context, merchantID uuid.UUID, startDate, endDate time.Time) (*model.Settlement, error) {
+	var settlement model.Settlement
+	err := r.db.WithContext(ctx).
+		Where("merchant_id = ? AND start_date = ? AND end_date = ?", merchantID, startDate, endDate).
+		First(&settlement).Error
 	if err != nil {
 		return nil, err
 	}

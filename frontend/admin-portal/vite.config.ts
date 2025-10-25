@@ -137,107 +137,18 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000, // 提高警告阈值
   },
   server: {
-    port: 5173, // 使用标准端口
+    port: 5173, // Admin Portal 端口
     proxy: {
-      // Admin Service (管理员、角色、权限、审计、系统配置)
-      '/api/v1/admin': {
-        target: 'http://localhost:40001',
+      // 所有 API 请求通过 Kong API Gateway 统一转发
+      '/api': {
+        target: 'http://localhost:40080', // Kong Proxy
         changeOrigin: true,
+        rewrite: (path) => path,
       },
-      '/api/v1/admins': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/roles': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/permissions': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/audit-logs': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/system-configs': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/email-templates': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/preferences': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-      '/api/v1/security': {
-        target: 'http://localhost:40001',
-        changeOrigin: true,
-      },
-
-      // Merchant Service (商户管理)
-      '/api/v1/merchant': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-      '/api/v1/merchants': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-      '/api/v1/api-keys': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-      '/api/v1/webhooks': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-      '/api/v1/channels': {
-        target: 'http://localhost:40002',
-        changeOrigin: true,
-      },
-
-      // Payment Gateway (支付)
-      '/api/v1/payments': {
-        target: 'http://localhost:40003',
-        changeOrigin: true,
-      },
-
-      // Order Service (订单)
-      '/api/v1/orders': {
-        target: 'http://localhost:40004',
-        changeOrigin: true,
-      },
-
-      // Analytics Service (数据分析)
-      '/api/v1/analytics': {
-        target: 'http://localhost:40009',
-        changeOrigin: true,
-      },
-      '/api/v1/metrics': {
-        target: 'http://localhost:40009',
-        changeOrigin: true,
-      },
-
-      // Config Service (配置中心)
-      '/api/v1/configs': {
-        target: 'http://localhost:40010',
-        changeOrigin: true,
-      },
-      '/api/v1/feature-flags': {
-        target: 'http://localhost:40010',
-        changeOrigin: true,
-      },
-
-      // Cashier Service (收银台)
-      '/api/v1/admin/cashier': {
-        target: 'http://localhost:40016',
-        changeOrigin: true,
-      },
-      '/api/v1/cashier': {
-        target: 'http://localhost:40016',
+      // WebSocket 连接（如果需要）
+      '/ws': {
+        target: 'ws://localhost:40080',
+        ws: true,
         changeOrigin: true,
       },
     },

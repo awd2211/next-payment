@@ -111,7 +111,7 @@ func main() {
 	taskScheduler.RegisterTask(&scheduler.Task{
 		Name:        "daily_auto_settlement",
 		Interval:    24 * time.Hour, // 每24小时
-		Func:        service.RunDailySettlement(application.DB, settlementRepo),
+		Func:        service.RunDailySettlement(application.DB, settlementRepo, accountingClient, merchantClient, notificationClient),
 		Description: "每日自动结算任务",
 	})
 

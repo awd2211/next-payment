@@ -16,13 +16,18 @@ const Login = () => {
     setLoading(true)
     try {
       const response = await authService.login(values)
-      if (response.data) {
-        setAuth(response.data.token, response.data.refresh_token, response.data.admin)
+      console.log('Login response:', response) // Debug log
+      // 后端直接返回 {token, refresh_token, admin}，request.ts 拦截器已返回 response.data
+      if (response && response.token) {
+        setAuth(response.token, response.refresh_token, response.admin)
+        message.success('登录成功')
+        navigate('/dashboard')
+      } else {
+        message.error('登录响应格式错误')
       }
-      message.success('登录成功')
-      navigate('/dashboard')
     } catch (error) {
       // Error already handled by API interceptor
+      console.error('Login error:', error)
     } finally {
       setLoading(false)
     }
@@ -91,7 +96,7 @@ const Login = () => {
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            默认账号: admin / admin123456
+            默认账号: admin / Admin@123
           </Text>
         </div>
       </Card>

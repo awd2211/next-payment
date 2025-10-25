@@ -11,11 +11,9 @@ import {
   LockOutlined,
   CloudOutlined,
   RocketOutlined,
-  TeamOutlined,
 } from '@ant-design/icons';
+import SEO from '../../components/SEO';
 import './style.css';
-
-const { TabPane } = Tabs;
 
 const Products = () => {
   const { t } = useTranslation();
