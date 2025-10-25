@@ -368,3 +368,147 @@ func ConvertAmountFromStripe(amount int64, currency string) int64 {
 	// 其他货币直接返回
 	return amount
 }
+
+// CreatePreAuth 创建预授权（使用 Stripe PaymentIntent 的 manual capture）
+func (a *StripeAdapter) CreatePreAuth(ctx context.Context, req *CreatePreAuthRequest) (*CreatePreAuthResponse, error) {
+	// Stripe 使用 PaymentIntent 的 manual capture 模式实现预授权
+	params := &stripe.PaymentIntentParams{
+		Amount:        stripe.Int64(ConvertAmountToStripe(req.Amount, req.Currency)),
+		Currency:      stripe.String(req.Currency),
+		Description:   stripe.String(req.Description),
+		CaptureMethod: stripe.String("manual"), // 手动确认，实现预授权
+		Metadata: map[string]string{
+			"pre_auth_no": req.PreAuthNo,
+			"order_no":    req.OrderNo,
+			"type":        "pre_auth",
+		},
+	}
+
+	// 设置客户信息
+	if req.CustomerEmail != "" {
+		params.ReceiptEmail = stripe.String(req.CustomerEmail)
+	}
+
+	// 设置自动支付方式
+	params.AutomaticPaymentMethods = &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+		Enabled: stripe.Bool(true),
+	}
+
+	// 调用 Stripe API 创建支付意图
+	pi, err := paymentintent.New(params)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Stripe 预授权失败: %w", err)
+	}
+
+	// 计算过期时间（Stripe PaymentIntent 默认24小时过期）
+	var expiresAt *int64
+	if req.ExpiresAt != nil {
+		expiresAt = req.ExpiresAt
+	}
+
+	return &CreatePreAuthResponse{
+		ChannelPreAuthNo: pi.ID,
+		ClientSecret:     pi.ClientSecret,
+		Status:           convertStripeStatus(pi.Status),
+		ExpiresAt:        expiresAt,
+		Extra: map[string]interface{}{
+			"payment_intent_id": pi.ID,
+			"client_secret":     pi.ClientSecret,
+		},
+	}, nil
+}
+
+// CapturePreAuth 确认预授权（capture PaymentIntent）
+func (a *StripeAdapter) CapturePreAuth(ctx context.Context, req *CapturePreAuthRequest) (*CapturePreAuthResponse, error) {
+	// 准备 capture 参数
+	params := &stripe.PaymentIntentCaptureParams{}
+
+	// 如果指定了金额，可以部分确认（小于等于预授权金额）
+	if req.Amount > 0 {
+		params.AmountToCapture = stripe.Int64(ConvertAmountToStripe(req.Amount, req.Currency))
+	}
+
+	// 调用 Stripe API 确认支付
+	pi, err := paymentintent.Capture(req.ChannelPreAuthNo, params)
+	if err != nil {
+		return nil, fmt.Errorf("确认 Stripe 预授权失败: %w", err)
+	}
+
+	return &CapturePreAuthResponse{
+		ChannelTradeNo:   pi.ID,
+		ChannelPreAuthNo: pi.ID,
+		Status:           convertStripeStatus(pi.Status),
+		Amount:           ConvertAmountFromStripe(pi.AmountCapturable, req.Currency),
+		Extra: map[string]interface{}{
+			"payment_intent_id": pi.ID,
+			"captured_at":       pi.Created,
+		},
+	}, nil
+}
+
+// CancelPreAuth 取消预授权（cancel PaymentIntent）
+func (a *StripeAdapter) CancelPreAuth(ctx context.Context, req *CancelPreAuthRequest) (*CancelPreAuthResponse, error) {
+	// 准备取消参数
+	params := &stripe.PaymentIntentCancelParams{}
+
+	// 设置取消原因
+	if req.Reason != "" {
+		// Stripe 支持的取消原因: duplicate, fraudulent, requested_by_customer, abandoned
+		params.CancellationReason = stripe.String("requested_by_customer")
+	}
+
+	// 调用 Stripe API 取消支付意图
+	pi, err := paymentintent.Cancel(req.ChannelPreAuthNo, params)
+	if err != nil {
+		return nil, fmt.Errorf("取消 Stripe 预授权失败: %w", err)
+	}
+
+	return &CancelPreAuthResponse{
+		ChannelPreAuthNo: pi.ID,
+		Status:           convertStripeStatus(pi.Status),
+		Extra: map[string]interface{}{
+			"payment_intent_id": pi.ID,
+			"cancelled_at":      pi.CanceledAt,
+		},
+	}, nil
+}
+
+// QueryPreAuth 查询预授权状态
+func (a *StripeAdapter) QueryPreAuth(ctx context.Context, channelPreAuthNo string) (*QueryPreAuthResponse, error) {
+	// 查询 PaymentIntent
+	pi, err := paymentintent.Get(channelPreAuthNo, nil)
+	if err != nil {
+		return nil, fmt.Errorf("查询 Stripe 预授权失败: %w", err)
+	}
+
+	// 获取币种（从 PaymentIntent）
+	currency := string(pi.Currency)
+
+	// 计算已确认金额
+	capturedAmount := int64(0)
+	if pi.AmountReceived > 0 {
+		capturedAmount = ConvertAmountFromStripe(pi.AmountReceived, currency)
+	}
+
+	// 计算过期时间（PaymentIntent 没有明确的过期时间字段）
+	var expiresAt *int64
+
+	// 创建时间
+	createdAt := pi.Created
+
+	return &QueryPreAuthResponse{
+		ChannelPreAuthNo: pi.ID,
+		Status:           convertStripeStatus(pi.Status),
+		Amount:           ConvertAmountFromStripe(pi.Amount, currency),
+		CapturedAmount:   capturedAmount,
+		Currency:         currency,
+		ExpiresAt:        expiresAt,
+		CreatedAt:        &createdAt,
+		Extra: map[string]interface{}{
+			"payment_intent_id":  pi.ID,
+			"amount_capturable":  pi.AmountCapturable,
+			"amount_received":    pi.AmountReceived,
+			"cancellation_reason": pi.CancellationReason,
+		},
+	}, nil
+}

@@ -32,6 +32,18 @@ type PaymentAdapter interface {
 
 	// ParseWebhook 解析 Webhook 数据
 	ParseWebhook(ctx context.Context, body []byte) (*WebhookEvent, error)
+
+	// CreatePreAuth 创建预授权（可选，不是所有渠道都支持）
+	CreatePreAuth(ctx context.Context, req *CreatePreAuthRequest) (*CreatePreAuthResponse, error)
+
+	// CapturePreAuth 确认预授权（扣款）
+	CapturePreAuth(ctx context.Context, req *CapturePreAuthRequest) (*CapturePreAuthResponse, error)
+
+	// CancelPreAuth 取消预授权（释放资金）
+	CancelPreAuth(ctx context.Context, req *CancelPreAuthRequest) (*CancelPreAuthResponse, error)
+
+	// QueryPreAuth 查询预授权状态
+	QueryPreAuth(ctx context.Context, channelPreAuthNo string) (*QueryPreAuthResponse, error)
 }
 
 // CreatePaymentRequest 创建支付请求
@@ -99,6 +111,75 @@ type QueryRefundResponse struct {
 	Currency        string                 `json:"currency"`          // 货币
 	RefundedAt      *int64                 `json:"refunded_at"`       // 退款时间（Unix时间戳）
 	Extra           map[string]interface{} `json:"extra"`             // 扩展信息
+}
+
+// CreatePreAuthRequest 创建预授权请求
+type CreatePreAuthRequest struct {
+	PreAuthNo     string                 `json:"pre_auth_no"`     // 预授权流水号
+	OrderNo       string                 `json:"order_no"`        // 订单号
+	Amount        int64                  `json:"amount"`          // 预授权金额（分）
+	Currency      string                 `json:"currency"`        // 货币
+	CustomerEmail string                 `json:"customer_email"`  // 客户邮箱
+	CustomerName  string                 `json:"customer_name"`   // 客户姓名
+	Description   string                 `json:"description"`     // 描述
+	ExpiresAt     *int64                 `json:"expires_at"`      // 过期时间（Unix时间戳）
+	CallbackURL   string                 `json:"callback_url"`    // 回调URL
+	Extra         map[string]interface{} `json:"extra"`           // 扩展信息
+}
+
+// CreatePreAuthResponse 创建预授权响应
+type CreatePreAuthResponse struct {
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"` // 渠道预授权号
+	ClientSecret     string                 `json:"client_secret"`       // 客户端密钥
+	Status           string                 `json:"status"`              // 状态
+	ExpiresAt        *int64                 `json:"expires_at"`          // 过期时间
+	Extra            map[string]interface{} `json:"extra"`               // 扩展信息
+}
+
+// CapturePreAuthRequest 确认预授权请求
+type CapturePreAuthRequest struct {
+	PreAuthNo        string                 `json:"pre_auth_no"`         // 预授权流水号
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"` // 渠道预授权号
+	Amount           int64                  `json:"amount"`              // 确认金额（分，可小于等于预授权金额）
+	Currency         string                 `json:"currency"`            // 货币
+	Description      string                 `json:"description"`         // 描述
+	Extra            map[string]interface{} `json:"extra"`               // 扩展信息
+}
+
+// CapturePreAuthResponse 确认预授权响应
+type CapturePreAuthResponse struct {
+	ChannelTradeNo   string                 `json:"channel_trade_no"`    // 支付交易号
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"` // 渠道预授权号
+	Status           string                 `json:"status"`              // 状态
+	Amount           int64                  `json:"amount"`              // 实际扣款金额
+	Extra            map[string]interface{} `json:"extra"`               // 扩展信息
+}
+
+// CancelPreAuthRequest 取消预授权请求
+type CancelPreAuthRequest struct {
+	PreAuthNo        string                 `json:"pre_auth_no"`         // 预授权流水号
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"` // 渠道预授权号
+	Reason           string                 `json:"reason"`              // 取消原因
+	Extra            map[string]interface{} `json:"extra"`               // 扩展信息
+}
+
+// CancelPreAuthResponse 取消预授权响应
+type CancelPreAuthResponse struct {
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"` // 渠道预授权号
+	Status           string                 `json:"status"`              // 状态
+	Extra            map[string]interface{} `json:"extra"`               // 扩展信息
+}
+
+// QueryPreAuthResponse 查询预授权响应
+type QueryPreAuthResponse struct {
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"` // 渠道预授权号
+	Status           string                 `json:"status"`              // 状态
+	Amount           int64                  `json:"amount"`              // 预授权金额
+	CapturedAmount   int64                  `json:"captured_amount"`     // 已确认金额
+	Currency         string                 `json:"currency"`            // 货币
+	ExpiresAt        *int64                 `json:"expires_at"`          // 过期时间
+	CreatedAt        *int64                 `json:"created_at"`          // 创建时间
+	Extra            map[string]interface{} `json:"extra"`               // 扩展信息
 }
 
 // WebhookEvent Webhook 事件

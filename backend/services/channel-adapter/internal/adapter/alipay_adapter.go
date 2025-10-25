@@ -23,6 +23,7 @@ import (
 
 // AlipayAdapter 支付宝支付适配器
 type AlipayAdapter struct {
+	DefaultPreAuthNotSupported  // 嵌入默认预授权实现
 	config      *model.AlipayConfig
 	httpClient  *http.Client
 	privateKey  *rsa.PrivateKey

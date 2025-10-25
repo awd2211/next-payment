@@ -489,6 +489,141 @@ func (h *ChannelHandler) ListChannelConfigs(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// CreatePreAuth 创建预授权
+// @Summary 创建预授权
+// @Tags Channel
+// @Accept json
+// @Produce json
+// @Param request body service.CreatePreAuthRequest true "创建预授权请求"
+// @Success 200 {object} service.CreatePreAuthResponse
+// @Router /api/v1/channel/pre-auth [post]
+func (h *ChannelHandler) CreatePreAuth(c *gin.Context) {
+	var req service.CreatePreAuthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	resp, err := h.channelService.CreatePreAuth(c.Request.Context(), &req)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInternalError, "创建预授权失败", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusInternalServerError, response)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    "SUCCESS",
+		"message": "创建预授权成功",
+		"data":    resp,
+	})
+}
+
+// CapturePreAuth 确认预授权（扣款）
+// @Summary 确认预授权
+// @Tags Channel
+// @Accept json
+// @Produce json
+// @Param request body service.CapturePreAuthRequest true "确认预授权请求"
+// @Success 200 {object} service.CapturePreAuthResponse
+// @Router /api/v1/channel/pre-auth/capture [post]
+func (h *ChannelHandler) CapturePreAuth(c *gin.Context) {
+	var req service.CapturePreAuthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	resp, err := h.channelService.CapturePreAuth(c.Request.Context(), &req)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInternalError, "确认预授权失败", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusInternalServerError, response)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    "SUCCESS",
+		"message": "确认预授权成功",
+		"data":    resp,
+	})
+}
+
+// CancelPreAuth 取消预授权（释放资金）
+// @Summary 取消预授权
+// @Tags Channel
+// @Accept json
+// @Produce json
+// @Param request body service.CancelPreAuthRequest true "取消预授权请求"
+// @Success 200 {object} service.CancelPreAuthResponse
+// @Router /api/v1/channel/pre-auth/cancel [post]
+func (h *ChannelHandler) CancelPreAuth(c *gin.Context) {
+	var req service.CancelPreAuthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "无效的请求参数", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	resp, err := h.channelService.CancelPreAuth(c.Request.Context(), &req)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInternalError, "取消预授权失败", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusInternalServerError, response)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    "SUCCESS",
+		"message": "取消预授权成功",
+		"data":    resp,
+	})
+}
+
+// QueryPreAuth 查询预授权状态
+// @Summary 查询预授权
+// @Tags Channel
+// @Produce json
+// @Param channel_pre_auth_no path string true "渠道预授权号"
+// @Success 200 {object} service.QueryPreAuthResponse
+// @Router /api/v1/channel/pre-auth/{channel_pre_auth_no} [get]
+func (h *ChannelHandler) QueryPreAuth(c *gin.Context) {
+	channelPreAuthNo := c.Param("channel_pre_auth_no")
+	if channelPreAuthNo == "" {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInvalidRequest, "缺少预授权号", "").
+			WithTraceID(traceID)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	resp, err := h.channelService.QueryPreAuth(c.Request.Context(), channelPreAuthNo)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		response := errors.NewErrorResponse(errors.ErrCodeInternalError, "查询预授权失败", err.Error()).
+			WithTraceID(traceID)
+		c.JSON(http.StatusInternalServerError, response)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    "SUCCESS",
+		"message": "查询预授权成功",
+		"data":    resp,
+	})
+}
+
 // RegisterRoutes 注册路由
 func (h *ChannelHandler) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api/v1")
@@ -501,6 +636,12 @@ func (h *ChannelHandler) RegisterRoutes(router *gin.Engine) {
 		// 退款相关（完整RESTful路由）
 		api.POST("/channel/refunds", h.CreateRefund)
 		api.GET("/channel/refunds/:refund_no", h.QueryRefund)
+
+		// 预授权相关（完整RESTful路由）
+		api.POST("/channel/pre-auth", h.CreatePreAuth)
+		api.POST("/channel/pre-auth/capture", h.CapturePreAuth)
+		api.POST("/channel/pre-auth/cancel", h.CancelPreAuth)
+		api.GET("/channel/pre-auth/:channel_pre_auth_no", h.QueryPreAuth)
 
 		// Payment-Gateway 兼容路由（简化版）
 		api.POST("/channel/payment", h.CreatePayment)      // 别名路由

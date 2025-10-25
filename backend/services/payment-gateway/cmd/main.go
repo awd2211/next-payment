@@ -63,10 +63,11 @@ func main() {
 			&model.Refund{},
 			&model.PaymentCallback{},
 			&model.PaymentRoute{},
-			&model.PreAuthPayment{}, // 预授权支付
-			&saga.Saga{},     // Saga 分布式事务
-			&saga.SagaStep{}, // Saga 步骤
-			&exportpkg.ExportTask{}, // 数据导出任务
+			&model.PreAuthPayment{},         // 预授权支付
+			&model.WebhookNotification{},    // Webhook 通知
+			&saga.Saga{},                    // Saga 分布式事务
+			&saga.SagaStep{},                // Saga 步骤
+			&exportpkg.ExportTask{},         // 数据导出任务
 		},
 
 		// 启用企业级功能(gRPC 默认关闭,使用 HTTP/REST)
@@ -96,6 +97,7 @@ func main() {
 	paymentRepo := repository.NewPaymentRepository(application.DB)
 	apiKeyRepo := repository.NewAPIKeyRepository(application.DB)
 	preAuthRepo := repository.NewPreAuthRepository(application.DB)
+	webhookNotificationRepo := repository.NewWebhookNotificationRepository(application.DB)
 
 	// 4. 初始化微服务客户端
 	orderServiceURL := config.GetEnv("ORDER_SERVICE_URL", "http://localhost:40004")
@@ -260,6 +262,13 @@ func main() {
 	)
 	logger.Info("预授权服务已初始化")
 
+	// 初始化 Webhook 通知服务
+	webhookNotificationService := service.NewWebhookNotificationService(
+		webhookNotificationRepo,
+		application.Redis,
+	)
+	logger.Info("Webhook 通知服务已初始化")
+
 	// 启动预授权过期扫描工作器（每30分钟扫描一次）
 	preAuthExpireInterval := time.Duration(config.GetEnvInt("PRE_AUTH_EXPIRE_INTERVAL", 1800)) * time.Second
 	go func() {
@@ -275,6 +284,22 @@ func main() {
 		}
 	}()
 	logger.Info(fmt.Sprintf("预授权过期扫描工作器已启动，扫描间隔: %v", preAuthExpireInterval))
+
+	// 启动 Webhook 重试工作器（每 5 分钟扫描一次失败的通知）
+	webhookRetryInterval := time.Duration(config.GetEnvInt("WEBHOOK_RETRY_INTERVAL", 300)) * time.Second
+	go func() {
+		ticker := time.NewTicker(webhookRetryInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			count, err := webhookNotificationService.RetryFailedNotifications(context.Background())
+			if err != nil {
+				logger.Error("Webhook 重试任务失败", zap.Error(err))
+			} else if count > 0 {
+				logger.Info("Webhook 重试任务完成", zap.Int("success_count", count))
+			}
+		}
+	}()
+	logger.Info(fmt.Sprintf("Webhook 重试工作器已启动，扫描间隔: %v", webhookRetryInterval))
 
 	// 9. 初始化Handler
 	paymentHandler := handler.NewPaymentHandler(paymentService)

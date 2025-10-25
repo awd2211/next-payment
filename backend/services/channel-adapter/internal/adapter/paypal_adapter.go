@@ -16,6 +16,7 @@ import (
 
 // PayPalAdapter PayPal 支付适配器
 type PayPalAdapter struct {
+	DefaultPreAuthNotSupported  // 嵌入默认预授权实现
 	config     *model.PayPalConfig
 	httpClient *http.Client
 	apiBase    string

@@ -16,6 +16,7 @@ import (
 // CryptoAdapter 加密货币支付适配器
 // 支持多链：ETH, BSC, TRON, BTC 等
 type CryptoAdapter struct {
+	DefaultPreAuthNotSupported  // 嵌入默认预授权实现
 	config             *model.CryptoConfig
 	httpClient         *http.Client
 	exchangeRateClient *client.ExchangeRateClient // 汇率客户端

@@ -25,6 +25,12 @@ type ChannelService interface {
 	CreateRefund(ctx context.Context, req *CreateRefundRequest) (*CreateRefundResponse, error)
 	QueryRefund(ctx context.Context, refundNo string) (*QueryRefundResponse, error)
 
+	// 预授权操作
+	CreatePreAuth(ctx context.Context, req *CreatePreAuthRequest) (*CreatePreAuthResponse, error)
+	CapturePreAuth(ctx context.Context, req *CapturePreAuthRequest) (*CapturePreAuthResponse, error)
+	CancelPreAuth(ctx context.Context, req *CancelPreAuthRequest) (*CancelPreAuthResponse, error)
+	QueryPreAuth(ctx context.Context, channelPreAuthNo string) (*QueryPreAuthResponse, error)
+
 	// Webhook 处理
 	HandleWebhook(ctx context.Context, channel string, signature string, body []byte, headers map[string]string) error
 	ProcessPendingWebhooks(ctx context.Context) error
@@ -531,4 +537,226 @@ func (s *channelService) createFailedTransaction(ctx context.Context, req *Creat
 		ErrorMessage:   errorMsg,
 	}
 	s.repo.CreateTransaction(ctx, tx)
+}
+
+// 预授权相关类型定义
+type CreatePreAuthRequest struct {
+	Channel       string                 `json:"channel"`
+	PreAuthNo     string                 `json:"pre_auth_no"`
+	OrderNo       string                 `json:"order_no"`
+	Amount        int64                  `json:"amount"`
+	Currency      string                 `json:"currency"`
+	CustomerEmail string                 `json:"customer_email"`
+	CustomerName  string                 `json:"customer_name"`
+	Description   string                 `json:"description"`
+	ExpiresAt     *int64                 `json:"expires_at"`
+	CallbackURL   string                 `json:"callback_url"`
+	Extra         map[string]interface{} `json:"extra"`
+}
+
+type CreatePreAuthResponse struct {
+	PreAuthNo        string                 `json:"pre_auth_no"`
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"`
+	ClientSecret     string                 `json:"client_secret,omitempty"`
+	Status           string                 `json:"status"`
+	ExpiresAt        *int64                 `json:"expires_at"`
+	Extra            map[string]interface{} `json:"extra"`
+}
+
+type CapturePreAuthRequest struct {
+	Channel          string                 `json:"channel"`
+	PreAuthNo        string                 `json:"pre_auth_no"`
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"`
+	Amount           int64                  `json:"amount"`
+	Currency         string                 `json:"currency"`
+	Description      string                 `json:"description"`
+	Extra            map[string]interface{} `json:"extra"`
+}
+
+type CapturePreAuthResponse struct {
+	PreAuthNo        string                 `json:"pre_auth_no"`
+	ChannelTradeNo   string                 `json:"channel_trade_no"`
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"`
+	Status           string                 `json:"status"`
+	Amount           int64                  `json:"amount"`
+	Extra            map[string]interface{} `json:"extra"`
+}
+
+type CancelPreAuthRequest struct {
+	Channel          string                 `json:"channel"`
+	PreAuthNo        string                 `json:"pre_auth_no"`
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"`
+	Reason           string                 `json:"reason"`
+	Extra            map[string]interface{} `json:"extra"`
+}
+
+type CancelPreAuthResponse struct {
+	PreAuthNo        string                 `json:"pre_auth_no"`
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"`
+	Status           string                 `json:"status"`
+	Extra            map[string]interface{} `json:"extra"`
+}
+
+type QueryPreAuthResponse struct {
+	PreAuthNo        string                 `json:"pre_auth_no"`
+	ChannelPreAuthNo string                 `json:"channel_pre_auth_no"`
+	Status           string                 `json:"status"`
+	Amount           int64                  `json:"amount"`
+	CapturedAmount   int64                  `json:"captured_amount"`
+	Currency         string                 `json:"currency"`
+	ExpiresAt        *int64                 `json:"expires_at"`
+	CreatedAt        *int64                 `json:"created_at"`
+	Extra            map[string]interface{} `json:"extra"`
+}
+
+// CreatePreAuth 创建预授权
+func (s *channelService) CreatePreAuth(ctx context.Context, req *CreatePreAuthRequest) (*CreatePreAuthResponse, error) {
+	// 1. 获取适配器
+	adapterInstance, ok := s.adapterFactory.GetAdapter(req.Channel)
+	if !ok {
+		return nil, fmt.Errorf("不支持的支付渠道: %s", req.Channel)
+	}
+
+	// 2. 调用适配器创建预授权
+	adapterReq := &adapter.CreatePreAuthRequest{
+		PreAuthNo:     req.PreAuthNo,
+		OrderNo:       req.OrderNo,
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		CustomerEmail: req.CustomerEmail,
+		CustomerName:  req.CustomerName,
+		Description:   req.Description,
+		ExpiresAt:     req.ExpiresAt,
+		CallbackURL:   req.CallbackURL,
+		Extra:         req.Extra,
+	}
+
+	adapterResp, err := adapterInstance.CreatePreAuth(ctx, adapterReq)
+	if err != nil {
+		logger.Error("创建预授权失败",
+			zap.String("channel", req.Channel),
+			zap.String("pre_auth_no", req.PreAuthNo),
+			zap.Error(err))
+		return nil, fmt.Errorf("创建预授权失败: %w", err)
+	}
+
+	// 3. 返回响应
+	return &CreatePreAuthResponse{
+		PreAuthNo:        req.PreAuthNo,
+		ChannelPreAuthNo: adapterResp.ChannelPreAuthNo,
+		ClientSecret:     adapterResp.ClientSecret,
+		Status:           adapterResp.Status,
+		ExpiresAt:        adapterResp.ExpiresAt,
+		Extra:            adapterResp.Extra,
+	}, nil
+}
+
+// CapturePreAuth 确认预授权（扣款）
+func (s *channelService) CapturePreAuth(ctx context.Context, req *CapturePreAuthRequest) (*CapturePreAuthResponse, error) {
+	// 1. 获取适配器
+	adapterInstance, ok := s.adapterFactory.GetAdapter(req.Channel)
+	if !ok {
+		return nil, fmt.Errorf("不支持的支付渠道: %s", req.Channel)
+	}
+
+	// 2. 调用适配器确认预授权
+	adapterReq := &adapter.CapturePreAuthRequest{
+		PreAuthNo:        req.PreAuthNo,
+		ChannelPreAuthNo: req.ChannelPreAuthNo,
+		Amount:           req.Amount,
+		Currency:         req.Currency,
+		Description:      req.Description,
+		Extra:            req.Extra,
+	}
+
+	adapterResp, err := adapterInstance.CapturePreAuth(ctx, adapterReq)
+	if err != nil {
+		logger.Error("确认预授权失败",
+			zap.String("channel", req.Channel),
+			zap.String("channel_pre_auth_no", req.ChannelPreAuthNo),
+			zap.Error(err))
+		return nil, fmt.Errorf("确认预授权失败: %w", err)
+	}
+
+	// 3. 返回响应
+	return &CapturePreAuthResponse{
+		PreAuthNo:        req.PreAuthNo,
+		ChannelTradeNo:   adapterResp.ChannelTradeNo,
+		ChannelPreAuthNo: adapterResp.ChannelPreAuthNo,
+		Status:           adapterResp.Status,
+		Amount:           adapterResp.Amount,
+		Extra:            adapterResp.Extra,
+	}, nil
+}
+
+// CancelPreAuth 取消预授权（释放资金）
+func (s *channelService) CancelPreAuth(ctx context.Context, req *CancelPreAuthRequest) (*CancelPreAuthResponse, error) {
+	// 1. 获取适配器
+	adapterInstance, ok := s.adapterFactory.GetAdapter(req.Channel)
+	if !ok {
+		return nil, fmt.Errorf("不支持的支付渠道: %s", req.Channel)
+	}
+
+	// 2. 调用适配器取消预授权
+	adapterReq := &adapter.CancelPreAuthRequest{
+		PreAuthNo:        req.PreAuthNo,
+		ChannelPreAuthNo: req.ChannelPreAuthNo,
+		Reason:           req.Reason,
+		Extra:            req.Extra,
+	}
+
+	adapterResp, err := adapterInstance.CancelPreAuth(ctx, adapterReq)
+	if err != nil {
+		logger.Error("取消预授权失败",
+			zap.String("channel", req.Channel),
+			zap.String("channel_pre_auth_no", req.ChannelPreAuthNo),
+			zap.Error(err))
+		return nil, fmt.Errorf("取消预授权失败: %w", err)
+	}
+
+	// 3. 返回响应
+	return &CancelPreAuthResponse{
+		PreAuthNo:        req.PreAuthNo,
+		ChannelPreAuthNo: adapterResp.ChannelPreAuthNo,
+		Status:           adapterResp.Status,
+		Extra:            adapterResp.Extra,
+	}, nil
+}
+
+// QueryPreAuth 查询预授权状态
+func (s *channelService) QueryPreAuth(ctx context.Context, channelPreAuthNo string) (*QueryPreAuthResponse, error) {
+	// TODO: 从数据库获取预授权记录以确定使用哪个渠道
+	// 这里暂时返回错误，需要调用方传递 channel 参数
+	return nil, fmt.Errorf("QueryPreAuth 需要指定渠道，请使用 QueryPreAuthWithChannel")
+}
+
+// QueryPreAuthWithChannel 查询预授权状态（指定渠道）
+func (s *channelService) QueryPreAuthWithChannel(ctx context.Context, channel string, channelPreAuthNo string) (*QueryPreAuthResponse, error) {
+	// 1. 获取适配器
+	adapterInstance, ok := s.adapterFactory.GetAdapter(channel)
+	if !ok {
+		return nil, fmt.Errorf("不支持的支付渠道: %s", channel)
+	}
+
+	// 2. 调用适配器查询预授权
+	adapterResp, err := adapterInstance.QueryPreAuth(ctx, channelPreAuthNo)
+	if err != nil {
+		logger.Error("查询预授权失败",
+			zap.String("channel", channel),
+			zap.String("channel_pre_auth_no", channelPreAuthNo),
+			zap.Error(err))
+		return nil, fmt.Errorf("查询预授权失败: %w", err)
+	}
+
+	// 3. 返回响应
+	return &QueryPreAuthResponse{
+		ChannelPreAuthNo: adapterResp.ChannelPreAuthNo,
+		Status:           adapterResp.Status,
+		Amount:           adapterResp.Amount,
+		CapturedAmount:   adapterResp.CapturedAmount,
+		Currency:         adapterResp.Currency,
+		ExpiresAt:        adapterResp.ExpiresAt,
+		CreatedAt:        adapterResp.CreatedAt,
+		Extra:            adapterResp.Extra,
+	}, nil
 }
