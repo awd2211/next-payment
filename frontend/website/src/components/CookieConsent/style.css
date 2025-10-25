@@ -1,0 +1,186 @@
+.cookie-consent {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.1);
+  border-top: 1px solid rgba(102, 126, 234, 0.2);
+  animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.cookie-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.cookie-icon {
+  font-size: 48px;
+  flex-shrink: 0;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.cookie-text {
+  flex: 1;
+}
+
+.cookie-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #262626;
+}
+
+.cookie-description {
+  font-size: 14px;
+  margin: 0;
+  color: #595959;
+  line-height: 1.6;
+}
+
+.cookie-link {
+  color: #667eea;
+  text-decoration: underline;
+  transition: color 0.3s;
+}
+
+.cookie-link:hover {
+  color: #764ba2;
+}
+
+.cookie-actions {
+  flex-shrink: 0;
+}
+
+.cookie-actions .ant-btn {
+  border-radius: 20px;
+  padding: 4px 20px;
+  height: auto;
+  font-weight: 500;
+}
+
+.cookie-actions .ant-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.cookie-actions .ant-btn-primary:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.cookie-actions .ant-btn-text {
+  color: #595959;
+}
+
+.cookie-actions .ant-btn-text:hover {
+  color: #262626;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Dark theme */
+.dark-theme .cookie-consent {
+  background: rgba(26, 26, 46, 0.98);
+  border-top-color: rgba(102, 126, 234, 0.3);
+}
+
+.dark-theme .cookie-title {
+  color: #eaeaea;
+}
+
+.dark-theme .cookie-description {
+  color: #a0a0a0;
+}
+
+.dark-theme .cookie-link {
+  color: #667eea;
+}
+
+.dark-theme .cookie-actions .ant-btn-text {
+  color: #a0a0a0;
+}
+
+.dark-theme .cookie-actions .ant-btn-text:hover {
+  color: #eaeaea;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .cookie-consent {
+    padding: 16px;
+  }
+
+  .cookie-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .cookie-icon {
+    font-size: 36px;
+  }
+
+  .cookie-title {
+    font-size: 16px;
+  }
+
+  .cookie-description {
+    font-size: 13px;
+  }
+
+  .cookie-actions {
+    width: 100%;
+  }
+
+  .cookie-actions .ant-space {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cookie-actions .ant-btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .cookie-icon {
+    font-size: 32px;
+  }
+
+  .cookie-actions .ant-space {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .cookie-actions .ant-btn {
+    width: 100%;
+  }
+}

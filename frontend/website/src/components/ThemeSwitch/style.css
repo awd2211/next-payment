@@ -1,0 +1,136 @@
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+}
+
+.theme-toggle {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.theme-toggle.ant-switch-checked {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+.theme-toggle:hover {
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Dark Theme Styles */
+:root.dark-theme {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #0f3460;
+  --text-primary: #eaeaea;
+  --text-secondary: #a0a0a0;
+  --border-color: #2d3748;
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+
+.dark-theme {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.dark-theme .app {
+  background-color: var(--bg-primary);
+}
+
+.dark-theme .ant-card {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme .ant-card-head {
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme .hero-section,
+.dark-theme .docs-hero,
+.dark-theme .notfound-page {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.dark-theme .feature-card,
+.dark-theme .stat-card,
+.dark-theme .doc-card {
+  background-color: var(--bg-card);
+  box-shadow: 0 4px 16px var(--shadow);
+}
+
+.dark-theme .feature-card:hover,
+.dark-theme .stat-card:hover {
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.dark-theme h1,
+.dark-theme h2,
+.dark-theme h3,
+.dark-theme h4,
+.dark-theme h5,
+.dark-theme h6 {
+  color: var(--text-primary);
+}
+
+.dark-theme p,
+.dark-theme span,
+.dark-theme li {
+  color: var(--text-secondary);
+}
+
+.dark-theme .ant-btn-default {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme .ant-btn-default:hover {
+  background-color: var(--bg-secondary);
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.dark-theme .ant-input,
+.dark-theme .ant-input-textarea textarea {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme .ant-input:focus,
+.dark-theme .ant-input-textarea textarea:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.dark-theme .ant-select-selector {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .code-block {
+  background-color: #0d1117 !important;
+  border-color: var(--border-color);
+}
+
+.dark-theme .api-base-url {
+  background-color: var(--bg-card);
+}
+
+.dark-theme .webhook-security {
+  background-color: rgba(67, 233, 123, 0.1);
+  border-color: rgba(67, 233, 123, 0.3);
+}
+
+/* Smooth transition for theme changes */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Disable transitions on theme toggle to prevent flash */
+.theme-transitioning * {
+  transition: none !important;
+}
