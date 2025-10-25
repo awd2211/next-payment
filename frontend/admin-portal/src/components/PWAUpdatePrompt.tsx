@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Button, notification } from 'antd'
+// @ts-ignore - virtual module
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -13,10 +14,10 @@ const PWAUpdatePrompt = () => {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
-    onRegistered(r) {
+    onRegistered(r: any) {
       console.log('SW Registered: ' + r)
     },
-    onRegisterError(error) {
+    onRegisterError(error: any) {
       console.log('SW registration error', error)
     },
   })

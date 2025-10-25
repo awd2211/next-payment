@@ -25,6 +25,16 @@ import {
   WarningOutlined,
   AccountBookOutlined,
   CreditCardOutlined,
+  BankOutlined,
+  WalletOutlined,
+  ApiOutlined,
+  CalculatorOutlined,
+  BarChartOutlined,
+  BellOutlined,
+  ExclamationCircleOutlined,
+  ReconciliationOutlined,
+  SendOutlined,
+  ControlOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
@@ -46,62 +56,147 @@ const Layout = () => {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken()
 
-  // 菜单项
+  // 菜单项 - 分类结构
   const menuItems: MenuProps['items'] = [
+    // 仪表板
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
-      label: t('menu.dashboard'),
+      label: t('menu.dashboard') || '仪表板',
     },
-    hasPermission('config.view') && {
-      key: '/system-configs',
-      icon: <SettingOutlined />,
-      label: t('menu.systemConfigs'),
-    },
-    hasPermission('admin.view') && {
-      key: '/admins',
-      icon: <TeamOutlined />,
-      label: t('menu.admins'),
-    },
-    hasPermission('role.view') && {
-      key: '/roles',
-      icon: <SafetyOutlined />,
-      label: t('menu.roles'),
-    },
+
+    // 商户管理
     hasPermission('merchant.view') && {
-      key: '/merchants',
+      key: 'merchant-group',
       icon: <ShopOutlined />,
-      label: t('menu.merchants'),
+      label: t('menu.merchantManagement') || '商户管理',
+      children: [
+        {
+          key: '/merchants',
+          label: t('menu.merchants') || '商户列表',
+        },
+        {
+          key: '/kyc',
+          label: t('menu.kyc') || 'KYC审核',
+        },
+        {
+          key: '/merchant-limits',
+          label: t('menu.merchantLimits') || '商户限额',
+        },
+      ],
     },
+
+    // 交易管理
     hasPermission('payment.view') && {
-      key: '/payments',
+      key: 'transaction-group',
       icon: <DollarOutlined />,
-      label: t('menu.payments'),
+      label: t('menu.transactionManagement') || '交易管理',
+      children: [
+        {
+          key: '/payments',
+          label: t('menu.payments') || '支付记录',
+        },
+        {
+          key: '/orders',
+          label: t('menu.orders') || '订单管理',
+        },
+        {
+          key: '/disputes',
+          label: t('menu.disputes') || '争议处理',
+        },
+        {
+          key: '/risk',
+          label: t('menu.riskManagement') || '风险管理',
+        },
+      ],
     },
-    hasPermission('order.view') && {
-      key: '/orders',
-      icon: <ShoppingOutlined />,
-      label: t('menu.orders'),
-    },
-    hasPermission('risk.view') && {
-      key: '/risk',
-      icon: <WarningOutlined />,
-      label: t('menu.riskManagement'),
-    },
+
+    // 财务管理
     hasPermission('accounting.view') && {
-      key: '/settlements',
+      key: 'finance-group',
       icon: <AccountBookOutlined />,
-      label: t('menu.settlements'),
+      label: t('menu.financeManagement') || '财务管理',
+      children: [
+        {
+          key: '/accounting',
+          label: t('menu.accounting') || '账务管理',
+        },
+        {
+          key: '/settlements',
+          label: t('menu.settlements') || '结算管理',
+        },
+        {
+          key: '/withdrawals',
+          label: t('menu.withdrawals') || '提现管理',
+        },
+        {
+          key: '/reconciliation',
+          label: t('menu.reconciliation') || '对账管理',
+        },
+      ],
     },
+
+    // 渠道配置
     hasPermission('config.view') && {
-      key: '/cashier',
-      icon: <CreditCardOutlined />,
-      label: t('menu.cashier') || '收银台管理',
+      key: 'channel-group',
+      icon: <ApiOutlined />,
+      label: t('menu.channelConfig') || '渠道配置',
+      children: [
+        {
+          key: '/channels',
+          label: t('menu.channels') || '支付渠道',
+        },
+        {
+          key: '/cashier',
+          label: t('menu.cashier') || '收银台管理',
+        },
+        {
+          key: '/webhooks',
+          label: t('menu.webhooks') || 'Webhook管理',
+        },
+      ],
     },
-    hasPermission('audit.view') && {
-      key: '/audit-logs',
-      icon: <FileTextOutlined />,
-      label: t('menu.auditLogs'),
+
+    // 数据分析
+    hasPermission('config.view') && {
+      key: 'analytics-group',
+      icon: <BarChartOutlined />,
+      label: t('menu.analyticsCenter') || '数据中心',
+      children: [
+        {
+          key: '/analytics',
+          label: t('menu.analytics') || '数据分析',
+        },
+        {
+          key: '/notifications',
+          label: t('menu.notifications') || '通知管理',
+        },
+      ],
+    },
+
+    // 系统管理
+    hasPermission('admin.view') && {
+      key: 'system-group',
+      icon: <SettingOutlined />,
+      label: t('menu.systemManagement') || '系统管理',
+      children: [
+        hasPermission('config.view') && {
+          key: '/system-configs',
+          label: t('menu.systemConfigs') || '系统配置',
+        },
+        hasPermission('admin.view') && {
+          key: '/admins',
+          label: t('menu.admins') || '管理员',
+        },
+        hasPermission('role.view') && {
+          key: '/roles',
+          label: t('menu.roles') || '角色权限',
+        },
+        hasPermission('audit.view') && {
+          key: '/audit-logs',
+          label: t('menu.auditLogs') || '审计日志',
+        },
+      ].filter(Boolean),
     },
   ].filter(Boolean) as MenuProps['items']
 

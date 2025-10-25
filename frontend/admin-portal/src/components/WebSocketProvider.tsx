@@ -120,7 +120,7 @@ const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
         key: 'ws-reconnecting',
       })
     } else if (status === ConnectionStatus.CONNECTED) {
-      antNotification.close('ws-reconnecting')
+      antNotification.destroy('ws-reconnecting')
     }
   }, [status])
 

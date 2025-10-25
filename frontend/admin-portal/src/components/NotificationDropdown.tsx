@@ -95,7 +95,7 @@ const NotificationDropdown = () => {
         <Space>
           <Text strong>{t('notifications.title', '通知')}</Text>
           {unreadCount > 0 && (
-            <Tag color="blue">{t('notifications.unread', { count: unreadCount }, `${unreadCount} 条未读`)}</Tag>
+            <Tag color="blue">{t('notifications.unread', `${unreadCount} 条未读`, { count: unreadCount })}</Tag>
           )}
         </Space>
         {notifications.length > 0 && (

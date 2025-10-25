@@ -1,6 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConfigProvider, theme as antdTheme } from 'antd'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
 import dayjs from 'dayjs'
@@ -15,6 +17,7 @@ import './i18n/config'
 import { getThemeConfig } from './theme/config'
 import type { ThemeMode } from './hooks/useTheme'
 import ErrorBoundary from './components/ErrorBoundary'
+import { queryClient } from './lib/queryClient'
 
 // 动态设置 dayjs 语言
 const getAntdLocale = (lang: string) => {
@@ -66,15 +69,19 @@ const AppWithI18n = () => {
   const themeConfig = getThemeConfig(isDark)
 
   return (
-    <ConfigProvider
-      locale={locale}
-      theme={{
-        ...themeConfig,
-        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-      }}
-    >
-      <App />
-    </ConfigProvider>
+    <QueryClientProvider client={queryClient}>
+      <ConfigProvider
+        locale={locale}
+        theme={{
+          ...themeConfig,
+          algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        }}
+      >
+        <App />
+      </ConfigProvider>
+      {/* React Query DevTools - 仅在开发环境显示 */}
+      {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+    </QueryClientProvider>
   )
 }
 
