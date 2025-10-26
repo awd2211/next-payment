@@ -86,35 +86,38 @@ export const disputeService = {
    * Get disputes list with filters
    */
   list: (params: ListDisputesParams) => {
-    return request.get<ListDisputesResponse>('/api/v1/admin/disputes', { params })
+    return request.get<ListDisputesResponse>('/api/v1/disputes', { params })
   },
 
   /**
    * Get dispute detail by ID
    */
   getDetail: (id: string) => {
-    return request.get<DisputeDetailResponse>(`/api/v1/admin/disputes/${id}`)
+    return request.get<DisputeDetailResponse>(`/api/v1/disputes/${id}`)
   },
 
   /**
    * Get evidence list for a dispute
    */
   getEvidence: (disputeId: string) => {
-    return request.get<EvidenceListResponse>(`/api/v1/admin/disputes/${disputeId}/evidence`)
+    return request.get<EvidenceListResponse>(`/api/v1/disputes/${disputeId}/evidence`)
   },
 
   /**
-   * Resolve a dispute (accept or reject)
+   * Resolve a dispute (accept or reject) - 对应后端的status update
    */
   resolve: (id: string, data: ResolveDisputeRequest) => {
-    return request.post<ResolveDisputeResponse>(`/api/v1/admin/disputes/${id}/resolve`, data)
+    return request.put<ResolveDisputeResponse>(`/api/v1/disputes/${id}/status`, {
+      status: data.decision === 'accept' ? 'accepted' : 'rejected',
+      reason: data.reason,
+    })
   },
 
   /**
    * Upload evidence file
    */
   uploadEvidence: (disputeId: string, formData: FormData) => {
-    return request.post(`/api/v1/admin/disputes/${disputeId}/evidence`, formData, {
+    return request.post(`/api/v1/disputes/${disputeId}/evidence`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -125,25 +128,25 @@ export const disputeService = {
    * Download evidence file
    */
   downloadEvidence: (disputeId: string, evidenceId: string) => {
-    return request.get(`/api/v1/admin/disputes/${disputeId}/evidence/${evidenceId}/download`, {
+    return request.get(`/api/v1/disputes/evidence/${evidenceId}`, {
       responseType: 'blob',
     })
   },
 
   /**
-   * Export disputes report
+   * Export disputes report - 注意: 后端需要实现此接口
    */
   export: (params: ListDisputesParams) => {
-    return request.get('/api/v1/admin/disputes/export', {
+    return request.get('/api/v1/disputes/export', {
       params,
       responseType: 'blob',
     })
   },
 
   /**
-   * Get dispute statistics
+   * Get dispute statistics (对应后端的statistics接口)
    */
   getStats: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get('/api/v1/admin/disputes/stats', { params })
+    return request.get('/api/v1/disputes/statistics', { params })
   },
 }

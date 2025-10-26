@@ -57,47 +57,47 @@ export interface SettlementStatsParams {
 export const settlementService = {
   // 获取结算列表
   list: (params: SettlementListParams) => {
-    return request.get<SettlementListResponse>('/settlements', { params })
+    return request.get<SettlementListResponse>('/api/v1/settlements', { params })
   },
 
   // 获取结算详情
   get: (id: string) => {
-    return request.get<Settlement>(`/settlements/${id}`)
+    return request.get<Settlement>(`/api/v1/settlements/${id}`)
   },
 
-  // 获取结算统计
+  // 获取结算统计 (注意: 后端需要实现此接口)
   getStats: (params: SettlementStatsParams) => {
-    return request.get<{ data: SettlementStats }>('/settlements/stats', { params })
+    return request.get<{ data: SettlementStats }>('/api/v1/settlements/stats', { params })
   },
 
   // 创建结算单
   create: (data: Partial<Settlement>) => {
-    return request.post<Settlement>('/settlements', data)
+    return request.post<Settlement>('/api/v1/settlements', data)
   },
 
-  // 更新结算单
+  // 更新结算单 (注意: 后端不支持PUT更新，使用approve/reject/execute代替)
   update: (id: string, data: Partial<Settlement>) => {
-    return request.put<Settlement>(`/settlements/${id}`, data)
+    return request.put<Settlement>(`/api/v1/settlements/${id}`, data)
   },
 
-  // 确认结算
+  // 批准结算 (对应后端的approve接口)
   confirm: (id: string) => {
-    return request.post(`/settlements/${id}/confirm`)
+    return request.post(`/api/v1/settlements/${id}/approve`)
   },
 
-  // 完成结算
+  // 执行结算 (对应后端的execute接口)
   complete: (id: string, remark: string) => {
-    return request.post(`/settlements/${id}/complete`, { remark })
+    return request.post(`/api/v1/settlements/${id}/execute`, { remark })
   },
 
-  // 取消结算
+  // 拒绝结算 (对应后端的reject接口)
   cancel: (id: string, reason: string) => {
-    return request.post(`/settlements/${id}/cancel`, { reason })
+    return request.post(`/api/v1/settlements/${id}/reject`, { reason })
   },
 
-  // 导出结算数据
+  // 导出结算数据 (注意: 后端需要实现此接口)
   export: (params: SettlementListParams) => {
-    return request.get('/settlements/export', { params, responseType: 'blob' })
+    return request.get('/api/v1/settlements/export', { params, responseType: 'blob' })
   },
 }
 

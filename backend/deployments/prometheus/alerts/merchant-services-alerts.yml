@@ -1,0 +1,206 @@
+# Merchant Services Prometheus Alerting Rules
+# merchant-policy-service (40012) + merchant-quota-service (40022)
+
+groups:
+  - name: merchant_services_alerts
+    interval: 30s
+    rules:
+      # ========================================
+      # Service Availability Alerts
+      # ========================================
+      
+      - alert: MerchantPolicyServiceDown
+        expr: up{job="merchant-policy-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: merchant-policy-service
+        annotations:
+          summary: "Merchant Policy Service is down"
+          description: "merchant-policy-service has been down for more than 1 minute."
+          
+      - alert: MerchantQuotaServiceDown
+        expr: up{job="merchant-quota-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: merchant-quota-service
+        annotations:
+          summary: "Merchant Quota Service is down"
+          description: "merchant-quota-service has been down for more than 1 minute."
+
+      # ========================================
+      # HTTP Error Rate Alerts
+      # ========================================
+      
+      - alert: MerchantPolicyServiceHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job="merchant-policy-service",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="merchant-policy-service"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: merchant-policy-service
+        annotations:
+          summary: "High error rate on Merchant Policy Service"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+          
+      - alert: MerchantQuotaServiceHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job="merchant-quota-service",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="merchant-quota-service"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: merchant-quota-service
+        annotations:
+          summary: "High error rate on Merchant Quota Service"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # ========================================
+      # Response Time Alerts
+      # ========================================
+      
+      - alert: MerchantPolicyServiceSlowResponses
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="merchant-policy-service"}[5m])) by (le, path)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: merchant-policy-service
+        annotations:
+          summary: "Slow responses on Merchant Policy Service"
+          description: "P95 response time is {{ $value }}s for path {{ $labels.path }}"
+          
+      - alert: MerchantQuotaServiceSlowResponses
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="merchant-quota-service"}[5m])) by (le, path)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: merchant-quota-service
+        annotations:
+          summary: "Slow responses on Merchant Quota Service"
+          description: "P95 response time is {{ $value }}s for path {{ $labels.path }}"
+
+      # ========================================
+      # Rate Limit Alerts
+      # ========================================
+      
+      - alert: MerchantPolicyServiceHighRateLimitHits
+        expr: |
+          sum(rate(http_requests_total{job="merchant-policy-service",status="429"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: merchant-policy-service
+        annotations:
+          summary: "High rate limit hits on Merchant Policy Service"
+          description: "Rate limit being hit {{ $value }} times per second."
+          
+      - alert: MerchantQuotaServiceHighRateLimitHits
+        expr: |
+          sum(rate(http_requests_total{job="merchant-quota-service",status="429"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: merchant-quota-service
+        annotations:
+          summary: "High rate limit hits on Merchant Quota Service"
+          description: "Rate limit being hit {{ $value }} times per second."
+
+      # ========================================
+      # Business Logic Alerts (Quota Service)
+      # ========================================
+      
+      - alert: HighQuotaConsumptionFailures
+        expr: |
+          sum(rate(http_requests_total{job="merchant-quota-service",path="/api/v1/quotas/consume",status!="200"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: merchant-quota-service
+        annotations:
+          summary: "High quota consumption failure rate"
+          description: "Quota consumption failures at {{ $value }} per second."
+          
+      - alert: ManyActiveQuotaAlerts
+        expr: |
+          sum(quota_alerts_active{job="merchant-quota-service"}) > 100
+        for: 10m
+        labels:
+          severity: info
+          service: merchant-quota-service
+        annotations:
+          summary: "Many active quota alerts"
+          description: "{{ $value }} active quota alerts detected."
+
+      # ========================================
+      # Database Connection Alerts
+      # ========================================
+      
+      - alert: MerchantPolicyServiceDatabaseConnectionErrors
+        expr: |
+          sum(rate(http_requests_total{job="merchant-policy-service",status="503"}[5m])) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: merchant-policy-service
+        annotations:
+          summary: "Database connection errors on Merchant Policy Service"
+          description: "Service returning 503 errors, possible database issue."
+          
+      - alert: MerchantQuotaServiceDatabaseConnectionErrors
+        expr: |
+          sum(rate(http_requests_total{job="merchant-quota-service",status="503"}[5m])) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: merchant-quota-service
+        annotations:
+          summary: "Database connection errors on Merchant Quota Service"
+          description: "Service returning 503 errors, possible database issue."
+
+      # ========================================
+      # Traffic Spike Alerts
+      # ========================================
+      
+      - alert: MerchantPolicyServiceTrafficSpike
+        expr: |
+          (
+            sum(rate(http_requests_total{job="merchant-policy-service"}[5m]))
+            /
+            sum(rate(http_requests_total{job="merchant-policy-service"}[1h] offset 1h))
+          ) > 3
+        for: 5m
+        labels:
+          severity: info
+          service: merchant-policy-service
+        annotations:
+          summary: "Traffic spike on Merchant Policy Service"
+          description: "Traffic is {{ $value }}x higher than usual."
+          
+      - alert: MerchantQuotaServiceTrafficSpike
+        expr: |
+          (
+            sum(rate(http_requests_total{job="merchant-quota-service"}[5m]))
+            /
+            sum(rate(http_requests_total{job="merchant-quota-service"}[1h] offset 1h))
+          ) > 3
+        for: 5m
+        labels:
+          severity: info
+          service: merchant-quota-service
+        annotations:
+          summary: "Traffic spike on Merchant Quota Service"
+          description: "Traffic is {{ $value }}x higher than usual."

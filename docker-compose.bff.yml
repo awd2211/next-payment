@@ -1,0 +1,217 @@
+version: '3.8'
+
+# ============================================================================
+# BFF Services Docker Compose Configuration
+# Admin BFF 和 Merchant BFF 服务配置
+# ============================================================================
+
+services:
+  # Admin BFF Service
+  admin-bff:
+    build:
+      context: ./backend
+      dockerfile: services/admin-bff-service/Dockerfile
+    container_name: payment-admin-bff
+    ports:
+      - "40001:40001"
+    environment:
+      # 服务配置
+      - ENV=production
+      - PORT=40001
+      - SERVICE_NAME=admin-bff-service
+
+      # JWT配置
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-secret-key-2024}
+
+      # 数据库配置（Admin BFF 需要数据库支持审计日志）
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=payment_admin
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置（可选，用于速率限制）
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+
+      # 后端服务 URLs（18个微服务）
+      - CONFIG_SERVICE_URL=http://config-service:8010
+      - RISK_SERVICE_URL=http://risk-service:8006
+      - KYC_SERVICE_URL=http://kyc-service:8015
+      - MERCHANT_SERVICE_URL=http://merchant-service:8002
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8009
+      - LIMIT_SERVICE_URL=http://limit-service:8022
+      - CHANNEL_SERVICE_URL=http://channel-adapter:8005
+      - CASHIER_SERVICE_URL=http://cashier-service:8016
+      - ORDER_SERVICE_URL=http://order-service:8004
+      - ACCOUNTING_SERVICE_URL=http://accounting-service:8007
+      - DISPUTE_SERVICE_URL=http://dispute-service:8021
+      - MERCHANT_AUTH_SERVICE_URL=http://merchant-auth-service:8011
+      - MERCHANT_CONFIG_SERVICE_URL=http://merchant-config-service:8012
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8008
+      - PAYMENT_GATEWAY_URL=http://payment-gateway:8003
+      - RECONCILIATION_SERVICE_URL=http://reconciliation-service:8020
+      - SETTLEMENT_SERVICE_URL=http://settlement-service:8013
+      - WITHDRAWAL_SERVICE_URL=http://withdrawal-service:8014
+
+      # 可观测性配置
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - LOG_LEVEL=info
+
+      # SMTP配置（邮件通知）
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@payment-platform.com}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Payment Platform}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - payment-network
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:40001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+    labels:
+      - "service.type=bff"
+      - "service.name=admin-bff"
+      - "security.level=enterprise"
+      - "metrics.prometheus=true"
+
+  # Merchant BFF Service
+  merchant-bff:
+    build:
+      context: ./backend
+      dockerfile: services/merchant-bff-service/Dockerfile
+    container_name: payment-merchant-bff
+    ports:
+      - "40023:40023"
+    environment:
+      # 服务配置
+      - ENV=production
+      - PORT=40023
+      - SERVICE_NAME=merchant-bff-service
+
+      # JWT配置
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-secret-key-2024}
+
+      # Merchant BFF 不需要数据库
+
+      # Redis配置（可选）
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+      # 后端服务 URLs（15个微服务）
+      - PAYMENT_GATEWAY_URL=http://payment-gateway:8003
+      - ORDER_SERVICE_URL=http://order-service:8004
+      - SETTLEMENT_SERVICE_URL=http://settlement-service:8013
+      - WITHDRAWAL_SERVICE_URL=http://withdrawal-service:8014
+      - ACCOUNTING_SERVICE_URL=http://accounting-service:8007
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8009
+      - KYC_SERVICE_URL=http://kyc-service:8015
+      - MERCHANT_AUTH_SERVICE_URL=http://merchant-auth-service:8011
+      - MERCHANT_CONFIG_SERVICE_URL=http://merchant-config-service:8012
+      - MERCHANT_LIMIT_SERVICE_URL=http://limit-service:8022
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8008
+      - RISK_SERVICE_URL=http://risk-service:8006
+      - DISPUTE_SERVICE_URL=http://dispute-service:8021
+      - RECONCILIATION_SERVICE_URL=http://reconciliation-service:8020
+      - CASHIER_SERVICE_URL=http://cashier-service:8016
+
+      # 可观测性配置
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - LOG_LEVEL=info
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    networks:
+      - payment-network
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:40023/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+    labels:
+      - "service.type=bff"
+      - "service.name=merchant-bff"
+      - "security.level=tenant-isolation"
+      - "metrics.prometheus=true"
+
+networks:
+  payment-network:
+    external: true  # 使用主 docker-compose.yml 创建的网络
+
+# ============================================================================
+# 使用说明:
+#
+# 1. 启动 BFF 服务（需要先启动主 docker-compose.yml）:
+#    docker-compose -f docker-compose.yml up -d
+#    docker-compose -f docker-compose.bff.yml up -d
+#
+# 2. 查看日志:
+#    docker-compose -f docker-compose.bff.yml logs -f admin-bff
+#    docker-compose -f docker-compose.bff.yml logs -f merchant-bff
+#
+# 3. 停止服务:
+#    docker-compose -f docker-compose.bff.yml down
+#
+# 4. 重启服务:
+#    docker-compose -f docker-compose.bff.yml restart admin-bff
+#    docker-compose -f docker-compose.bff.yml restart merchant-bff
+#
+# 5. 访问服务:
+#    Admin BFF Swagger:    http://localhost:40001/swagger/index.html
+#    Admin BFF Health:     http://localhost:40001/health
+#    Admin BFF Metrics:    http://localhost:40001/metrics
+#    Merchant BFF Swagger: http://localhost:40023/swagger/index.html
+#    Merchant BFF Health:  http://localhost:40023/health
+#    Merchant BFF Metrics: http://localhost:40023/metrics
+# ============================================================================

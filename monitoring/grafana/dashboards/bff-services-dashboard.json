@@ -1,0 +1,358 @@
+{
+  "dashboard": {
+    "title": "BFF Services Dashboard",
+    "tags": ["bff", "security", "admin", "merchant"],
+    "timezone": "browser",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "up{job=~\"admin-bff|merchant-bff\"}",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Request Rate (req/s)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=~\"admin-bff|merchant-bff\"}[5m])",
+            "legendFormat": "{{job}} - {{method}} {{path}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate (%)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=~\"admin-bff|merchant-bff\",status=~\"5..\"}[5m])) by (job) / sum(rate(http_requests_total{job=~\"admin-bff|merchant-bff\"}[5m])) by (job) * 100",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Error Rate"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [5], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "name": "High Error Rate",
+          "noDataState": "no_data"
+        }
+      },
+      {
+        "id": 4,
+        "title": "P95 Latency (ms)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\"admin-bff|merchant-bff\"}[5m])) by (job, le)) * 1000",
+            "legendFormat": "{{job}} P95",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=~\"admin-bff|merchant-bff\"}[5m])) by (job, le)) * 1000",
+            "legendFormat": "{{job}} P99",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "ms", "label": "Latency"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Rate Limit Violations",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=~\"admin-bff|merchant-bff\",status=\"429\"}[5m])",
+            "legendFormat": "{{job}} - 429 (Rate Limited)",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Rate Limited Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Authentication Failures",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=~\"admin-bff|merchant-bff\",status=\"401\"}[5m])",
+            "legendFormat": "{{job}} - 401 (Unauthorized)",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(http_requests_total{job=~\"admin-bff|merchant-bff\",status=\"403\"}[5m])",
+            "legendFormat": "{{job}} - 403 (Forbidden)",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Auth Failures/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "HTTP Status Codes Distribution",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=~\"admin-bff|merchant-bff\"}[5m])) by (status)",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Memory Usage (MB)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{job=~\"admin-bff|merchant-bff\"} / 1024 / 1024",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "mbytes", "label": "Memory"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "CPU Usage (%)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{job=~\"admin-bff|merchant-bff\"}[5m]) * 100",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU Usage"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Active Goroutines",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 36},
+        "targets": [
+          {
+            "expr": "go_goroutines{job=~\"admin-bff|merchant-bff\"}",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Goroutines"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Request by Endpoint",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 36},
+        "targets": [
+          {
+            "expr": "topk(10, sum(rate(http_requests_total{job=~\"admin-bff|merchant-bff\"}[5m])) by (job, method, path))",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "job": "Service",
+                "method": "Method",
+                "path": "Path",
+                "Value": "Req/s"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "2FA Failures (Admin BFF Only)",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 44},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"admin-bff\",status=\"403\",path=~\".*payments.*|.*settlements.*|.*withdrawals.*\"}[5m])",
+            "legendFormat": "2FA Failures - {{path}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "2FA Failures/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Tenant Isolation Metrics (Merchant BFF)",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 44},
+        "targets": [
+          {
+            "expr": "count(count(http_requests_total{job=\"merchant-bff\"}) by (user_id))",
+            "legendFormat": "Active Merchants",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 14,
+        "title": "Request Size (bytes)",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 50},
+        "targets": [
+          {
+            "expr": "rate(http_request_size_bytes_sum{job=~\"admin-bff|merchant-bff\"}[5m]) / rate(http_request_size_bytes_count{job=~\"admin-bff|merchant-bff\"}[5m])",
+            "legendFormat": "{{job}} - Avg Request Size",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "bytes", "label": "Size"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 15,
+        "title": "Response Size (bytes)",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 50},
+        "targets": [
+          {
+            "expr": "rate(http_response_size_bytes_sum{job=~\"admin-bff|merchant-bff\"}[5m]) / rate(http_response_size_bytes_count{job=~\"admin-bff|merchant-bff\"}[5m])",
+            "legendFormat": "{{job}} - Avg Response Size",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "bytes", "label": "Size"},
+          {"format": "short"}
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "service",
+          "type": "query",
+          "query": "label_values(up{job=~\"admin-bff|merchant-bff\"}, job)",
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*"
+        },
+        {
+          "name": "interval",
+          "type": "interval",
+          "query": "30s,1m,5m,10m,30m,1h",
+          "current": {"text": "5m", "value": "5m"}
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "ALERTS{job=~\"admin-bff|merchant-bff\",alertstate=\"firing\"}",
+          "iconColor": "red",
+          "name": "Alerts",
+          "tagKeys": "alertname,severity",
+          "titleFormat": "Alert: {{alertname}}"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    },
+    "links": [
+      {
+        "title": "BFF Security Documentation",
+        "url": "https://github.com/your-org/payment-platform/blob/main/BFF_SECURITY_COMPLETE_SUMMARY.md",
+        "type": "link"
+      }
+    ]
+  }
+}

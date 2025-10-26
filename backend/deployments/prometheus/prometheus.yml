@@ -21,6 +21,7 @@ global:
 # 规则文件
 rule_files:
   - 'alerts/*.yml'
+  - 'rules/*.yml'
 
 # 抓取配置
 scrape_configs:
@@ -68,43 +69,17 @@ scrape_configs:
   # 核心业务服务监控（本地运行，使用 host.docker.internal）
   # ========================================
 
-  # Admin Service - 运营管理服务
-  - job_name: 'admin-service'
-    static_configs:
-      - targets: ['host.docker.internal:40000']
-        labels:
-          service: 'admin-service'
-          tier: 'backend'
-          type: 'microservice'
-    metrics_path: '/metrics'
-
-  # Merchant Service - 商户管理服务
-  - job_name: 'merchant-service'
-    static_configs:
-      - targets: ['host.docker.internal:40001']
-        labels:
-          service: 'merchant-service'
-          tier: 'backend'
-          type: 'microservice'
-    metrics_path: '/metrics'
+  # Merchant Service - 商户管理服务 (已废弃 - 功能移至 Merchant BFF)
+  # - job_name: 'merchant-service'
+  #   static_configs:
+  #     - targets: ['host.docker.internal:40002']
 
   # Payment Gateway - 支付网关
   - job_name: 'payment-gateway'
     static_configs:
-      - targets: ['host.docker.internal:40002']
-        labels:
-          service: 'payment-gateway'
-          tier: 'backend'
-          type: 'microservice'
-          critical: 'true'
-    metrics_path: '/metrics'
-
-  # Channel Adapter - 渠道适配器
-  - job_name: 'channel-adapter'
-    static_configs:
       - targets: ['host.docker.internal:40003']
         labels:
-          service: 'channel-adapter'
+          service: 'payment-gateway'
           tier: 'backend'
           type: 'microservice'
           critical: 'true'
@@ -120,12 +95,12 @@ scrape_configs:
           type: 'microservice'
     metrics_path: '/metrics'
 
-  # Accounting Service - 账务服务
-  - job_name: 'accounting-service'
+  # Channel Adapter - 渠道适配器
+  - job_name: 'channel-adapter'
     static_configs:
       - targets: ['host.docker.internal:40005']
         labels:
-          service: 'accounting-service'
+          service: 'channel-adapter'
           tier: 'backend'
           type: 'microservice'
           critical: 'true'
@@ -142,10 +117,21 @@ scrape_configs:
           critical: 'true'
     metrics_path: '/metrics'
 
+  # Accounting Service - 账务服务
+  - job_name: 'accounting-service'
+    static_configs:
+      - targets: ['host.docker.internal:40007']
+        labels:
+          service: 'accounting-service'
+          tier: 'backend'
+          type: 'microservice'
+          critical: 'true'
+    metrics_path: '/metrics'
+
   # Notification Service - 通知服务
   - job_name: 'notification-service'
     static_configs:
-      - targets: ['host.docker.internal:40007']
+      - targets: ['host.docker.internal:40008']
         labels:
           service: 'notification-service'
           tier: 'backend'
@@ -155,7 +141,7 @@ scrape_configs:
   # Analytics Service - 分析服务
   - job_name: 'analytics-service'
     static_configs:
-      - targets: ['host.docker.internal:40008']
+      - targets: ['host.docker.internal:40009']
         labels:
           service: 'analytics-service'
           tier: 'backend'
@@ -165,11 +151,45 @@ scrape_configs:
   # Config Service - 配置中心
   - job_name: 'config-service'
     static_configs:
-      - targets: ['host.docker.internal:40009']
+      - targets: ['host.docker.internal:40010']
         labels:
           service: 'config-service'
           tier: 'backend'
           type: 'microservice'
+    metrics_path: '/metrics'
+
+  # ========================================
+  # BFF Services - 前端聚合层
+  # ========================================
+
+  # Admin BFF Service - 管理后台 BFF (Zero-Trust 架构)
+  - job_name: 'admin-bff'
+    scrape_interval: 10s  # Admin BFF 更频繁采集（安全监控需要）
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['host.docker.internal:40001']
+        labels:
+          service: 'admin-bff-service'
+          tier: 'bff'
+          type: 'bff'
+          bff_type: 'admin'
+          security_level: 'high'
+          critical: 'true'
+    metrics_path: '/metrics'
+
+  # Merchant BFF Service - 商户门户 BFF (租户隔离)
+  - job_name: 'merchant-bff'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['host.docker.internal:40023']
+        labels:
+          service: 'merchant-bff-service'
+          tier: 'bff'
+          type: 'bff'
+          bff_type: 'merchant'
+          security_level: 'medium'
+          critical: 'true'
     metrics_path: '/metrics'
 
   # ========================================
@@ -205,3 +225,27 @@ scrape_configs:
         labels:
           service: 'node-exporter'
           tier: 'monitoring'
+
+  # ========================================
+  # Merchant Policy Service (NEW)
+  # ========================================
+  - job_name: 'merchant-policy-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['host.docker.internal:40012']
+        labels:
+          service: 'merchant-policy-service'
+          tier: 'business-logic'
+          category: 'merchant-services'
+
+  # ========================================
+  # Merchant Quota Service (NEW)
+  # ========================================
+  - job_name: 'merchant-quota-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['host.docker.internal:40022']
+        labels:
+          service: 'merchant-quota-service'
+          tier: 'business-logic'
+          category: 'merchant-services'

@@ -4,11 +4,11 @@ import (
 	"log"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
+	"go.uber.org/zap"
 
 	"payment-platform/reconciliation-service/internal/client"
 	"payment-platform/reconciliation-service/internal/downloader"
@@ -21,6 +21,15 @@ import (
 
 func main() {
 	// Use Bootstrap framework for service initialization
+	var configClient *configclient.Client
+	if config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true" {
+		clientCfg := configclient.ClientConfig{ServiceName: "reconciliation-service", Environment: config.GetEnv("ENV", "production"), ConfigURL: config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"), RefreshRate: 30 * time.Second}
+		if config.GetEnvBool("CONFIG_CLIENT_MTLS", false) { clientCfg.EnableMTLS = true; clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", ""); clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", ""); clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "") }
+		client, _ := configclient.NewClient(clientCfg)
+		if client != nil { configClient = client; defer configClient.Stop() }
+	}
+	getConfig := func(key, defaultValue string) string { if configClient != nil { if val := configClient.Get(key); val != "" { return val } }; return config.GetEnv(key, defaultValue) }
+
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "reconciliation-service",
 		DBName:      "payment_reconciliation",
@@ -80,8 +89,8 @@ func main() {
 	// Create handler
 	reconHandler := handler.NewReconciliationHandler(reconService)
 
-	// JWT 认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// JWT 认证中间件（优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 

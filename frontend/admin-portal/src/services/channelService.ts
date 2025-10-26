@@ -243,7 +243,7 @@ export const channelService = {
 
   // Legacy/Compatibility APIs
   list: (params: ListChannelsParams) => {
-    return request.get<ListChannelsResponse>('/channels', { params })
+    return request.get<ListChannelsResponse>('/admin/channels', { params })
   },
 
   getById: (id: string) => {

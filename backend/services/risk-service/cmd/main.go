@@ -8,9 +8,11 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 	"payment-platform/risk-service/internal/client"
 	"payment-platform/risk-service/internal/handler"
 	"payment-platform/risk-service/internal/model"
@@ -36,7 +38,50 @@ import (
 //	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 1. 使用 Bootstrap 框架初始化应用
+	// 1. 初始化配置客户端（可选，失败不影响启动）
+	var configClient *configclient.Client
+	enableConfigClient := config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true"
+
+	if enableConfigClient {
+		// 检查是否启用 mTLS
+		enableConfigMTLS := config.GetEnvBool("CONFIG_CLIENT_MTLS", false)
+
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "risk-service",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+
+		// 如果启用 mTLS,添加证书配置
+		if enableConfigMTLS {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+		}
+
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败，将使用环境变量", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置中心客户端初始化成功")
+		}
+	}
+
+	// 定义配置获取函数：优先从配置中心获取，失败则使用环境变量
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 2. 使用 Bootstrap 框架初始化应用
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "risk-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_risk"),
@@ -94,8 +139,8 @@ func main() {
 	// pb.RegisterRiskServiceServer(application.GRPCServer, riskGrpcServer)
 	// logger.Info(fmt.Sprintf("gRPC Server 已注册，将监听端口 %d", config.GetEnvInt("GRPC_PORT", 50006)))
 
-	// JWT 认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// JWT 认证中间件（优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 

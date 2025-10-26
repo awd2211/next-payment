@@ -1,0 +1,287 @@
+# ============================================================================
+# BFF Services Prometheus Alert Rules
+# Admin BFF 和 Merchant BFF 服务告警规则
+# ============================================================================
+
+groups:
+  - name: bff_services_alerts
+    interval: 30s
+    rules:
+      # ======== 服务可用性告警 ========
+
+      - alert: BFFServiceDown
+        expr: up{job=~"admin-bff|merchant-bff"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: bff
+        annotations:
+          summary: "BFF Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute."
+          runbook_url: "https://wiki.example.com/runbooks/bff-service-down"
+
+      - alert: BFFServiceHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status=~"5.."}[5m])) by (job)
+            /
+            sum(rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "{{ $labels.job }} has error rate above 5% (current: {{ $value | humanizePercentage }})."
+
+      # ======== 速率限制告警 ========
+
+      - alert: BFFHighRateLimitViolations
+        expr: rate(http_requests_total{job=~"admin-bff|merchant-bff",status="429"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+          feature: rate_limiting
+        annotations:
+          summary: "High rate limit violations on {{ $labels.job }}"
+          description: "{{ $labels.job }} is experiencing {{ $value | humanize }} rate limit violations per second."
+          action: "Review rate limit configuration or check for potential abuse."
+
+      - alert: BFFRateLimitAbuse
+        expr: rate(http_requests_total{job=~"admin-bff|merchant-bff",status="429"}[1m]) > 50
+        for: 2m
+        labels:
+          severity: critical
+          component: bff
+          feature: rate_limiting
+        annotations:
+          summary: "Possible rate limit abuse on {{ $labels.job }}"
+          description: "{{ $labels.job }} is experiencing excessive rate limit violations ({{ $value | humanize }} req/s). Possible attack."
+          action: "Investigate source IPs and consider IP blocking."
+
+      # ======== 认证失败告警 ========
+
+      - alert: BFFHighAuthFailures
+        expr: rate(http_requests_total{job=~"admin-bff|merchant-bff",status="401"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+          feature: authentication
+        annotations:
+          summary: "High authentication failures on {{ $labels.job }}"
+          description: "{{ $labels.job }} has {{ $value | humanize }} authentication failures per second."
+          action: "Check for brute force attacks or expired tokens."
+
+      # ======== 2FA 告警（仅 Admin BFF） ========
+
+      - alert: AdminBFFHigh2FAFailures
+        expr: rate(http_requests_total{job="admin-bff",status="403",path=~".*payments.*|.*settlements.*|.*withdrawals.*"}[5m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+          feature: 2fa
+        annotations:
+          summary: "High 2FA failures on Admin BFF"
+          description: "Admin BFF has {{ $value | humanize }} 2FA verification failures per second on sensitive operations."
+          action: "Investigate potential unauthorized access attempts."
+
+      # ======== 权限拒绝告警 ========
+
+      - alert: BFFHighPermissionDenials
+        expr: rate(http_requests_total{job=~"admin-bff|merchant-bff",status="403"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: info
+          component: bff
+          feature: rbac
+        annotations:
+          summary: "High permission denials on {{ $labels.job }}"
+          description: "{{ $labels.job }} has {{ $value | humanize }} permission denials per second."
+          action: "Review user roles and permissions configuration."
+
+      # ======== 性能告警 ========
+
+      - alert: BFFHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job=~"admin-bff|merchant-bff"}[5m])) by (job, le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+          feature: performance
+        annotations:
+          summary: "High latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} P95 latency is {{ $value | humanizeDuration }} (threshold: 1s)."
+          action: "Check downstream service health and database connections."
+
+      - alert: BFFVeryHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job=~"admin-bff|merchant-bff"}[5m])) by (job, le)
+          ) > 3
+        for: 2m
+        labels:
+          severity: critical
+          component: bff
+          feature: performance
+        annotations:
+          summary: "Very high latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} P95 latency is {{ $value | humanizeDuration }} (threshold: 3s)."
+          action: "Immediate investigation required. Check database, Redis, and downstream services."
+
+      # ======== 资源使用告警 ========
+
+      - alert: BFFHighMemoryUsage
+        expr: |
+          (
+            process_resident_memory_bytes{job=~"admin-bff|merchant-bff"}
+            /
+            (1024 * 1024 * 1024)
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+          feature: resources
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "{{ $labels.job }} is using {{ $value | humanize }}GB memory (threshold: 0.8GB)."
+          action: "Consider increasing memory limits or investigating memory leaks."
+
+      - alert: BFFHighCPUUsage
+        expr: rate(process_cpu_seconds_total{job=~"admin-bff|merchant-bff"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+          feature: resources
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "{{ $labels.job }} CPU usage is {{ $value | humanizePercentage }} (threshold: 80%)."
+
+      # ======== 请求量告警 ========
+
+      - alert: BFFRequestSurge
+        expr: |
+          (
+            rate(http_requests_total{job=~"admin-bff|merchant-bff"}[1m])
+            /
+            rate(http_requests_total{job=~"admin-bff|merchant-bff"}[1m] offset 10m)
+          ) > 2
+        for: 5m
+        labels:
+          severity: info
+          component: bff
+          feature: traffic
+        annotations:
+          summary: "Request surge on {{ $labels.job }}"
+          description: "{{ $labels.job }} is experiencing {{ $value | humanize }}x traffic increase compared to 10 minutes ago."
+          action: "Monitor for potential issues. May be legitimate traffic spike."
+
+      - alert: BFFUnusuallyLowTraffic
+        expr: rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m]) < 0.1
+        for: 15m
+        labels:
+          severity: info
+          component: bff
+          feature: traffic
+        annotations:
+          summary: "Unusually low traffic on {{ $labels.job }}"
+          description: "{{ $labels.job }} is receiving very low traffic ({{ $value | humanize }} req/s)."
+          action: "Check if service is properly registered in load balancer."
+
+      # ======== 健康检查告警 ========
+
+      - alert: BFFHealthCheckFailing
+        expr: up{job=~"admin-bff|merchant-bff"} == 0 or absent(up{job=~"admin-bff|merchant-bff"})
+        for: 30s
+        labels:
+          severity: critical
+          component: bff
+          feature: health
+        annotations:
+          summary: "{{ $labels.job }} health check is failing"
+          description: "Health check for {{ $labels.job }} on {{ $labels.instance }} is failing."
+          action: "Check service logs and restart if necessary."
+
+      # ======== 数据库连接告警（仅 Admin BFF） ========
+
+      - alert: AdminBFFDatabaseConnectionIssues
+        expr: sum(rate(http_requests_total{job="admin-bff",status="503"}[5m])) > 1
+        for: 2m
+        labels:
+          severity: critical
+          component: bff
+          feature: database
+        annotations:
+          summary: "Admin BFF database connection issues"
+          description: "Admin BFF is returning 503 errors, likely due to database connection problems."
+          action: "Check PostgreSQL connection and admin_bff database health."
+
+      # ======== Redis 连接告警 ========
+
+      - alert: BFFRedisConnectionIssues
+        expr: redis_up{job=~"admin-bff|merchant-bff"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: bff
+          feature: cache
+        annotations:
+          summary: "{{ $labels.job }} Redis connection issues"
+          description: "{{ $labels.job }} cannot connect to Redis. Rate limiting may fall back to in-memory."
+          action: "Check Redis service health and network connectivity."
+
+      # ======== 安全事件告警 ========
+
+      - alert: BFFSuspiciousActivity
+        expr: |
+          (
+            rate(http_requests_total{job=~"admin-bff|merchant-bff",status=~"401|403|429"}[5m])
+            /
+            rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          component: bff
+          feature: security
+        annotations:
+          summary: "Suspicious activity on {{ $labels.job }}"
+          description: "{{ $labels.job }} has {{ $value | humanizePercentage }} of requests being rejected (401/403/429)."
+          action: "Investigate for potential security threats or misconfigurations."
+
+      # ======== 审计日志告警（仅 Admin BFF） ========
+
+      - alert: AdminBFFHighSensitiveOperations
+        expr: rate(http_requests_total{job="admin-bff",path=~".*approve.*|.*reject.*|.*freeze.*"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: info
+          component: bff
+          feature: audit
+        annotations:
+          summary: "High rate of sensitive operations on Admin BFF"
+          description: "Admin BFF is processing {{ $value | humanize }} sensitive operations per second."
+          action: "Normal if expected. Review audit logs if unusual."
+
+# ============================================================================
+# 告警级别说明:
+# - critical: 需要立即处理，影响服务可用性
+# - warning:  需要关注，可能影响服务质量
+# - info:     仅通知，无需立即处理
+#
+# 使用方法:
+# 1. 将此文件放到 Prometheus rules 目录
+# 2. 在 prometheus.yml 中添加:
+#    rule_files:
+#      - "alerts/bff-alerts.yml"
+# 3. 重载 Prometheus 配置:
+#    curl -X POST http://localhost:9090/-/reload
+# ============================================================================

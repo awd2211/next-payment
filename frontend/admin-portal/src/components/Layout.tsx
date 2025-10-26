@@ -184,6 +184,10 @@ const Layout = () => {
           key: '/system-configs',
           label: t('menu.systemConfigs') || '系统配置',
         },
+        hasPermission('config.view') && {
+          key: '/config-management',
+          label: t('menu.configManagement') || '配置中心',
+        },
         hasPermission('admin.view') && {
           key: '/admins',
           label: t('menu.admins') || '管理员',

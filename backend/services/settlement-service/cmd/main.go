@@ -9,11 +9,13 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
 	"github.com/payment-platform/pkg/saga"
 	"github.com/payment-platform/pkg/scheduler"
+	"go.uber.org/zap"
 	"payment-platform/settlement-service/internal/client"
 	"payment-platform/settlement-service/internal/handler"
 	"payment-platform/settlement-service/internal/model"
@@ -39,7 +41,47 @@ import (
 //	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 1. Bootstrap初始化
+	// 1. 初始化配置客户端
+	var configClient *configclient.Client
+	enableConfigClient := config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true"
+
+	if enableConfigClient {
+		enableConfigMTLS := config.GetEnvBool("CONFIG_CLIENT_MTLS", false)
+
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "settlement-service",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+
+		if enableConfigMTLS {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+		}
+
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败，将使用环境变量", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置中心客户端初始化成功")
+		}
+	}
+
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 2. Bootstrap初始化
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "settlement-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_settlement"),
@@ -75,11 +117,11 @@ func main() {
 	settlementRepo := repository.NewSettlementRepository(application.DB)
 	settlementAccountRepo := repository.NewSettlementAccountRepository(application.DB)
 
-	// 3. 初始化HTTP客户端
-	accountingServiceURL := config.GetEnv("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
-	withdrawalServiceURL := config.GetEnv("WITHDRAWAL_SERVICE_URL", "http://localhost:40014")
-	merchantServiceURL := config.GetEnv("MERCHANT_SERVICE_URL", "http://localhost:40002")
-	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	// 3. 初始化HTTP客户端（优先从配置中心获取）
+	accountingServiceURL := getConfig("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
+	withdrawalServiceURL := getConfig("WITHDRAWAL_SERVICE_URL", "http://localhost:40014")
+	merchantServiceURL := getConfig("MERCHANT_SERVICE_URL", "http://localhost:40002")
+	notificationServiceURL := getConfig("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
 
 	accountingClient := client.NewAccountingClient(accountingServiceURL)
 	withdrawalClient := client.NewWithdrawalClient(withdrawalServiceURL)
@@ -128,9 +170,9 @@ func main() {
 	go taskScheduler.Start(context.Background())
 	logger.Info("定时任务调度器已启动（包含自动结算和数据归档任务）")
 
-	// 5. 初始化Kafka EventPublisher (新增: 事件驱动架构)
+	// 5. 初始化Kafka EventPublisher (新增: 事件驱动架构，优先从配置中心获取)
 	var eventPublisher *kafka.EventPublisher
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
+	kafkaBrokersStr := getConfig("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 		eventPublisher = kafka.NewEventPublisher(kafkaBrokers)
@@ -167,8 +209,8 @@ func main() {
 	}
 	logger.Info("Settlement Saga Service 初始化完成")
 
-	// 7. 初始化 JWT Manager（用于认证）
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// 7. 初始化 JWT Manager（用于认证，优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

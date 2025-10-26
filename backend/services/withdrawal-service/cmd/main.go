@@ -7,10 +7,12 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/saga"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 	"payment-platform/withdrawal-service/internal/client"
 	"payment-platform/withdrawal-service/internal/handler"
 	"payment-platform/withdrawal-service/internal/model"
@@ -34,7 +36,47 @@ import (
 //	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 1. Bootstrap初始化
+	// 1. 初始化配置客户端
+	var configClient *configclient.Client
+	enableConfigClient := config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true"
+
+	if enableConfigClient {
+		enableConfigMTLS := config.GetEnvBool("CONFIG_CLIENT_MTLS", false)
+
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "withdrawal-service",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+
+		if enableConfigMTLS {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+		}
+
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败，将使用环境变量", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置中心客户端初始化成功")
+		}
+	}
+
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 2. Bootstrap初始化
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "withdrawal-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_withdrawal"),
@@ -61,24 +103,26 @@ func main() {
 
 	logger.Info("正在启动 Withdrawal Service...")
 
-	// 2. 初始化客户端
-	accountingServiceURL := config.GetEnv("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
-	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	// 2. 初始化客户端（优先从配置中心获取）
+	accountingServiceURL := getConfig("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
+	notificationServiceURL := getConfig("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
 
 	accountingClient := client.NewAccountingClient(accountingServiceURL)
 	notificationClient := client.NewNotificationClient(notificationServiceURL)
+	logger.Info("HTTP客户端初始化完成")
 
-	// 银行转账客户端配置
+	// 银行转账客户端配置（优先从配置中心获取敏感信息）
 	bankConfig := &client.BankConfig{
-		BankChannel: config.GetEnv("BANK_CHANNEL", "mock"),
-		APIEndpoint: config.GetEnv("BANK_API_ENDPOINT", "https://api.bank.example.com"),
-		MerchantID:  config.GetEnv("BANK_MERCHANT_ID", ""),
-		APIKey:      config.GetEnv("BANK_API_KEY", ""),
-		APISecret:   config.GetEnv("BANK_API_SECRET", ""),
+		BankChannel: getConfig("BANK_CHANNEL", "mock"),
+		APIEndpoint: getConfig("BANK_API_ENDPOINT", "https://api.bank.example.com"),
+		MerchantID:  getConfig("BANK_MERCHANT_ID", ""),
+		APIKey:      getConfig("BANK_API_KEY", ""),
+		APISecret:   getConfig("BANK_API_SECRET", ""),
 		Timeout:     30 * time.Second,
 		UseSandbox:  config.GetEnvBool("BANK_USE_SANDBOX", true),
 	}
 	bankTransferClient := client.NewBankTransferClient(bankConfig)
+	logger.Info("银行转账客户端初始化完成")
 
 	// 3. 初始化Repository
 	withdrawalRepo := repository.NewWithdrawalRepository(application.DB)
@@ -114,8 +158,8 @@ func main() {
 
 	logger.Info("路由注册完成")
 
-	// 8. JWT认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// 8. JWT认证中间件（优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 

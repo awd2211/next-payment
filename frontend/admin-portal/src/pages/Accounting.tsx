@@ -1,192 +1,228 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Tabs, Statistic, Row, Col, DatePicker, Select, Space, message } from 'antd'
-import { DollarOutlined, LineChartOutlined } from '@ant-design/icons'
+import { Card, Table, Tabs, Statistic, Row, Col, Select, Space, Tag } from 'antd'
+import { DollarOutlined, SwapOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { accountingService, type AccountingEntry, type AccountingSummary } from '../services/accountingService'
-import dayjs from 'dayjs'
-
-const { RangePicker } = DatePicker
+import { accountingService, type Transaction } from '../services/accountingService'
 
 export default function Accounting() {
   const [loading, setLoading] = useState(false)
-  const [entries, setEntries] = useState<AccountingEntry[]>([])
-  const [summary, setSummary] = useState<AccountingSummary | null>(null)
-  const [dateRange, setDateRange] = useState<[string, string]>([
-    dayjs().startOf('month').format('YYYY-MM-DD'),
-    dayjs().endOf('month').format('YYYY-MM-DD'),
-  ])
-  const [currency, setCurrency] = useState<string>('USD')
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [activeTab, setActiveTab] = useState<string>('all')
+  const [totalIn, setTotalIn] = useState(0)
+  const [totalOut, setTotalOut] = useState(0)
 
   useEffect(() => {
     fetchData()
-    fetchSummary()
-  }, [dateRange, currency])
+  }, [activeTab])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const response = await accountingService.listEntries({
+      const params: any = {
         page: 1,
         page_size: 50,
-        start_date: dateRange[0],
-        end_date: dateRange[1],
-        currency,
-      })
+      }
+
+      // 根据 tab 筛选交易类型
+      if (activeTab !== 'all') {
+        params.transaction_type = activeTab
+      }
+
+      const response = await accountingService.listTransactions(params)
+
       // 响应拦截器已解包，直接使用数据
       if (response && response.list) {
-        setEntries(response.list)
+        setTransactions(response.list)
+
+        // 计算总入账和总出账
+        const totalInAmount = response.list
+          .filter((t: Transaction) => t.amount > 0)
+          .reduce((sum: number, t: Transaction) => sum + t.amount, 0)
+        const totalOutAmount = response.list
+          .filter((t: Transaction) => t.amount < 0)
+          .reduce((sum: number, t: Transaction) => sum + Math.abs(t.amount), 0)
+
+        setTotalIn(totalInAmount)
+        setTotalOut(totalOutAmount)
       }
     } catch (error) {
-      // 错误已被拦截器处理并显示
-      console.error('Failed to fetch accounting entries:', error)
+      console.error('Failed to fetch transactions:', error)
+      // 如果API失败，使用空数据
+      setTransactions([])
+      setTotalIn(0)
+      setTotalOut(0)
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchSummary = async () => {
-    try {
-      const response = await accountingService.getSummary({
-        start_date: dateRange[0],
-        end_date: dateRange[1],
-        currency,
-      })
-      // 响应拦截器已解包，直接使用数据
-      if (response) {
-        setSummary(response)
-      }
-    } catch (error) {
-      console.error('Failed to fetch accounting summary:', error)
-    }
-  }
-
-  const columns: ColumnsType<AccountingEntry> = [
-    { title: '凭证号', dataIndex: 'entry_no', width: 180 },
-    { title: '日期', dataIndex: 'account_date', width: 120 },
-    { title: '借方科目', dataIndex: 'debit_account', width: 150 },
-    { title: '贷方科目', dataIndex: 'credit_account', width: 150 },
+  const columns: ColumnsType<Transaction> = [
+    {
+      title: '交易流水号',
+      dataIndex: 'transaction_no',
+      width: 200,
+      fixed: 'left',
+    },
+    {
+      title: '交易类型',
+      dataIndex: 'transaction_type',
+      width: 120,
+      render: (type: string) => {
+        const typeMap: Record<string, { text: string; color: string }> = {
+          payment_in: { text: '支付入账', color: 'green' },
+          refund_out: { text: '退款出账', color: 'orange' },
+          withdraw: { text: '提现', color: 'red' },
+          fee: { text: '手续费', color: 'purple' },
+          adjustment: { text: '调账', color: 'blue' },
+        }
+        const config = typeMap[type] || { text: type, color: 'default' }
+        return <Tag color={config.color}>{config.text}</Tag>
+      },
+    },
     {
       title: '金额',
       dataIndex: 'amount',
-      width: 120,
-      render: (amount, record) => `${record.currency} ${(amount / 100).toFixed(2)}`,
+      width: 150,
+      align: 'right',
+      render: (amount: number, record: Transaction) => {
+        const value = (amount / 100).toFixed(2)
+        const isPositive = amount > 0
+        return (
+          <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
+            {isPositive ? '+' : ''}{value} {record.currency}
+          </span>
+        )
+      },
     },
-    { title: '摘要', dataIndex: 'description', ellipsis: true },
-    { title: '参考号', dataIndex: 'reference_no', width: 180 },
-    { title: '创建时间', dataIndex: 'created_at', width: 180 },
+    {
+      title: '货币',
+      dataIndex: 'currency',
+      width: 80,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 100,
+      render: (status: string) => {
+        const statusMap: Record<string, { text: string; color: string }> = {
+          pending: { text: '待处理', color: 'default' },
+          completed: { text: '已完成', color: 'success' },
+          failed: { text: '失败', color: 'error' },
+          reversed: { text: '已冲正', color: 'warning' },
+        }
+        const config = statusMap[status] || { text: status, color: 'default' }
+        return <Tag color={config.color}>{config.text}</Tag>
+      },
+    },
+    {
+      title: '描述',
+      dataIndex: 'description',
+      ellipsis: true,
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      width: 180,
+    },
   ]
 
-  const handleDateRangeChange = (dates: any) => {
-    if (dates && dates[0] && dates[1]) {
-      setDateRange([
-        dates[0].format('YYYY-MM-DD'),
-        dates[1].format('YYYY-MM-DD'),
-      ])
-    }
-  }
-
-  const handleCurrencyChange = (value: string) => {
-    setCurrency(value)
-  }
+  const tabItems = [
+    {
+      key: 'all',
+      label: '全部交易',
+    },
+    {
+      key: 'payment_in',
+      label: '支付入账',
+    },
+    {
+      key: 'refund_out',
+      label: '退款出账',
+    },
+    {
+      key: 'withdraw',
+      label: '提现',
+    },
+    {
+      key: 'fee',
+      label: '手续费',
+    },
+    {
+      key: 'adjustment',
+      label: '调账',
+    },
+  ]
 
   return (
     <div>
+      {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
+        <Col span={8}>
           <Card>
             <Statistic
-              title="总资产"
-              value={summary?.total_assets || 0}
+              title="总入账"
+              value={totalIn / 100}
               precision={2}
-              prefix={<DollarOutlined />}
-              suffix={currency}
+              valueStyle={{ color: '#3f8600' }}
+              prefix={<RiseOutlined />}
+              suffix="USD"
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col span={8}>
           <Card>
             <Statistic
-              title="总负债"
-              value={summary?.total_liabilities || 0}
+              title="总出账"
+              value={totalOut / 100}
               precision={2}
-              prefix={<DollarOutlined />}
-              suffix={currency}
+              valueStyle={{ color: '#cf1322' }}
+              prefix={<FallOutlined />}
+              suffix="USD"
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col span={8}>
           <Card>
             <Statistic
-              title="本期收入"
-              value={summary?.total_revenue || 0}
+              title="净额"
+              value={(totalIn - totalOut) / 100}
               precision={2}
+              valueStyle={{ color: totalIn >= totalOut ? '#3f8600' : '#cf1322' }}
               prefix={<DollarOutlined />}
-              suffix={currency}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="本期支出"
-              value={summary?.total_expense || 0}
-              precision={2}
-              prefix={<LineChartOutlined />}
-              suffix={currency}
+              suffix="USD"
             />
           </Card>
         </Col>
       </Row>
 
+      {/* 交易列表 */}
       <Card
-        title="账务管理"
-        extra={
+        title={
           <Space>
-            <RangePicker
-              defaultValue={[dayjs(dateRange[0]), dayjs(dateRange[1])]}
-              onChange={handleDateRangeChange}
-            />
-            <Select
-              placeholder="币种"
-              style={{ width: 100 }}
-              value={currency}
-              onChange={handleCurrencyChange}
-              options={[
-                { label: 'USD', value: 'USD' },
-                { label: 'CNY', value: 'CNY' },
-                { label: 'EUR', value: 'EUR' },
-                { label: 'GBP', value: 'GBP' },
-              ]}
-            />
+            <SwapOutlined />
+            <span>账户交易记录</span>
           </Space>
         }
       >
         <Tabs
-          items={[
-            {
-              key: 'entries',
-              label: '会计分录',
-              children: (
-                <Table
-                  columns={columns}
-                  dataSource={entries}
-                  loading={loading}
-                  rowKey="id"
-                  scroll={{ x: 1200 }}
-                />
-              ),
-            },
-            {
-              key: 'balance',
-              label: '余额表',
-              children: <div style={{ padding: 50, textAlign: 'center' }}>余额表功能开发中...</div>,
-            },
-            {
-              key: 'ledger',
-              label: '总账',
-              children: <div style={{ padding: 50, textAlign: 'center' }}>总账功能开发中...</div>,
-            },
-          ]}
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={tabItems}
+          style={{ marginBottom: 16 }}
+        />
+
+        <Table
+          columns={columns}
+          dataSource={transactions}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            total: transactions.length,
+            pageSize: 50,
+            showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 条记录`,
+          }}
+          scroll={{ x: 1200 }}
         />
       </Card>
     </div>

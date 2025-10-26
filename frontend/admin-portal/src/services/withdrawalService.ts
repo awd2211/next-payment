@@ -82,70 +82,70 @@ export const withdrawalService = {
    * 获取提现申请列表
    */
   list: (params: ListWithdrawalsParams) => {
-    return request.get<ListWithdrawalsResponse>('/withdrawals', { params })
+    return request.get<ListWithdrawalsResponse>('/api/v1/withdrawals', { params })
   },
 
   /**
    * 获取单个提现申请详情
    */
   getById: (id: string) => {
-    return request.get<{ data: Withdrawal }>(`/withdrawals/${id}`)
+    return request.get<{ data: Withdrawal }>(`/api/v1/withdrawals/${id}`)
   },
 
   /**
    * 批准提现申请
    */
   approve: (id: string, data: ApproveWithdrawalRequest) => {
-    return request.post(`/withdrawals/${id}/approve`, data)
+    return request.post(`/api/v1/withdrawals/${id}/approve`, data)
   },
 
   /**
    * 拒绝提现申请
    */
   reject: (id: string, data: RejectWithdrawalRequest) => {
-    return request.post(`/withdrawals/${id}/reject`, data)
+    return request.post(`/api/v1/withdrawals/${id}/reject`, data)
   },
 
   /**
-   * 处理提现（标记为处理中）
+   * 处理提现（标记为处理中）- 注意: 后端使用execute接口
    */
   process: (id: string, data: ProcessWithdrawalRequest) => {
-    return request.post(`/withdrawals/${id}/process`, data)
+    return request.post(`/api/v1/withdrawals/${id}/execute`, data)
   },
 
   /**
-   * 完成提现
+   * 完成提现 - 对应后端的execute接口
    */
   complete: (id: string) => {
-    return request.post(`/withdrawals/${id}/complete`)
+    return request.post(`/api/v1/withdrawals/${id}/execute`)
   },
 
   /**
-   * 标记提现失败
+   * 标记提现失败 - 注意: 后端需要实现此接口
    */
   fail: (id: string, reason: string) => {
-    return request.post(`/withdrawals/${id}/fail`, { reason })
+    return request.post(`/api/v1/withdrawals/${id}/fail`, { reason })
   },
 
   /**
-   * 获取提现统计信息
+   * 获取提现统计信息 - 注意: 后端需要实现此接口
    */
   getStats: (params?: { start_time?: string; end_time?: string; currency?: string }) => {
-    return request.get<{ data: WithdrawalStats }>('/withdrawals/stats', { params })
+    return request.get<{ data: WithdrawalStats }>('/api/v1/withdrawals/stats', { params })
   },
 
   /**
-   * 批量批准提现申请
+   * 批量批准提现申请 - 注意: 后端需要实现此接口
    */
   batchApprove: (ids: string[], remark?: string) => {
-    return request.post('/withdrawals/batch/approve', { ids, remark })
+    return request.post('/api/v1/withdrawals/batch/approve', { ids, remark })
   },
 
   /**
-   * 导出提现记录
+   * 导出提现记录 - 注意: 后端需要实现此接口
    */
   export: (params: ListWithdrawalsParams) => {
-    return request.download('/withdrawals/export', 'withdrawals.xlsx', { params })
+    return request.download('/api/v1/withdrawals/export', 'withdrawals.xlsx', { params })
   },
 }
 

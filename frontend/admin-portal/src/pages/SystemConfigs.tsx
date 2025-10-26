@@ -34,10 +34,19 @@ const SystemConfigs = () => {
   const loadConfigs = async () => {
     setLoading(true)
     try {
-      const response = await systemConfigService.listGrouped()
+      const response = await systemConfigService.list({ page: 1, page_size: 100 })
       // 响应拦截器已解包，直接使用数据
-      if (response && response.data) {
-        setConfigs(response.data.configs || {})
+      if (response && response.list) {
+        // 按服务名称分组
+        const grouped = (response.list || []).reduce((acc: Record<string, SystemConfig[]>, config: SystemConfig) => {
+          const category = config.service_name || 'uncategorized'
+          if (!acc[category]) {
+            acc[category] = []
+          }
+          acc[category].push(config)
+          return acc
+        }, {})
+        setConfigs(grouped)
       }
     } catch (error) {
       // Error handled by interceptor
@@ -49,20 +58,20 @@ const SystemConfigs = () => {
   const columns: ColumnsType<SystemConfig> = [
     {
       title: '配置键',
-      dataIndex: 'key',
-      key: 'key',
+      dataIndex: 'config_key',
+      key: 'config_key',
       width: 250,
     },
     {
       title: '配置值',
-      dataIndex: 'value',
-      key: 'value',
+      dataIndex: 'config_value',
+      key: 'config_value',
       ellipsis: true,
     },
     {
       title: '类型',
-      dataIndex: 'type',
-      key: 'type',
+      dataIndex: 'value_type',
+      key: 'value_type',
       width: 100,
       render: (type: string) => {
         const colors: Record<string, string> = {
@@ -75,17 +84,23 @@ const SystemConfigs = () => {
       },
     },
     {
+      title: '环境',
+      dataIndex: 'environment',
+      key: 'environment',
+      width: 100,
+    },
+    {
       title: '描述',
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
     },
     {
-      title: '公开',
-      dataIndex: 'is_public',
-      key: 'is_public',
+      title: '加密',
+      dataIndex: 'is_encrypted',
+      key: 'is_encrypted',
       width: 80,
-      render: (is_public: boolean) => (is_public ? '是' : '否'),
+      render: (is_encrypted: boolean) => (is_encrypted ? '是' : '否'),
     },
     {
       title: '操作',
@@ -130,7 +145,7 @@ const SystemConfigs = () => {
   const handleDelete = (config: SystemConfig) => {
     Modal.confirm({
       title: '确认删除',
-      content: `确定要删除配置 "${config.key}" 吗？`,
+      content: `确定要删除配置 "${config.config_key}" 吗？`,
       onOk: async () => {
         try {
           await systemConfigService.delete(config.id)
@@ -204,7 +219,15 @@ const SystemConfigs = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item
-            name="key"
+            name="service_name"
+            label="服务名称"
+            rules={[{ required: true, message: '请输入服务名称' }]}
+          >
+            <Input placeholder="例如: payment-gateway" disabled={!!editingConfig} />
+          </Form.Item>
+
+          <Form.Item
+            name="config_key"
             label="配置键"
             rules={[{ required: true, message: '请输入配置键' }]}
           >
@@ -212,7 +235,7 @@ const SystemConfigs = () => {
           </Form.Item>
 
           <Form.Item
-            name="value"
+            name="config_value"
             label="配置值"
             rules={[{ required: true, message: '请输入配置值' }]}
           >
@@ -220,7 +243,7 @@ const SystemConfigs = () => {
           </Form.Item>
 
           <Form.Item
-            name="type"
+            name="value_type"
             label="数据类型"
             rules={[{ required: true, message: '请选择数据类型' }]}
           >
@@ -233,24 +256,23 @@ const SystemConfigs = () => {
           </Form.Item>
 
           <Form.Item
-            name="category"
-            label="配置类别"
-            rules={[{ required: true, message: '请选择配置类别' }]}
+            name="environment"
+            label="环境"
+            rules={[{ required: true, message: '请选择环境' }]}
           >
-            <Select placeholder="选择配置类别" disabled={!!editingConfig}>
-              <Select.Option value="payment">支付配置</Select.Option>
-              <Select.Option value="notification">通知配置</Select.Option>
-              <Select.Option value="risk">风控配置</Select.Option>
-              <Select.Option value="system">系统配置</Select.Option>
-              <Select.Option value="settlement">结算配置</Select.Option>
+            <Select placeholder="选择环境">
+              <Select.Option value="development">开发环境</Select.Option>
+              <Select.Option value="staging">测试环境</Select.Option>
+              <Select.Option value="production">生产环境</Select.Option>
+              <Select.Option value="all">所有环境</Select.Option>
             </Select>
           </Form.Item>
 
           <Form.Item name="description" label="描述">
-            <Input placeholder="配置描述" />
+            <TextArea rows={2} placeholder="配置描述" />
           </Form.Item>
 
-          <Form.Item name="is_public" label="是否公开" valuePropName="checked">
+          <Form.Item name="is_encrypted" label="是否加密" valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>

@@ -32,6 +32,7 @@ const Disputes = lazy(() => import('./pages/Disputes'))
 const Reconciliation = lazy(() => import('./pages/Reconciliation'))
 const Webhooks = lazy(() => import('./pages/Webhooks'))
 const MerchantLimits = lazy(() => import('./pages/MerchantLimits'))
+const ConfigManagement = lazy(() => import('./pages/ConfigManagement'))
 
 function App() {
   return (
@@ -215,6 +216,14 @@ function App() {
             element={
               <Suspense fallback={<PageLoading />}>
                 <MerchantLimits />
+              </Suspense>
+            }
+          />
+          <Route
+            path="config-management"
+            element={
+              <Suspense fallback={<PageLoading />}>
+                <ConfigManagement />
               </Suspense>
             }
           />

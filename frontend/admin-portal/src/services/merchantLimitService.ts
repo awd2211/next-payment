@@ -1,213 +1,185 @@
 import request from './request'
 
-// Types
-export interface MerchantLimit {
+// ===== 层级管理 =====
+
+export interface LimitTier {
   id: string
-  merchant_id: string
-  merchant_name: string
-  daily_transaction_limit: number
-  daily_amount_limit: number
-  monthly_transaction_limit: number
-  monthly_amount_limit: number
-  single_transaction_min: number
-  single_transaction_max: number
-  current_daily_count: number
-  current_daily_amount: number
-  current_monthly_count: number
-  current_monthly_amount: number
-  is_enabled: boolean
-  alert_threshold: number
+  tier_name: string
+  tier_level: number
+  daily_limit: number
+  monthly_limit: number
+  single_transaction_limit: number
+  description?: string
   created_at: string
   updated_at: string
 }
 
-export interface LimitUsageHistory {
-  id: string
-  merchant_id: string
-  date: string
-  transaction_count: number
-  transaction_amount: number
-  limit_type: 'daily' | 'monthly'
-}
-
-export interface ListMerchantLimitsParams {
+export interface ListTiersParams {
   page?: number
   page_size?: number
-  merchant_id?: string
-  merchant_name?: string
-  is_enabled?: boolean
-  alert_status?: 'normal' | 'warning' | 'exceeded'
 }
 
-export interface ListMerchantLimitsResponse {
-  code: number
-  message: string
-  data: {
-    list: MerchantLimit[]
+export interface ListTiersResponse {
+  data: LimitTier[]
+  pagination: {
     total: number
     page: number
     page_size: number
   }
 }
 
-export interface MerchantLimitDetailResponse {
-  code: number
-  message: string
-  data: MerchantLimit
-}
+// ===== 商户限额管理 =====
 
-export interface UpdateMerchantLimitRequest {
-  daily_transaction_limit?: number
-  daily_amount_limit?: number
-  monthly_transaction_limit?: number
-  monthly_amount_limit?: number
-  single_transaction_min?: number
-  single_transaction_max?: number
-  is_enabled?: boolean
-  alert_threshold?: number
-}
-
-export interface UpdateMerchantLimitResponse {
-  code: number
-  message: string
-  data: MerchantLimit
-}
-
-export interface LimitUsageStatsResponse {
-  code: number
-  message: string
-  data: {
-    merchant_id: string
-    daily: {
-      transaction_count: number
-      transaction_amount: number
-      usage_rate_count: number
-      usage_rate_amount: number
-    }
-    monthly: {
-      transaction_count: number
-      transaction_amount: number
-      usage_rate_count: number
-      usage_rate_amount: number
-    }
-  }
-}
-
-export interface LimitAlertConfig {
+export interface MerchantLimit {
   id: string
   merchant_id: string
-  alert_type: 'email' | 'sms' | 'webhook'
-  recipients: string[]
-  is_enabled: boolean
+  merchant_name?: string
+  tier_id: string
+  tier_name?: string
+  daily_limit: number
+  monthly_limit: number
+  single_transaction_limit: number
+  used_daily_amount: number
+  used_monthly_amount: number
+  remaining_daily_amount: number
+  remaining_monthly_amount: number
+  is_suspended: boolean
+  suspend_reason?: string
+  created_at: string
+  updated_at: string
 }
 
-// API Methods
+export interface UsageHistory {
+  id: string
+  merchant_id: string
+  transaction_type: string
+  amount: number
+  currency: string
+  daily_used: number
+  monthly_used: number
+  created_at: string
+}
+
+export interface UsageStatistics {
+  merchant_id: string
+  current_tier: string
+  daily_usage_rate: number
+  monthly_usage_rate: number
+  total_transactions_today: number
+  total_transactions_month: number
+  average_transaction_amount: number
+  peak_transaction_amount: number
+  last_transaction_at?: string
+}
+
+// ===== API Service =====
+
 export const merchantLimitService = {
+  // ===== 层级管理 API (管理员) =====
+
   /**
-   * Get merchant limits list
+   * 创建限额层级
    */
-  list: (params: ListMerchantLimitsParams) => {
-    return request.get<ListMerchantLimitsResponse>('/api/v1/admin/merchant-limits', { params })
+  createTier: (data: Partial<LimitTier>) => {
+    return request.post<LimitTier>('/api/v1/tiers', data)
   },
 
   /**
-   * Get merchant limit detail by merchant ID
+   * 获取层级列表
    */
-  getDetail: (merchantId: string) => {
-    return request.get<MerchantLimitDetailResponse>(`/api/v1/admin/merchant-limits/${merchantId}`)
+  listTiers: (params: ListTiersParams) => {
+    return request.get<ListTiersResponse>('/api/v1/tiers', { params })
   },
 
   /**
-   * Update merchant limit
+   * 获取单个层级详情
    */
-  update: (merchantId: string, data: UpdateMerchantLimitRequest) => {
-    return request.put<UpdateMerchantLimitResponse>(`/api/v1/admin/merchant-limits/${merchantId}`, data)
+  getTier: (tierId: string) => {
+    return request.get<{ data: LimitTier }>(`/api/v1/tiers/${tierId}`)
   },
 
   /**
-   * Create merchant limit (for new merchant)
+   * 更新层级
    */
-  create: (merchantId: string, data: UpdateMerchantLimitRequest) => {
-    return request.post<UpdateMerchantLimitResponse>(`/api/v1/admin/merchant-limits/${merchantId}`, data)
+  updateTier: (tierId: string, data: Partial<LimitTier>) => {
+    return request.put<LimitTier>(`/api/v1/tiers/${tierId}`, data)
   },
 
   /**
-   * Get current usage statistics for a merchant
+   * 删除层级
    */
-  getUsageStats: (merchantId: string) => {
-    return request.get<LimitUsageStatsResponse>(`/api/v1/admin/merchant-limits/${merchantId}/usage`)
+  deleteTier: (tierId: string) => {
+    return request.delete(`/api/v1/tiers/${tierId}`)
   },
 
-  /**
-   * Get usage history
-   */
-  getUsageHistory: (merchantId: string, params?: { start_date?: string; end_date?: string; limit_type?: string }) => {
-    return request.get(`/api/v1/admin/merchant-limits/${merchantId}/history`, { params })
-  },
+  // ===== 商户限额管理 API =====
 
   /**
-   * Reset daily/monthly counters (admin operation)
+   * 初始化商户限额
    */
-  resetCounters: (merchantId: string, type: 'daily' | 'monthly') => {
-    return request.post(`/api/v1/admin/merchant-limits/${merchantId}/reset`, { type })
-  },
-
-  /**
-   * Get merchants exceeding limits (alert dashboard)
-   */
-  getAlertslist: (params?: { threshold?: number }) => {
-    return request.get('/api/v1/admin/merchant-limits/alerts', { params })
-  },
-
-  /**
-   * Get limit alert configuration
-   */
-  getAlertConfig: (merchantId: string) => {
-    return request.get(`/api/v1/admin/merchant-limits/${merchantId}/alert-config`)
-  },
-
-  /**
-   * Update limit alert configuration
-   */
-  updateAlertConfig: (merchantId: string, data: Partial<LimitAlertConfig>) => {
-    return request.put(`/api/v1/admin/merchant-limits/${merchantId}/alert-config`, data)
-  },
-
-  /**
-   * Batch update limits (for multiple merchants)
-   */
-  batchUpdate: (data: { merchant_ids: string[]; limits: UpdateMerchantLimitRequest }) => {
-    return request.post('/api/v1/admin/merchant-limits/batch-update', data)
-  },
-
-  /**
-   * Export merchant limits report
-   */
-  export: (params: ListMerchantLimitsParams) => {
-    return request.get('/api/v1/admin/merchant-limits/export', {
-      params,
-      responseType: 'blob',
+  initializeLimit: (merchantId: string, tierId: string) => {
+    return request.post('/api/v1/limits/initialize', {
+      merchant_id: merchantId,
+      tier_id: tierId,
     })
   },
 
   /**
-   * Get system-wide limit statistics
+   * 获取商户限额
    */
-  getSystemStats: () => {
-    return request.get('/api/v1/admin/merchant-limits/system-stats')
+  getMerchantLimit: (merchantId: string) => {
+    return request.get<{ data: MerchantLimit }>(`/api/v1/limits/${merchantId}`)
   },
 
   /**
-   * Get limit templates (preset configurations)
+   * 更新商户限额
    */
-  getTemplates: () => {
-    return request.get('/api/v1/admin/merchant-limits/templates')
+  updateMerchantLimit: (merchantId: string, data: Partial<MerchantLimit>) => {
+    return request.put(`/api/v1/limits/${merchantId}`, data)
   },
 
   /**
-   * Apply limit template to merchant
+   * 变更商户层级
    */
-  applyTemplate: (merchantId: string, templateId: string) => {
-    return request.post(`/api/v1/admin/merchant-limits/${merchantId}/apply-template`, { template_id: templateId })
+  changeTier: (merchantId: string, newTierId: string, reason?: string) => {
+    return request.post(`/api/v1/limits/${merchantId}/change-tier`, {
+      new_tier_id: newTierId,
+      reason,
+    })
+  },
+
+  /**
+   * 暂停商户交易
+   */
+  suspendMerchant: (merchantId: string, reason: string) => {
+    return request.post(`/api/v1/limits/${merchantId}/suspend`, { reason })
+  },
+
+  /**
+   * 恢复商户交易
+   */
+  unsuspendMerchant: (merchantId: string) => {
+    return request.post(`/api/v1/limits/${merchantId}/unsuspend`)
+  },
+
+  /**
+   * 获取商户使用历史
+   */
+  getUsageHistory: (
+    merchantId: string,
+    params?: { page?: number; page_size?: number; start_date?: string; end_date?: string },
+  ) => {
+    return request.get<{ data: UsageHistory[]; pagination: any }>(`/api/v1/limits/${merchantId}/usage-history`, {
+      params,
+    })
+  },
+
+  /**
+   * 获取商户使用统计
+   */
+  getStatistics: (merchantId: string) => {
+    return request.get<{ data: UsageStatistics }>(`/api/v1/limits/${merchantId}/statistics`)
   },
 }
+
+export default merchantLimitService

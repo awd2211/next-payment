@@ -209,7 +209,7 @@ const Roles = () => {
     // 加载角色详情以获取当前权限
     try {
       const response = await roleService.getById(role.id)
-      const currentPermissionIds = response.data.permissions?.map((p: Permission) => p.id) || []
+      const currentPermissionIds = response.permissions?.map((p: Permission) => p.id) || []
       setSelectedPermissions(currentPermissionIds)
       setPermissionModalVisible(true)
     } catch (error) {

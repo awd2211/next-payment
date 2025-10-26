@@ -1,0 +1,576 @@
+basePath: /api/v1
+definitions:
+  handler.ErrorResponse:
+    properties:
+      error:
+        example: invalid parameter
+        type: string
+    type: object
+  handler.ListResponse:
+    properties:
+      code:
+        example: 0
+        type: integer
+      data: {}
+      message:
+        example: success
+        type: string
+      page:
+        example: 1
+        type: integer
+      page_size:
+        example: 20
+        type: integer
+      total:
+        example: 100
+        type: integer
+      total_pages:
+        example: 5
+        type: integer
+    type: object
+  handler.SuccessResponse:
+    properties:
+      code:
+        example: 0
+        type: integer
+      data: {}
+      message:
+        example: success
+        type: string
+    type: object
+  service.AdjustQuotaInput:
+    properties:
+      adjust_reason:
+        type: string
+      adjusted_by:
+        type: string
+      currency:
+        type: string
+      daily_adjust:
+        description: 可为负数
+        type: integer
+      merchant_id:
+        type: string
+      monthly_adjust:
+        description: 可为负数
+        type: integer
+      yearly_adjust:
+        description: 可为负数
+        type: integer
+    required:
+    - adjust_reason
+    - adjusted_by
+    - currency
+    - merchant_id
+    type: object
+  service.ConsumeQuotaInput:
+    properties:
+      amount:
+        minimum: 1
+        type: integer
+      currency:
+        type: string
+      merchant_id:
+        type: string
+      order_no:
+        type: string
+    required:
+    - amount
+    - currency
+    - merchant_id
+    - order_no
+    type: object
+  service.InitializeQuotaInput:
+    properties:
+      currency:
+        type: string
+      merchant_id:
+        type: string
+    required:
+    - currency
+    - merchant_id
+    type: object
+  service.ReleaseQuotaInput:
+    properties:
+      amount:
+        minimum: 1
+        type: integer
+      currency:
+        type: string
+      merchant_id:
+        type: string
+      order_no:
+        type: string
+    required:
+    - amount
+    - currency
+    - merchant_id
+    - order_no
+    type: object
+host: localhost:40022
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 商户配额服务 - 实时追踪配额消耗,提供配额检查、消耗、释放和预警功能
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Merchant Quota Service API
+  version: "1.0"
+paths:
+  /alerts:
+    get:
+      consumes:
+      - application/json
+      description: 查询预警列表，支持按商户、级别、类型、状态筛选和分页
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 预警级别
+        in: query
+        name: alert_level
+        type: string
+      - description: 预警类型
+        in: query
+        name: alert_type
+        type: string
+      - description: 是否已处理
+        in: query
+        name: is_resolved
+        type: boolean
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回预警列表
+          schema:
+            $ref: '#/definitions/handler.ListResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询预警列表
+      tags:
+      - Alert
+  /alerts/{alert_id}/resolve:
+    post:
+      consumes:
+      - application/json
+      description: 管理员标记预警为已处理
+      parameters:
+      - description: 预警ID
+        in: path
+        name: alert_id
+        required: true
+        type: string
+      - description: 处理人ID
+        in: query
+        name: resolved_by
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功标记为已处理
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 标记预警为已处理
+      tags:
+      - Alert
+  /alerts/active:
+    get:
+      consumes:
+      - application/json
+      description: 查询商户未处理的预警列表
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 预警级别 (warning, critical)
+        in: query
+        name: alert_level
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回预警列表
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户活跃预警
+      tags:
+      - Alert
+  /alerts/check:
+    post:
+      consumes:
+      - application/json
+      description: 手动触发检查指定商户的配额预警
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 币种
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功检查预警
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 检查商户配额预警
+      tags:
+      - Alert
+  /quotas:
+    get:
+      consumes:
+      - application/json
+      description: 查询商户指定币种的配额信息
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 币种
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回配额信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 配额不存在
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询配额
+      tags:
+      - Quota
+  /quotas/adjust:
+    post:
+      consumes:
+      - application/json
+      description: 管理员手动调整商户配额使用量
+      parameters:
+      - description: 调整配额请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.AdjustQuotaInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回调整后的配额
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 调整配额
+      tags:
+      - Quota
+  /quotas/consume:
+    post:
+      consumes:
+      - application/json
+      description: 交易时调用，扣减商户配额（使用乐观锁）
+      parameters:
+      - description: 消耗配额请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.ConsumeQuotaInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回操作结果
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 消耗配额
+      tags:
+      - Quota
+  /quotas/initialize:
+    post:
+      consumes:
+      - application/json
+      description: 为商户创建配额记录（新商户注册时调用）
+      parameters:
+      - description: 初始化配额请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.InitializeQuotaInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回配额信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 初始化商户配额
+      tags:
+      - Quota
+  /quotas/list:
+    get:
+      consumes:
+      - application/json
+      description: 查询配额列表，支持按商户、币种、状态筛选和分页
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - description: 币种
+        in: query
+        name: currency
+        type: string
+      - description: 是否暂停
+        in: query
+        name: is_suspended
+        type: boolean
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回配额列表
+          schema:
+            $ref: '#/definitions/handler.ListResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询配额列表
+      tags:
+      - Quota
+  /quotas/release:
+    post:
+      consumes:
+      - application/json
+      description: 退款时调用，释放已占用的配额
+      parameters:
+      - description: 释放配额请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.ReleaseQuotaInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回操作结果
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 释放配额
+      tags:
+      - Quota
+  /quotas/resume:
+    post:
+      consumes:
+      - application/json
+      description: 恢复已暂停的商户配额
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 币种
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功恢复
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 恢复配额
+      tags:
+      - Quota
+  /quotas/suspend:
+    post:
+      consumes:
+      - application/json
+      description: 暂停商户配额，暂停后无法消耗配额
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 币种
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功暂停
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 暂停配额
+      tags:
+      - Quota
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -10,9 +10,11 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 	"payment-platform/channel-adapter/internal/adapter"
 	"payment-platform/channel-adapter/internal/client"
 	"payment-platform/channel-adapter/internal/handler"
@@ -39,7 +41,50 @@ import (
 //	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 1. 使用 Bootstrap 框架初始化应用
+	// 1. 初始化配置客户端（可选，失败不影响启动）
+	var configClient *configclient.Client
+	enableConfigClient := config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true"
+
+	if enableConfigClient {
+		// 检查是否启用 mTLS
+		enableConfigMTLS := config.GetEnvBool("CONFIG_CLIENT_MTLS", false)
+
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "channel-adapter",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+
+		// 如果启用 mTLS,添加证书配置
+		if enableConfigMTLS {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+		}
+
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败，将使用环境变量", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置中心客户端初始化成功")
+		}
+	}
+
+	// 定义配置获取函数：优先从配置中心获取，失败则使用环境变量
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 2. 使用 Bootstrap 框架初始化应用
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "channel-adapter",
 		DBName:      config.GetEnv("DB_NAME", "payment_channel"),
@@ -74,14 +119,14 @@ func main() {
 
 	logger.Info("正在启动 Channel Adapter Service...")
 
-	// 2. 创建适配器工厂
+	// 3. 创建适配器工厂
 	adapterFactory := adapter.NewAdapterFactory()
 
-	// 3. 注册 Stripe 适配器
+	// 4. 注册 Stripe 适配器（优先从配置中心获取敏感信息）
 	stripeConfig := &model.StripeConfig{
-		APIKey:              config.GetEnv("STRIPE_API_KEY", ""),
-		WebhookSecret:       config.GetEnv("STRIPE_WEBHOOK_SECRET", ""),
-		PublishableKey:      config.GetEnv("STRIPE_PUBLISHABLE_KEY", ""),
+		APIKey:              getConfig("STRIPE_API_KEY", ""),
+		WebhookSecret:       getConfig("STRIPE_WEBHOOK_SECRET", ""),
+		PublishableKey:      getConfig("STRIPE_PUBLISHABLE_KEY", ""),
 		StatementDescriptor: "Payment Platform",
 		CaptureMethod:       "automatic",
 	}
@@ -89,33 +134,33 @@ func main() {
 	adapterFactory.Register(model.ChannelStripe, stripeAdapter)
 	logger.Info("Stripe 适配器已注册")
 
-	// 4. 注册 PayPal 适配器（可选）
-	paypalClientID := config.GetEnv("PAYPAL_CLIENT_ID", "")
+	// 5. 注册 PayPal 适配器（可选，优先从配置中心获取）
+	paypalClientID := getConfig("PAYPAL_CLIENT_ID", "")
 	if paypalClientID != "" {
 		paypalConfig := &model.PayPalConfig{
 			ClientID:     paypalClientID,
-			ClientSecret: config.GetEnv("PAYPAL_CLIENT_SECRET", ""),
-			Mode:         config.GetEnv("PAYPAL_MODE", "sandbox"),
-			WebhookID:    config.GetEnv("PAYPAL_WEBHOOK_ID", ""),
+			ClientSecret: getConfig("PAYPAL_CLIENT_SECRET", ""),
+			Mode:         getConfig("PAYPAL_MODE", "sandbox"),
+			WebhookID:    getConfig("PAYPAL_WEBHOOK_ID", ""),
 		}
 		paypalAdapter := adapter.NewPayPalAdapter(paypalConfig)
 		adapterFactory.Register(model.ChannelPayPal, paypalAdapter)
 		logger.Info("PayPal 适配器已注册")
 	}
 
-	// 5. 注册 Alipay 适配器（可选）
-	alipayAppID := config.GetEnv("ALIPAY_APP_ID", "")
+	// 6. 注册 Alipay 适配器（可选，优先从配置中心获取）
+	alipayAppID := getConfig("ALIPAY_APP_ID", "")
 	if alipayAppID != "" {
 		alipayConfig := &model.AlipayConfig{
 			AppID:      alipayAppID,
-			PrivateKey: config.GetEnv("ALIPAY_PRIVATE_KEY", ""),
-			PublicKey:  config.GetEnv("ALIPAY_PUBLIC_KEY", ""),
-			NotifyURL:  config.GetEnv("ALIPAY_NOTIFY_URL", ""),
-			ReturnURL:  config.GetEnv("ALIPAY_RETURN_URL", ""),
+			PrivateKey: getConfig("ALIPAY_PRIVATE_KEY", ""),
+			PublicKey:  getConfig("ALIPAY_PUBLIC_KEY", ""),
+			NotifyURL:  getConfig("ALIPAY_NOTIFY_URL", ""),
+			ReturnURL:  getConfig("ALIPAY_RETURN_URL", ""),
 			SignType:   "RSA2",
 			Format:     "json",
 			Charset:    "utf-8",
-			APIGateway: config.GetEnv("ALIPAY_API_GATEWAY", "https://openapi.alipay.com/gateway.do"),
+			APIGateway: getConfig("ALIPAY_API_GATEWAY", "https://openapi.alipay.com/gateway.do"),
 		}
 		alipayAdapter, err := adapter.NewAlipayAdapter(alipayConfig)
 		if err != nil {
@@ -138,11 +183,11 @@ func main() {
 	exchangeRateUpdateInterval := time.Duration(config.GetEnvInt("EXCHANGE_RATE_UPDATE_INTERVAL", 7200)) * time.Second
 	exchangeRateClient.StartPeriodicUpdate(context.Background(), exchangeRateUpdateInterval)
 
-	// 9. 注册加密货币适配器（可选）
-	cryptoWallet := config.GetEnv("CRYPTO_WALLET_ADDRESS", "")
+	// 9. 注册加密货币适配器（可选，优先从配置中心获取）
+	cryptoWallet := getConfig("CRYPTO_WALLET_ADDRESS", "")
 	if cryptoWallet != "" {
 		// 解析支持的网络列表
-		networksStr := config.GetEnv("CRYPTO_NETWORKS", "ETH,BSC,TRON")
+		networksStr := getConfig("CRYPTO_NETWORKS", "ETH,BSC,TRON")
 		networks := []string{}
 		for _, network := range strings.Split(networksStr, ",") {
 			networks = append(networks, strings.TrimSpace(network))
@@ -152,8 +197,8 @@ func main() {
 			WalletAddress: cryptoWallet,
 			Networks:      networks,
 			Confirmations: config.GetEnvInt("CRYPTO_CONFIRMATIONS", 12),
-			APIEndpoint:   config.GetEnv("CRYPTO_API_ENDPOINT", ""),
-			APIKey:        config.GetEnv("CRYPTO_API_KEY", ""),
+			APIEndpoint:   getConfig("CRYPTO_API_ENDPOINT", ""),
+			APIKey:        getConfig("CRYPTO_API_KEY", ""),
 		}
 		cryptoAdapter := adapter.NewCryptoAdapter(cryptoConfig, exchangeRateClient)
 		adapterFactory.Register(model.ChannelCrypto, cryptoAdapter)
@@ -184,8 +229,8 @@ func main() {
 	// pb.RegisterChannelServiceServer(application.GRPCServer, channelGrpcServer)
 	// logger.Info(fmt.Sprintf("gRPC Server 已注册，将监听端口 %d", config.GetEnvInt("GRPC_PORT", 50005)))
 
-	// JWT 认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// JWT 认证中间件（优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 

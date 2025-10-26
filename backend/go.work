@@ -4,24 +4,23 @@ use (
 	./pkg
 	./proto
 	./services/accounting-service
-	./services/admin-service
+	./services/admin-bff-service
 	./services/analytics-service
 	./services/cashier-service
 	./services/channel-adapter
 	./services/config-service
 	./services/kyc-service
-	// 预留：待拆分的服务（go.mod创建后取消注释）
 	./services/merchant-auth-service
-	./services/merchant-service
+	./services/merchant-bff-service
+	./services/merchant-policy-service
+	./services/merchant-quota-service
 	./services/notification-service
 	./services/order-service
 	./services/payment-gateway
+	./services/reconciliation-service
+	./services/dispute-service
 	./services/risk-service
 	./services/settlement-service
 	./services/withdrawal-service
-	./services/merchant-config-service
-	./services/reconciliation-service
-	./services/dispute-service
-	./services/merchant-limit-service
 	./tests/integration
 )

@@ -26,12 +26,10 @@ export interface ListMerchantsParams {
 }
 
 export interface ListMerchantsResponse {
-  data: {
-    list: Merchant[]
-    total: number
-    page: number
-    page_size: number
-  }
+  list: Merchant[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface CreateMerchantRequest {

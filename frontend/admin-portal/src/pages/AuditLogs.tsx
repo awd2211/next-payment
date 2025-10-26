@@ -77,8 +77,8 @@ const AuditLogs = () => {
       })
       // 响应拦截器已解包，直接使用数据
       if (response) {
-        setLogs(response.data || [])
-        setTotal(response.pagination?.total || 0)
+        setLogs(response.list || [])
+        setTotal(response.total || 0)
       }
     } catch (error) {
       // Error handled by interceptor
@@ -91,8 +91,8 @@ const AuditLogs = () => {
     try {
       const response = await auditLogService.getStats({})
       // 响应拦截器已解包，直接使用数据
-      if (response && response.data) {
-        setStats(response.data)
+      if (response) {
+        setStats(response)
       }
     } catch (error) {
       // Error handled by interceptor
@@ -266,7 +266,7 @@ const AuditLogs = () => {
             <Card>
               <Statistic
                 title="总日志数"
-                value={stats.total_logs}
+                value={stats.total_logs || 0}
                 prefix={<FileTextOutlined />}
               />
             </Card>
@@ -275,7 +275,7 @@ const AuditLogs = () => {
             <Card>
               <Statistic
                 title="操作类型"
-                value={Object.keys(stats.action_distribution).length}
+                value={stats?.action_distribution ? Object.keys(stats.action_distribution).length : 0}
                 prefix={<ApiOutlined />}
                 suffix="种"
               />
@@ -285,7 +285,7 @@ const AuditLogs = () => {
             <Card>
               <Statistic
                 title="资源类型"
-                value={Object.keys(stats.resource_distribution).length}
+                value={stats?.resource_distribution ? Object.keys(stats.resource_distribution).length : 0}
                 prefix={<SafetyOutlined />}
                 suffix="种"
               />
@@ -295,7 +295,7 @@ const AuditLogs = () => {
             <Card>
               <Statistic
                 title="活跃管理员"
-                value={stats.top_admins.length}
+                value={stats?.top_admins?.length || 0}
                 prefix={<UserOutlined />}
                 suffix="人"
               />

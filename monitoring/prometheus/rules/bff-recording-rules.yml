@@ -1,0 +1,186 @@
+# BFF Services Recording Rules
+# 预计算常用指标，减少 Dashboard 查询延迟
+
+groups:
+  # ==========================================
+  # HTTP 请求性能指标
+  # ==========================================
+  - name: bff_http_performance
+    interval: 30s
+    rules:
+      # 1. 请求速率（每秒）- 按服务分组
+      - record: job:http_requests:rate5m
+        expr: sum(rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+
+      # 2. 请求速率 - 按服务和状态码分组
+      - record: job:http_requests:rate5m:by_status
+        expr: sum(rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])) by (job, status)
+
+      # 3. 请求速率 - 按服务和端点分组
+      - record: job:http_requests:rate5m:by_path
+        expr: sum(rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])) by (job, path)
+
+      # 4. 错误率（5xx） - 按服务分组
+      - record: job:http_errors:rate5m
+        expr: |
+          sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status=~"5.."}[5m])) by (job)
+          /
+          sum(rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+
+      # 5. P95 延迟 - 按服务分组
+      - record: job:http_request_duration:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job=~"admin-bff|merchant-bff"}[5m])) by (job, le)
+          )
+
+      # 6. P99 延迟 - 按服务分组
+      - record: job:http_request_duration:p99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job=~"admin-bff|merchant-bff"}[5m])) by (job, le)
+          )
+
+      # 7. 平均延迟 - 按服务分组
+      - record: job:http_request_duration:avg
+        expr: |
+          sum(rate(http_request_duration_seconds_sum{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+
+  # ==========================================
+  # 安全与认证指标
+  # ==========================================
+  - name: bff_security
+    interval: 30s
+    rules:
+      # 8. 限流违规率（429） - 按服务分组
+      - record: job:rate_limit_violations:rate5m
+        expr: sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status="429"}[5m])) by (job)
+
+      # 9. 认证失败率（401） - 按服务分组
+      - record: job:auth_failures:rate5m
+        expr: sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status="401"}[5m])) by (job)
+
+      # 10. 权限拒绝率（403） - 按服务分组
+      - record: job:permission_denied:rate5m
+        expr: sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status="403"}[5m])) by (job)
+
+      # 11. 2FA 失败率（仅 Admin BFF - 假设通过 path 标签识别）
+      - record: job:twofa_failures:rate5m
+        expr: |
+          sum(rate(http_requests_total{job="admin-bff",status="403",path=~".*/payments.*|.*/settlements.*|.*/withdrawals.*|.*/disputes.*"}[5m]))
+
+      # 12. 整体安全事件率（401 + 403 + 429）
+      - record: job:security_events:rate5m
+        expr: |
+          sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status=~"401|403|429"}[5m])) by (job)
+
+  # ==========================================
+  # 资源使用指标
+  # ==========================================
+  - name: bff_resources
+    interval: 60s
+    rules:
+      # 13. 内存使用率 - 按服务分组
+      - record: job:memory_usage:bytes
+        expr: process_resident_memory_bytes{job=~"admin-bff|merchant-bff"}
+
+      # 14. CPU 使用率 - 按服务分组
+      - record: job:cpu_usage:rate5m
+        expr: rate(process_cpu_seconds_total{job=~"admin-bff|merchant-bff"}[5m])
+
+      # 15. Goroutine 数量 - 按服务分组
+      - record: job:goroutines:current
+        expr: go_goroutines{job=~"admin-bff|merchant-bff"}
+
+      # 16. 文件描述符使用率
+      - record: job:fd_usage:ratio
+        expr: |
+          process_open_fds{job=~"admin-bff|merchant-bff"}
+          /
+          process_max_fds{job=~"admin-bff|merchant-bff"}
+
+  # ==========================================
+  # 业务指标（Merchant BFF 租户隔离）
+  # ==========================================
+  - name: bff_business
+    interval: 60s
+    rules:
+      # 17. 活跃租户数（Merchant BFF - 假设通过 merchant_id 标签）
+      # 注意: 需要在 Merchant BFF metrics 中添加 merchant_id 标签
+      # - record: job:active_tenants:count
+      #   expr: |
+      #     count(count(http_requests_total{job="merchant-bff"}) by (merchant_id))
+
+      # 18. Top 10 最活跃租户（按请求数）
+      # - record: job:top_tenants:rate5m
+      #   expr: |
+      #     topk(10,
+      #       sum(rate(http_requests_total{job="merchant-bff"}[5m])) by (merchant_id)
+      #     )
+
+      # 19. 平均请求大小 - 按服务分组
+      - record: job:http_request_size:avg
+        expr: |
+          sum(rate(http_request_size_bytes_sum{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+          /
+          sum(rate(http_request_size_bytes_count{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+
+      # 20. 平均响应大小 - 按服务分组
+      - record: job:http_response_size:avg
+        expr: |
+          sum(rate(http_response_size_bytes_sum{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+          /
+          sum(rate(http_response_size_bytes_count{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+
+  # ==========================================
+  # SLI/SLO 指标（服务水平指标）
+  # ==========================================
+  - name: bff_sli_slo
+    interval: 30s
+    rules:
+      # 21. 可用性（成功率 >= 99.9%）
+      - record: job:availability:rate5m
+        expr: |
+          (
+            sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status=~"2..|3.."}[5m])) by (job)
+            /
+            sum(rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+          ) * 100
+
+      # 22. 延迟 SLI（P95 < 500ms）
+      - record: job:latency_sli:p95_lt_500ms
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job=~"admin-bff|merchant-bff"}[5m])) by (job, le)
+            ) < 0.5
+          )
+
+      # 23. 错误预算消耗（假设 SLO = 99.9%，错误预算 = 0.1%）
+      - record: job:error_budget:remaining
+        expr: |
+          (
+            0.001  # 0.1% 错误预算
+            -
+            (
+              sum(rate(http_requests_total{job=~"admin-bff|merchant-bff",status=~"5.."}[5m])) by (job)
+              /
+              sum(rate(http_requests_total{job=~"admin-bff|merchant-bff"}[5m])) by (job)
+            )
+          ) * 100
+
+  # ==========================================
+  # 服务健康检查
+  # ==========================================
+  - name: bff_health
+    interval: 30s
+    rules:
+      # 24. 服务在线状态（1 = UP, 0 = DOWN）
+      - record: job:up:status
+        expr: up{job=~"admin-bff|merchant-bff"}
+
+      # 25. 服务重启次数（通过 process_start_time_seconds 变化检测）
+      - record: job:restarts:increase1h
+        expr: changes(process_start_time_seconds{job=~"admin-bff|merchant-bff"}[1h])

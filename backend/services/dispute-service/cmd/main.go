@@ -7,6 +7,7 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 
 	"payment-platform/dispute-service/internal/client"
 	"payment-platform/dispute-service/internal/handler"
@@ -17,6 +18,15 @@ import (
 
 func main() {
 	// Use Bootstrap framework for service initialization
+	var configClient *configclient.Client
+	if config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true" {
+		clientCfg := configclient.ClientConfig{ServiceName: "dispute-service", Environment: config.GetEnv("ENV", "production"), ConfigURL: config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"), RefreshRate: 30 * time.Second}
+		if config.GetEnvBool("CONFIG_CLIENT_MTLS", false) { clientCfg.EnableMTLS = true; clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", ""); clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", ""); clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "") }
+		client, _ := configclient.NewClient(clientCfg)
+		if client != nil { configClient = client; defer configClient.Stop() }
+	}
+	getConfig := func(key, defaultValue string) string { if configClient != nil { if val := configClient.Get(key); val != "" { return val } }; return config.GetEnv(key, defaultValue) }
+
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "dispute-service",
 		DBName:      "payment_dispute",
@@ -56,7 +66,7 @@ func main() {
 	disputeHandler := handler.NewDisputeHandler(disputeService)
 
 	// JWT 认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 

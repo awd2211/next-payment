@@ -7,9 +7,11 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 	"payment-platform/kyc-service/internal/client"
 	"payment-platform/kyc-service/internal/handler"
 	"payment-platform/kyc-service/internal/model"
@@ -33,7 +35,41 @@ import (
 //	@description		Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 1. 使用 Bootstrap 框架初始化应用
+	// 1. 初始化配置客户端
+	var configClient *configclient.Client
+	if config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true" {
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "kyc-service",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+		if config.GetEnvBool("CONFIG_CLIENT_MTLS", false) {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+		}
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置中心客户端初始化成功")
+		}
+	}
+
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 2. 使用 Bootstrap 框架初始化应用
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "kyc-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_kyc"),
@@ -70,9 +106,10 @@ func main() {
 
 	logger.Info("正在启动 KYC Service...")
 
-	// 2. 初始化 HTTP 客户端
-	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	// 3. 初始化 HTTP 客户端（优先从配置中心获取）
+	notificationServiceURL := getConfig("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
 	notificationClient := client.NewNotificationClient(notificationServiceURL)
+	logger.Info("通知服务客户端初始化完成")
 
 	// 3. 初始化 Repository
 	kycRepo := repository.NewKYCRepository(application.DB)
@@ -89,8 +126,8 @@ func main() {
 	// 6. 注册 KYC 路由
 	kycHandler.RegisterRoutes(application.Router)
 
-	// JWT 认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// JWT 认证中间件（优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 

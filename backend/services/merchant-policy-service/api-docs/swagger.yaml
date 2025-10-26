@@ -1,0 +1,761 @@
+basePath: /api/v1
+definitions:
+  handler.CalculateFeeRequest:
+    properties:
+      amount:
+        minimum: 1
+        type: integer
+      channel:
+        type: string
+      currency:
+        type: string
+      merchant_id:
+        type: string
+      payment_method:
+        type: string
+    required:
+    - amount
+    - currency
+    - merchant_id
+    type: object
+  handler.CheckLimitRequest:
+    properties:
+      amount:
+        minimum: 1
+        type: integer
+      channel:
+        type: string
+      currency:
+        type: string
+      daily_used:
+        minimum: 0
+        type: integer
+      merchant_id:
+        type: string
+      monthly_used:
+        minimum: 0
+        type: integer
+    required:
+    - amount
+    - currency
+    - merchant_id
+    type: object
+  handler.ErrorResponse:
+    properties:
+      error:
+        example: invalid parameter
+        type: string
+    type: object
+  handler.ListResponse:
+    properties:
+      code:
+        example: 0
+        type: integer
+      data: {}
+      message:
+        example: success
+        type: string
+      page:
+        example: 1
+        type: integer
+      page_size:
+        example: 20
+        type: integer
+      total:
+        example: 100
+        type: integer
+      total_pages:
+        example: 5
+        type: integer
+    type: object
+  handler.SuccessResponse:
+    properties:
+      code:
+        example: 0
+        type: integer
+      data: {}
+      message:
+        example: success
+        type: string
+    type: object
+  service.BindMerchantInput:
+    properties:
+      change_reason:
+        type: string
+      changed_by:
+        type: string
+      merchant_id:
+        type: string
+      tier_id:
+        type: string
+    required:
+    - merchant_id
+    - tier_id
+    type: object
+  service.ChangeTierInput:
+    properties:
+      change_reason:
+        type: string
+      changed_by:
+        type: string
+      merchant_id:
+        type: string
+      new_tier_id:
+        type: string
+    required:
+    - change_reason
+    - merchant_id
+    - new_tier_id
+    type: object
+  service.CreateTierInput:
+    properties:
+      allowed_channels:
+        type: string
+      allowed_currencies:
+        type: string
+      default_fee_policy_id:
+        type: string
+      default_limit_policy_id:
+        type: string
+      description:
+        type: string
+      is_active:
+        type: boolean
+      max_api_calls_per_min:
+        type: integer
+      tier_code:
+        type: string
+      tier_level:
+        maximum: 5
+        minimum: 1
+        type: integer
+      tier_name:
+        type: string
+      upgrade_requirements:
+        type: string
+    required:
+    - tier_code
+    - tier_level
+    - tier_name
+    type: object
+  service.SetCustomPolicyInput:
+    properties:
+      change_reason:
+        type: string
+      changed_by:
+        type: string
+      custom_fee_policy_id:
+        type: string
+      custom_limit_policy_id:
+        type: string
+      merchant_id:
+        type: string
+    required:
+    - merchant_id
+    type: object
+  service.UpdateTierInput:
+    properties:
+      allowed_channels:
+        type: string
+      allowed_currencies:
+        type: string
+      default_fee_policy_id:
+        type: string
+      default_limit_policy_id:
+        type: string
+      description:
+        type: string
+      is_active:
+        type: boolean
+      max_api_calls_per_min:
+        type: integer
+      tier_name:
+        type: string
+      upgrade_requirements:
+        type: string
+    type: object
+host: localhost:40012
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 商户策略服务 - 统一管理商户等级、费率、限额和渠道策略
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Merchant Policy Service API
+  version: "1.0"
+paths:
+  /policy-bindings/{merchant_id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除商户的等级绑定（谨慎操作）
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功解绑
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 绑定不存在
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 解绑商户
+      tags:
+      - PolicyBinding
+    get:
+      consumes:
+      - application/json
+      description: 获取商户当前的等级绑定和自定义策略信息
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回绑定详情
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 绑定不存在
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户策略绑定
+      tags:
+      - PolicyBinding
+  /policy-bindings/bind:
+    post:
+      consumes:
+      - application/json
+      description: 将商户绑定到指定等级（新商户注册时调用）
+      parameters:
+      - description: 绑定商户请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.BindMerchantInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回绑定信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 绑定商户到等级
+      tags:
+      - PolicyBinding
+  /policy-bindings/change-tier:
+    post:
+      consumes:
+      - application/json
+      description: 升级或降级商户等级
+      parameters:
+      - description: 变更等级请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.ChangeTierInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回变更后的绑定信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 变更商户等级
+      tags:
+      - PolicyBinding
+  /policy-bindings/custom-policy:
+    post:
+      consumes:
+      - application/json
+      description: 为商户设置自定义费率或限额策略，覆盖等级默认策略
+      parameters:
+      - description: 设置自定义策略请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.SetCustomPolicyInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回更新后的绑定信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 设置商户自定义策略
+      tags:
+      - PolicyBinding
+  /policy-engine/calculate-fee:
+    post:
+      consumes:
+      - application/json
+      description: 根据商户的费率策略计算交易费用
+      parameters:
+      - description: 计算费用请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CalculateFeeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回费用计算结果
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 未找到适用策略
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 计算交易费用
+      tags:
+      - PolicyEngine
+  /policy-engine/check-limit:
+    post:
+      consumes:
+      - application/json
+      description: 检查交易金额是否超过单笔/日/月限额
+      parameters:
+      - description: 检查限额请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CheckLimitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回限额检查结果
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 未找到适用策略
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 检查交易限额
+      tags:
+      - PolicyEngine
+  /policy-engine/fee-policy:
+    get:
+      consumes:
+      - application/json
+      description: 根据商户ID、渠道、支付方式、币种获取有效的费率策略（优先级：商户自定义 > 等级默认）
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 支付渠道 (stripe, paypal, crypto, all)
+        in: query
+        name: channel
+        type: string
+      - description: 支付方式 (card, bank_transfer, wallet, all)
+        in: query
+        name: payment_method
+        type: string
+      - description: 币种 (USD, EUR, CNY)
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回费率策略
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 未找到适用策略
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户有效费率策略
+      tags:
+      - PolicyEngine
+  /policy-engine/limit-policy:
+    get:
+      consumes:
+      - application/json
+      description: 根据商户ID、渠道、币种获取有效的限额策略（优先级：商户自定义 > 等级默认）
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        required: true
+        type: string
+      - description: 支付渠道 (stripe, paypal, crypto, all)
+        in: query
+        name: channel
+        type: string
+      - description: 币种 (USD, EUR, CNY)
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回限额策略
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 未找到适用策略
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户有效限额策略
+      tags:
+      - PolicyEngine
+  /tiers:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有商户等级列表，支持分页和筛选
+      parameters:
+      - description: 是否启用
+        in: query
+        name: is_active
+        type: boolean
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回等级列表
+          schema:
+            $ref: '#/definitions/handler.ListResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取等级列表
+      tags:
+      - Tier
+    post:
+      consumes:
+      - application/json
+      description: 创建新的商户等级（需管理员权限）
+      parameters:
+      - description: 创建等级请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.CreateTierInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回等级信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建商户等级
+      tags:
+      - Tier
+  /tiers/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除指定的等级（需管理员权限）
+      parameters:
+      - description: 等级ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功删除
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 等级不存在
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除商户等级
+      tags:
+      - Tier
+    get:
+      consumes:
+      - application/json
+      description: 根据ID获取等级详细信息
+      parameters:
+      - description: 等级ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回等级信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 等级不存在
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取等级详情
+      tags:
+      - Tier
+    put:
+      consumes:
+      - application/json
+      description: 更新指定等级的信息（需管理员权限）
+      parameters:
+      - description: 等级ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 更新等级请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.UpdateTierInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回更新后的等级信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: 等级不存在
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户等级
+      tags:
+      - Tier
+  /tiers/active:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有处于活跃状态的等级（不分页）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回活跃等级列表
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取所有活跃等级
+      tags:
+      - Tier
+  /tiers/code/{code}:
+    get:
+      consumes:
+      - application/json
+      description: 根据等级代码（如 starter, basic, professional）获取等级信息
+      parameters:
+      - description: 等级代码
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回等级信息
+          schema:
+            $ref: '#/definitions/handler.SuccessResponse'
+        "404":
+          description: 等级不存在
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 根据代码获取等级
+      tags:
+      - Tier
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

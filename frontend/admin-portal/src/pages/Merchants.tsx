@@ -75,10 +75,10 @@ const Merchants = () => {
         status: statusFilter,
         kyc_status: kycStatusFilter,
       })
-      // 响应拦截器已解包，直接使用数据
-      if (response && response.data) {
-        setMerchants(response.data.list || [])
-        setTotal(response.data.total || 0)
+      // 响应拦截器已解包，直接使用数据(不需要.data)
+      if (response && response.list) {
+        setMerchants(response.list || [])
+        setTotal(response.total || 0)
       }
     } catch (error) {
       // Error handled by interceptor

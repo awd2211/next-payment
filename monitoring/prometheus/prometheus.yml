@@ -1,0 +1,125 @@
+# Prometheus Configuration for BFF Services
+# Admin BFF (40001) & Merchant BFF (40023)
+
+global:
+  # 数据采集间隔
+  scrape_interval: 15s
+  # 超时时间
+  scrape_timeout: 10s
+  # 评估规则间隔
+  evaluation_interval: 15s
+
+  # 外部标签（所有指标自动添加）
+  external_labels:
+    cluster: 'payment-platform'
+    environment: 'production'
+
+# 告警管理器配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'localhost:9093'  # Alertmanager 端口
+
+# 加载告警规则
+rule_files:
+  - 'alerts/bff-alerts.yml'
+  - 'rules/bff-recording-rules.yml'
+
+# 采集配置
+scrape_configs:
+  # ==========================================
+  # Admin BFF Service (40001)
+  # ==========================================
+  - job_name: 'admin-bff'
+    scrape_interval: 10s  # Admin BFF 更频繁采集（安全监控需要）
+    scrape_timeout: 5s
+
+    static_configs:
+      - targets: ['localhost:40001']
+        labels:
+          service: 'admin-bff-service'
+          bff_type: 'admin'
+          security_level: 'high'
+
+    # Metrics endpoint 路径
+    metrics_path: '/metrics'
+
+    # 健康检查（仅采集健康的实例）
+    # relabel_configs:
+    #   - source_labels: [__address__]
+    #     target_label: __param_target
+    #   - source_labels: [__param_target]
+    #     target_label: instance
+    #   - target_label: __address__
+    #     replacement: localhost:40001
+
+  # ==========================================
+  # Merchant BFF Service (40023)
+  # ==========================================
+  - job_name: 'merchant-bff'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+    static_configs:
+      - targets: ['localhost:40023']
+        labels:
+          service: 'merchant-bff-service'
+          bff_type: 'merchant'
+          security_level: 'medium'
+
+    metrics_path: '/metrics'
+
+  # ==========================================
+  # Prometheus Self-Monitoring
+  # ==========================================
+  - job_name: 'prometheus'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['localhost:40090']
+        labels:
+          service: 'prometheus'
+
+  # ==========================================
+  # Node Exporter (系统指标 - 可选)
+  # ==========================================
+  # - job_name: 'node-exporter'
+  #   scrape_interval: 30s
+  #   static_configs:
+  #     - targets: ['localhost:9100']
+  #       labels:
+  #         service: 'node-exporter'
+
+  # ==========================================
+  # PostgreSQL Exporter (数据库指标 - 可选)
+  # ==========================================
+  # - job_name: 'postgres-exporter'
+  #   scrape_interval: 30s
+  #   static_configs:
+  #     - targets: ['localhost:9187']
+  #       labels:
+  #         service: 'postgres-exporter'
+  #         database: 'payment_admin'
+
+  # ==========================================
+  # Redis Exporter (缓存指标 - 可选)
+  # ==========================================
+  # - job_name: 'redis-exporter'
+  #   scrape_interval: 30s
+  #   static_configs:
+  #     - targets: ['localhost:9121']
+  #       labels:
+  #         service: 'redis-exporter'
+
+# ==========================================
+# 远程存储配置（可选 - 用于长期存储）
+# ==========================================
+# remote_write:
+#   - url: "http://localhost:8086/api/v1/prom/write?db=prometheus"
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 10
+#       max_samples_per_send: 1000
+
+# remote_read:
+#   - url: "http://localhost:8086/api/v1/prom/read?db=prometheus"

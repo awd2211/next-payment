@@ -103,25 +103,27 @@ export const reconciliationService = {
    * Get reconciliation records list
    */
   list: (params: ListReconciliationParams) => {
-    return request.get<ListReconciliationResponse>('/api/v1/admin/reconciliation', { params })
+    return request.get<ListReconciliationResponse>('/api/v1/reconciliation/tasks', { params })
   },
 
   /**
    * Get reconciliation detail by ID
    */
   getDetail: (id: string) => {
-    return request.get<ReconciliationDetailResponse>(`/api/v1/admin/reconciliation/${id}`)
+    return request.get<ReconciliationDetailResponse>(`/api/v1/reconciliation/tasks/${id}`)
   },
 
   /**
-   * Get unmatched items for a reconciliation
+   * Get unmatched items for a reconciliation - 对应后端的records接口
    */
   getUnmatchedItems: (reconId: string) => {
-    return request.get<UnmatchedItemsResponse>(`/api/v1/admin/reconciliation/${reconId}/unmatched`)
+    return request.get<UnmatchedItemsResponse>(`/api/v1/reconciliation/records`, {
+      params: { task_id: reconId }
+    })
   },
 
   /**
-   * Create new reconciliation
+   * Create new reconciliation task
    */
   create: (data: CreateReconciliationRequest) => {
     const formData = new FormData()
@@ -130,7 +132,7 @@ export const reconciliationService = {
     formData.append('recon_date', data.recon_date)
     if (data.file) formData.append('file', data.file)
 
-    return request.post<CreateReconciliationResponse>('/api/v1/admin/reconciliation', formData, {
+    return request.post<CreateReconciliationResponse>('/api/v1/reconciliation/tasks', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -138,49 +140,49 @@ export const reconciliationService = {
   },
 
   /**
-   * Confirm reconciliation result
+   * Confirm reconciliation result - 注意: 后端需要实现此接口
    */
   confirm: (id: string, data: ConfirmReconciliationRequest) => {
-    return request.post<ConfirmReconciliationResponse>(`/api/v1/admin/reconciliation/${id}/confirm`, data)
+    return request.post<ConfirmReconciliationResponse>(`/api/v1/reconciliation/tasks/${id}/confirm`, data)
   },
 
   /**
    * Retry failed reconciliation
    */
   retry: (id: string) => {
-    return request.post(`/api/v1/admin/reconciliation/${id}/retry`)
+    return request.post(`/api/v1/reconciliation/tasks/${id}/retry`)
   },
 
   /**
    * Download reconciliation report
    */
   downloadReport: (id: string) => {
-    return request.get(`/api/v1/admin/reconciliation/${id}/report`, {
+    return request.get(`/api/v1/reconciliation/reports/${id}`, {
       responseType: 'blob',
     })
   },
 
   /**
-   * Export reconciliation records
+   * Export reconciliation records - 注意: 后端需要实现此接口
    */
   export: (params: ListReconciliationParams) => {
-    return request.get('/api/v1/admin/reconciliation/export', {
+    return request.get('/api/v1/reconciliation/tasks/export', {
       params,
       responseType: 'blob',
     })
   },
 
   /**
-   * Get reconciliation statistics
+   * Get reconciliation statistics - 注意: 后端需要实现此接口
    */
   getStats: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get('/api/v1/admin/reconciliation/stats', { params })
+    return request.get('/api/v1/reconciliation/stats', { params })
   },
 
   /**
    * Resolve unmatched item
    */
   resolveUnmatched: (reconId: string, itemId: string, data: { action: 'resolve' | 'ignore'; notes?: string }) => {
-    return request.post(`/api/v1/admin/reconciliation/${reconId}/unmatched/${itemId}/resolve`, data)
+    return request.post(`/api/v1/reconciliation/records/${itemId}/resolve`, data)
   },
 }

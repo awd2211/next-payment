@@ -27,9 +27,11 @@ func NewKYCHandler(kycService service.KYCService) *KYCHandler {
 
 // RegisterRoutes 注册路由
 func (h *KYCHandler) RegisterRoutes(r *gin.Engine) {
-	api := r.Group("/api/v1")
+	// KYC API 组 - 添加 /kyc 前缀
+	kyc := r.Group("/api/v1/kyc")
 	{
-		documents := api.Group("/documents")
+		// 文档管理
+		documents := kyc.Group("/documents")
 		{
 			documents.POST("", h.SubmitDocument)
 			documents.GET("", h.ListDocuments)
@@ -38,7 +40,8 @@ func (h *KYCHandler) RegisterRoutes(r *gin.Engine) {
 			documents.POST("/:id/reject", h.RejectDocument)
 		}
 
-		qualifications := api.Group("/qualifications")
+		// 资质审核
+		qualifications := kyc.Group("/qualifications")
 		{
 			qualifications.POST("", h.SubmitQualification)
 			qualifications.GET("", h.ListQualifications)
@@ -47,19 +50,22 @@ func (h *KYCHandler) RegisterRoutes(r *gin.Engine) {
 			qualifications.POST("/:id/reject", h.RejectQualification)
 		}
 
-		levels := api.Group("/levels")
+		// 商户等级
+		levels := kyc.Group("/levels")
 		{
 			levels.GET("/:merchant_id", h.GetMerchantLevel)
 			levels.GET("/:merchant_id/eligibility", h.CheckMerchantEligibility)
 		}
 
-		alerts := api.Group("/alerts")
+		// 风险预警
+		alerts := kyc.Group("/alerts")
 		{
 			alerts.GET("", h.ListAlerts)
 			alerts.POST("/:id/resolve", h.ResolveAlert)
 		}
 
-		api.GET("/statistics", h.GetKYCStatistics)
+		// KYC 统计
+		kyc.GET("/statistics", h.GetKYCStatistics)
 	}
 }
 

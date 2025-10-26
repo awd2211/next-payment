@@ -88,54 +88,57 @@ export interface ListResponse<T> {
 export const riskService = {
   // 风险规则管理
   listRules: (params: RiskRuleListParams) => {
-    return request.get<ListResponse<RiskRule>>('/risk/rules', { params })
+    return request.get<ListResponse<RiskRule>>('/api/v1/rules', { params })
   },
 
   createRule: (data: Partial<RiskRule>) => {
-    return request.post<RiskRule>('/risk/rules', data)
+    return request.post<RiskRule>('/api/v1/rules', data)
   },
 
   updateRule: (id: string, data: Partial<RiskRule>) => {
-    return request.put<RiskRule>(`/risk/rules/${id}`, data)
+    return request.put<RiskRule>(`/api/v1/rules/${id}`, data)
   },
 
   deleteRule: (id: string) => {
-    return request.delete(`/risk/rules/${id}`)
+    return request.delete(`/api/v1/rules/${id}`)
   },
 
+  // 切换规则状态 - 对应后端的enable/disable接口
   toggleRule: (id: string, enabled: boolean) => {
-    return request.put(`/risk/rules/${id}/toggle`, { enabled })
+    const action = enabled ? 'enable' : 'disable'
+    return request.post(`/api/v1/rules/${id}/${action}`)
   },
 
-  // 风险告警管理
+  // 风险检查记录管理 (后端使用/checks而不是/alerts)
   listAlerts: (params: RiskAlertListParams) => {
-    return request.get<ListResponse<RiskAlert>>('/risk/alerts', { params })
+    return request.get<ListResponse<RiskAlert>>('/api/v1/checks', { params })
   },
 
   getAlert: (id: string) => {
-    return request.get<RiskAlert>(`/risk/alerts/${id}`)
+    return request.get<RiskAlert>(`/api/v1/checks/${id}`)
   },
 
+  // 处理告警 - 注意: 后端需要实现此接口
   handleAlert: (id: string, action: string, remark: string) => {
-    return request.post(`/risk/alerts/${id}/handle`, { action, remark })
+    return request.post(`/api/v1/checks/${id}/handle`, { action, remark })
   },
 
   // 黑名单管理
   listBlacklist: (params: BlacklistListParams) => {
-    return request.get<ListResponse<BlacklistItem>>('/risk/blacklist', { params })
+    return request.get<ListResponse<BlacklistItem>>('/api/v1/blacklist', { params })
   },
 
   addBlacklist: (data: Partial<BlacklistItem>) => {
-    return request.post<BlacklistItem>('/risk/blacklist', data)
+    return request.post<BlacklistItem>('/api/v1/blacklist', data)
   },
 
   removeBlacklist: (id: string) => {
-    return request.delete(`/risk/blacklist/${id}`)
+    return request.delete(`/api/v1/blacklist/${id}`)
   },
 
-  // 风险统计
+  // 风险统计 - 注意: 后端需要实现此接口
   getStats: () => {
-    return request.get<{ data: RiskStats }>('/risk/stats')
+    return request.get<{ data: RiskStats }>('/api/v1/risk/stats')
   },
 }
 

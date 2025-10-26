@@ -10,9 +10,11 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
+	"go.uber.org/zap"
 	// pb "github.com/payment-platform/proto/notification" // gRPC proto (预留,暂不使用)
 	"payment-platform/notification-service/internal/handler"
 	"payment-platform/notification-service/internal/model"
@@ -41,7 +43,47 @@ import (
 //	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 1. 使用 Bootstrap 框架初始化应用
+	// 1. 初始化配置客户端（可选，失败不影响启动）
+	var configClient *configclient.Client
+	enableConfigClient := config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true"
+
+	if enableConfigClient {
+		enableConfigMTLS := config.GetEnvBool("CONFIG_CLIENT_MTLS", false)
+
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "notification-service",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+
+		if enableConfigMTLS {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+		}
+
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败，将使用环境变量", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置中心客户端初始化成功")
+		}
+	}
+
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 2. 使用 Bootstrap 框架初始化应用
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "notification-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_notification"),
@@ -76,45 +118,45 @@ func main() {
 
 	logger.Info("正在启动 Notification Service...")
 
-	// 2. 创建邮件提供商工厂
+	// 3. 创建邮件提供商工厂
 	emailFactory := provider.NewEmailProviderFactory()
 
-	// 注册 SMTP 提供商
-	smtpHost := config.GetEnv("SMTP_HOST", "")
+	// 注册 SMTP 提供商（优先从配置中心获取敏感信息）
+	smtpHost := getConfig("SMTP_HOST", "")
 	if smtpHost != "" {
 		smtpProvider := provider.NewSMTPProvider(
 			smtpHost,
 			config.GetEnvInt("SMTP_PORT", 587),
-			config.GetEnv("SMTP_USERNAME", ""),
-			config.GetEnv("SMTP_PASSWORD", ""),
-			config.GetEnv("SMTP_FROM", ""),
+			getConfig("SMTP_USERNAME", ""),
+			getConfig("SMTP_PASSWORD", ""),
+			getConfig("SMTP_FROM", ""),
 		)
 		emailFactory.Register("smtp", smtpProvider)
 		logger.Info("SMTP 邮件提供商已注册")
 	}
 
-	// 注册 Mailgun 提供商
-	mailgunDomain := config.GetEnv("MAILGUN_DOMAIN", "")
+	// 注册 Mailgun 提供商（优先从配置中心获取敏感信息）
+	mailgunDomain := getConfig("MAILGUN_DOMAIN", "")
 	if mailgunDomain != "" {
 		mailgunProvider := provider.NewMailgunProvider(
 			mailgunDomain,
-			config.GetEnv("MAILGUN_API_KEY", ""),
-			config.GetEnv("MAILGUN_FROM", ""),
+			getConfig("MAILGUN_API_KEY", ""),
+			getConfig("MAILGUN_FROM", ""),
 		)
 		emailFactory.Register("mailgun", mailgunProvider)
 		logger.Info("Mailgun 邮件提供商已注册")
 	}
 
-	// 3. 创建短信提供商工厂
+	// 4. 创建短信提供商工厂
 	smsFactory := provider.NewSMSProviderFactory()
 
-	// 注册 Twilio 提供商
-	twilioAccountSID := config.GetEnv("TWILIO_ACCOUNT_SID", "")
+	// 注册 Twilio 提供商（优先从配置中心获取敏感信息）
+	twilioAccountSID := getConfig("TWILIO_ACCOUNT_SID", "")
 	if twilioAccountSID != "" {
 		twilioProvider := provider.NewTwilioProvider(
 			twilioAccountSID,
-			config.GetEnv("TWILIO_AUTH_TOKEN", ""),
-			config.GetEnv("TWILIO_FROM", ""),
+			getConfig("TWILIO_AUTH_TOKEN", ""),
+			getConfig("TWILIO_FROM", ""),
 		)
 		smsFactory.Register("twilio", twilioProvider)
 		logger.Info("Twilio 短信提供商已注册")
@@ -135,9 +177,9 @@ func main() {
 	var notificationService service.NotificationService
 	kafkaEnabled := config.GetEnv("KAFKA_ENABLE_ASYNC", "false") == "true"
 
-	// Kafka Brokers配置 (用于事件消费)
+	// Kafka Brokers配置 (用于事件消费，优先从配置中心获取)
 	var kafkaBrokers []string
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
+	kafkaBrokersStr := getConfig("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
 		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
@@ -148,7 +190,7 @@ func main() {
 
 		// 获取Kafka配置
 		if len(kafkaBrokers) == 0 {
-			kafkaBrokers = strings.Split(config.GetEnv("KAFKA_BROKERS", "localhost:40092"), ",")
+			kafkaBrokers = strings.Split(getConfig("KAFKA_BROKERS", "localhost:40092"), ",")
 		}
 
 		// 创建邮件生产者
@@ -222,8 +264,8 @@ func main() {
 	// 8. Swagger UI（公开接口）
 	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// 9. 初始化JWT管理器
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// 9. 初始化JWT管理器（优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 
 	// JWT认证中间件

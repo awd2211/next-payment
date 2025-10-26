@@ -32,13 +32,11 @@ export interface ListAuditLogsParams {
 }
 
 export interface ListAuditLogsResponse {
-  data: AuditLog[]
-  pagination: {
-    page: number
-    page_size: number
-    total: number
-    total_page: number
-  }
+  list: AuditLog[]
+  page: number
+  page_size: number
+  total: number
+  total_page: number
 }
 
 export interface AuditLogStats {
@@ -63,7 +61,7 @@ export const auditLogService = {
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return request.get<{ data: AuditLogStats }>('/audit-logs/stats', { params })
+    return request.get<AuditLogStats>('/audit-logs/stats', { params })
   },
 
   export: (params: ListAuditLogsParams) => {

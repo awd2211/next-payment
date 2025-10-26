@@ -1,116 +1,123 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Button, Tag, Modal, Image, Space, message, Form, Input, Select } from 'antd'
+import { Card, Table, Button, Tag, Modal, Space, message, Form, Input, Tabs } from 'antd'
 import { EyeOutlined, CheckOutlined, CloseOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { kycService, type KYCApplication } from '../services/kycService'
+import { kycService, type BusinessQualification } from '../services/kycService'
+
+const { TabPane } = Tabs
 
 export default function KYC() {
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<KYCApplication[]>([])
-  const [selectedRecord, setSelectedRecord] = useState<KYCApplication | null>(null)
+  const [data, setData] = useState<BusinessQualification[]>([])
+  const [selectedRecord, setSelectedRecord] = useState<BusinessQualification | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
   const [rejectVisible, setRejectVisible] = useState(false)
   const [rejectForm] = Form.useForm()
+  const [activeTab, setActiveTab] = useState('pending')
 
-  // Mock data - 替换为实际API调用
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [activeTab])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const response = await kycService.list({ page: 1, page_size: 20 })
+      const response = await kycService.listQualifications({
+        page: 1,
+        page_size: 20,
+        status: activeTab === 'all' ? undefined : activeTab
+      })
       // 响应拦截器已解包，直接使用数据
-      if (response && response.list) {
-        setData(response.list)
+      if (response && response.qualifications) {
+        setData(response.qualifications)
       }
     } catch (error) {
       // 错误已被拦截器处理并显示
-      console.error('Failed to fetch KYC applications:', error)
+      console.error('Failed to fetch KYC qualifications:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleView = (record: KYCApplication) => {
+  const handleView = (record: BusinessQualification) => {
     setSelectedRecord(record)
     setDetailVisible(true)
   }
 
-  const handleApprove = async (record: KYCApplication) => {
+  const handleApprove = async (record: BusinessQualification) => {
     Modal.confirm({
-      title: '确认通过KYC审核?',
-      content: `商户: ${record.merchant_name}`,
+      title: '确认通过资质审核?',
+      content: `公司: ${record.company_name}`,
       onOk: async () => {
         try {
-          const response = await kycService.approve(record.id, {})
-          if (response.code === 0) {
-            message.success('KYC审核通过')
-            fetchData()
-          } else {
-            message.error(response.error?.message || '操作失败')
-          }
+          await kycService.approveQualification(record.id)
+          message.success('资质审核通过')
+          fetchData()
         } catch (error) {
           message.error('操作失败')
-          console.error('Failed to approve KYC:', error)
+          console.error('Failed to approve qualification:', error)
         }
       },
     })
   }
 
-  const handleReject = (record: KYCApplication) => {
+  const handleReject = (record: BusinessQualification) => {
     setSelectedRecord(record)
     setRejectVisible(true)
   }
 
   const handleRejectSubmit = async (values: any) => {
     try {
-      const response = await kycService.reject(selectedRecord!.id, { reason: values.reason })
-      if (response.code === 0) {
-        message.success('已拒绝KYC申请')
-        setRejectVisible(false)
-        rejectForm.resetFields()
-        fetchData()
-      } else {
-        message.error(response.error?.message || '操作失败')
-      }
+      await kycService.rejectQualification(selectedRecord!.id, values.reason, values.remark)
+      message.success('已拒绝资质申请')
+      setRejectVisible(false)
+      rejectForm.resetFields()
+      fetchData()
     } catch (error) {
       message.error('操作失败')
-      console.error('Failed to reject KYC:', error)
+      console.error('Failed to reject qualification:', error)
     }
   }
 
-  const columns: ColumnsType<KYCApplication> = [
+  const columns: ColumnsType<BusinessQualification> = [
     {
       title: '商户ID',
       dataIndex: 'merchant_id',
-      width: 120,
-    },
-    {
-      title: '商户名称',
-      dataIndex: 'merchant_name',
       width: 200,
+      ellipsis: true,
     },
     {
-      title: '业务类型',
-      dataIndex: 'business_type',
-      width: 120,
+      title: '公司名称',
+      dataIndex: 'company_name',
+      width: 200,
     },
     {
       title: '法人姓名',
-      dataIndex: 'legal_name',
+      dataIndex: 'legal_person_name',
       width: 120,
     },
     {
-      title: '注册号',
-      dataIndex: 'registration_number',
-      width: 200,
+      title: '营业执照号',
+      dataIndex: 'business_license_no',
+      width: 180,
+    },
+    {
+      title: '行业',
+      dataIndex: 'industry',
+      width: 120,
+    },
+    {
+      title: '注册资本',
+      dataIndex: 'registered_capital',
+      width: 120,
+      render: (value: number) => {
+        return value ? `¥${(value / 100).toLocaleString()}` : '-'
+      },
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 120,
+      width: 100,
       render: (status: string) => {
         const colorMap = {
           pending: 'orange',
@@ -129,21 +136,18 @@ export default function KYC() {
     },
     {
       title: '提交时间',
-      dataIndex: 'submitted_at',
+      dataIndex: 'created_at',
       width: 180,
+      render: (text: string) => text ? new Date(text).toLocaleString() : '-',
     },
     {
       title: '操作',
       key: 'action',
-      width: 250,
+      width: 200,
       fixed: 'right',
       render: (_, record) => (
         <Space>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => handleView(record)}
-          >
+          <Button icon={<EyeOutlined />} size="small" onClick={() => handleView(record)}>
             查看
           </Button>
           {record.status === 'pending' && (
@@ -173,132 +177,109 @@ export default function KYC() {
 
   return (
     <div>
-      <Card
-        title="KYC审核管理"
-        extra={
-          <Space>
-            <Select
-              placeholder="状态筛选"
-              style={{ width: 120 }}
-              allowClear
-              options={[
-                { label: '待审核', value: 'pending' },
-                { label: '审核中', value: 'reviewing' },
-                { label: '已通过', value: 'approved' },
-                { label: '已拒绝', value: 'rejected' },
-              ]}
-            />
-            <Button icon={<SearchOutlined />} onClick={fetchData}>
-              刷新
-            </Button>
-          </Space>
-        }
-      >
+      <Card title="KYC 资质审核管理" extra={
+        <Button icon={<SearchOutlined />} onClick={fetchData}>
+          刷新
+        </Button>
+      }>
+        <Tabs activeKey={activeTab} onChange={setActiveTab}>
+          <TabPane tab="待审核" key="pending" />
+          <TabPane tab="审核中" key="reviewing" />
+          <TabPane tab="已通过" key="approved" />
+          <TabPane tab="已拒绝" key="rejected" />
+          <TabPane tab="全部" key="all" />
+        </Tabs>
+
         <Table
           columns={columns}
           dataSource={data}
-          loading={loading}
           rowKey="id"
-          scroll={{ x: 1400 }}
+          loading={loading}
           pagination={{
+            pageSize: 20,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showTotal: (total) => `共 ${total} 条记录`,
           }}
+          scroll={{ x: 1500 }}
         />
       </Card>
 
-      {/* 详情Modal */}
+      {/* 详情模态框 */}
       <Modal
-        title="KYC申请详情"
+        title="资质详情"
         open={detailVisible}
         onCancel={() => setDetailVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setDetailVisible(false)}>
+            关闭
+          </Button>,
+        ]}
         width={800}
-        footer={null}
       >
         {selectedRecord && (
           <div>
-            <Card title="基本信息" size="small" style={{ marginBottom: 16 }}>
-              <p><strong>商户名称:</strong> {selectedRecord.merchant_name}</p>
-              <p><strong>业务类型:</strong> {selectedRecord.business_type}</p>
-              <p><strong>法人姓名:</strong> {selectedRecord.legal_name}</p>
-              <p><strong>注册号:</strong> {selectedRecord.registration_number}</p>
-              <p><strong>提交时间:</strong> {selectedRecord.submitted_at}</p>
-            </Card>
+            <h3>基本信息</h3>
+            <p><strong>商户ID:</strong> {selectedRecord.merchant_id}</p>
+            <p><strong>公司名称:</strong> {selectedRecord.company_name}</p>
+            <p><strong>营业执照号:</strong> {selectedRecord.business_license_no}</p>
+            <p><strong>法人姓名:</strong> {selectedRecord.legal_person_name}</p>
+            <p><strong>法人身份证:</strong> {selectedRecord.legal_person_id_card}</p>
+            <p><strong>注册地址:</strong> {selectedRecord.registered_address || '-'}</p>
+            <p><strong>注册资本:</strong> ¥{(selectedRecord.registered_capital / 100).toLocaleString()}</p>
+            <p><strong>成立日期:</strong> {selectedRecord.established_date || '-'}</p>
+            <p><strong>经营范围:</strong> {selectedRecord.business_scope || '-'}</p>
+            <p><strong>行业:</strong> {selectedRecord.industry || '-'}</p>
+            <p><strong>税务登记号:</strong> {selectedRecord.tax_registration_no || '-'}</p>
+            <p><strong>组织机构代码:</strong> {selectedRecord.organization_code || '-'}</p>
 
-            <Card title="KYC文档" size="small">
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <div>
-                  <strong>营业执照:</strong>
-                  <br />
-                  <Image
-                    width={200}
-                    src={selectedRecord.documents.business_license}
-                    placeholder
-                  />
-                </div>
-                <div>
-                  <strong>身份证正面:</strong>
-                  <br />
-                  <Image
-                    width={200}
-                    src={selectedRecord.documents.id_card_front}
-                    placeholder
-                  />
-                </div>
-                <div>
-                  <strong>身份证背面:</strong>
-                  <br />
-                  <Image
-                    width={200}
-                    src={selectedRecord.documents.id_card_back}
-                    placeholder
-                  />
-                </div>
-                <div>
-                  <strong>银行对账单:</strong>
-                  <br />
-                  <Image
-                    width={200}
-                    src={selectedRecord.documents.bank_statement}
-                    placeholder
-                  />
-                </div>
-              </Space>
-            </Card>
+            <h3>证件照片</h3>
+            {selectedRecord.business_license_url && (
+              <div>
+                <p><strong>营业执照:</strong></p>
+                <img src={selectedRecord.business_license_url} alt="营业执照" style={{ maxWidth: '100%', marginBottom: 16 }} />
+              </div>
+            )}
+            {selectedRecord.legal_person_id_card_front_url && (
+              <div>
+                <p><strong>法人身份证正面:</strong></p>
+                <img src={selectedRecord.legal_person_id_card_front_url} alt="身份证正面" style={{ maxWidth: '100%', marginBottom: 16 }} />
+              </div>
+            )}
+            {selectedRecord.legal_person_id_card_back_url && (
+              <div>
+                <p><strong>法人身份证背面:</strong></p>
+                <img src={selectedRecord.legal_person_id_card_back_url} alt="身份证背面" style={{ maxWidth: '100%', marginBottom: 16 }} />
+              </div>
+            )}
+            {selectedRecord.tax_registration_url && (
+              <div>
+                <p><strong>税务登记证:</strong></p>
+                <img src={selectedRecord.tax_registration_url} alt="税务登记证" style={{ maxWidth: '100%', marginBottom: 16 }} />
+              </div>
+            )}
 
-            {selectedRecord.status === 'pending' && (
-              <div style={{ marginTop: 16, textAlign: 'right' }}>
-                <Space>
-                  <Button
-                    type="primary"
-                    icon={<CheckOutlined />}
-                    onClick={() => {
-                      setDetailVisible(false)
-                      handleApprove(selectedRecord)
-                    }}
-                  >
-                    通过审核
-                  </Button>
-                  <Button
-                    danger
-                    icon={<CloseOutlined />}
-                    onClick={() => {
-                      setDetailVisible(false)
-                      handleReject(selectedRecord)
-                    }}
-                  >
-                    拒绝申请
-                  </Button>
-                </Space>
+            {selectedRecord.status === 'rejected' && (
+              <div>
+                <h3>拒绝原因</h3>
+                <p style={{ color: 'red' }}>{selectedRecord.reject_reason}</p>
+                {selectedRecord.remark && <p><strong>备注:</strong> {selectedRecord.remark}</p>}
+              </div>
+            )}
+
+            {selectedRecord.reviewed_at && (
+              <div>
+                <h3>审核信息</h3>
+                <p><strong>审核人:</strong> {selectedRecord.reviewer_name || '-'}</p>
+                <p><strong>审核时间:</strong> {new Date(selectedRecord.reviewed_at).toLocaleString()}</p>
               </div>
             )}
           </div>
         )}
       </Modal>
 
-      {/* 拒绝Modal */}
+      {/* 拒绝模态框 */}
       <Modal
-        title="拒绝KYC申请"
+        title="拒绝资质申请"
         open={rejectVisible}
         onCancel={() => {
           setRejectVisible(false)
@@ -312,7 +293,10 @@ export default function KYC() {
             label="拒绝原因"
             rules={[{ required: true, message: '请输入拒绝原因' }]}
           >
-            <Input.TextArea rows={4} placeholder="请说明拒绝的具体原因..." />
+            <Input.TextArea rows={4} placeholder="请详细说明拒绝的原因" />
+          </Form.Item>
+          <Form.Item name="remark" label="备注">
+            <Input.TextArea rows={2} placeholder="可选:补充说明" />
           </Form.Item>
         </Form>
       </Modal>

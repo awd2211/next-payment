@@ -9,6 +9,7 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
 	"payment-platform/merchant-auth-service/internal/client"
@@ -37,6 +38,15 @@ import (
 
 func main() {
 	// 1. Bootstrap初始化
+	var configClient *configclient.Client
+	if config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true" {
+		clientCfg := configclient.ClientConfig{ServiceName: "merchant-auth-service", Environment: config.GetEnv("ENV", "production"), ConfigURL: config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"), RefreshRate: 30 * time.Second}
+		if config.GetEnvBool("CONFIG_CLIENT_MTLS", false) { clientCfg.EnableMTLS = true; clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", ""); clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", ""); clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "") }
+		client, _ := configclient.NewClient(clientCfg)
+		if client != nil { configClient = client; defer configClient.Stop() }
+	}
+	getConfig := func(key, defaultValue string) string { if configClient != nil { if val := configClient.Get(key); val != "" { return val } }; return config.GetEnv(key, defaultValue) }
+
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "merchant-auth-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_merchant_auth"),
@@ -87,7 +97,7 @@ func main() {
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 
 	// 6. 初始化JWT Manager
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

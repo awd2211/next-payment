@@ -1,0 +1,110 @@
+{
+  "dashboard": {
+    "title": "Merchant Services Dashboard",
+    "tags": ["merchant-services", "business-logic"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"merchant-policy-service|merchant-quota-service\"}",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Requests Per Second",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=\"merchant-policy-service\"}[5m]))",
+            "legendFormat": "Policy Service"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{job=\"merchant-quota-service\"}[5m]))",
+            "legendFormat": "Quota Service"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=\"merchant-policy-service\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"merchant-policy-service\"}[5m]))",
+            "legendFormat": "Policy Service Error Rate"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{job=\"merchant-quota-service\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"merchant-quota-service\"}[5m]))",
+            "legendFormat": "Quota Service Error Rate"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 4,
+        "title": "P95 Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"merchant-policy-service\"}[5m])) by (le))",
+            "legendFormat": "Policy Service P95"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"merchant-quota-service\"}[5m])) by (le))",
+            "legendFormat": "Quota Service P95"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 5,
+        "title": "Top Endpoints by Request Count",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, sum(rate(http_requests_total{job=~\"merchant-policy-service|merchant-quota-service\"}[5m])) by (job, path))",
+            "format": "table"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      },
+      {
+        "id": 6,
+        "title": "Rate Limit Hits (429 Errors)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=\"merchant-policy-service\",status=\"429\"}[5m]))",
+            "legendFormat": "Policy Service"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{job=\"merchant-quota-service\",status=\"429\"}[5m]))",
+            "legendFormat": "Quota Service"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 20}
+      },
+      {
+        "id": 7,
+        "title": "Active Quota Alerts",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(quota_alerts_active{job=\"merchant-quota-service\"})"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 20}
+      }
+    ],
+    "refresh": "30s",
+    "time": {"from": "now-1h", "to": "now"}
+  }
+}

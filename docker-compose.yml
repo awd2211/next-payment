@@ -278,6 +278,7 @@ services:
     volumes:
       - ./backend/deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./backend/deployments/prometheus/alerts:/etc/prometheus/alerts:ro
+      - ./backend/deployments/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     networks:
       - payment-network

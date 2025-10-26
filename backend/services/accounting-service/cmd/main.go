@@ -10,10 +10,12 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/kafka"
 	"github.com/payment-platform/pkg/logger"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 	"payment-platform/accounting-service/internal/client"
 	"payment-platform/accounting-service/internal/handler"
 	"payment-platform/accounting-service/internal/model"
@@ -40,7 +42,47 @@ import (
 //	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	// 1. 使用 Bootstrap 框架初始化应用
+	// 1. 初始化配置客户端（可选，失败不影响启动）
+	var configClient *configclient.Client
+	enableConfigClient := config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true"
+
+	if enableConfigClient {
+		enableConfigMTLS := config.GetEnvBool("CONFIG_CLIENT_MTLS", false)
+
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "accounting-service",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+
+		if enableConfigMTLS {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+		}
+
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败，将使用环境变量", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置中心客户端初始化成功")
+		}
+	}
+
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 2. 使用 Bootstrap 框架初始化应用
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "accounting-service",
 		DBName:      config.GetEnv("DB_NAME", "payment_accounting"),
@@ -71,9 +113,10 @@ func main() {
 
 	logger.Info("正在启动 Accounting Service...")
 
-	// 2. 初始化 HTTP 客户端
-	channelAdapterURL := config.GetEnv("CHANNEL_SERVICE_URL", "http://localhost:40005")
+	// 3. 初始化 HTTP 客户端（优先从配置中心获取）
+	channelAdapterURL := getConfig("CHANNEL_SERVICE_URL", "http://localhost:40005")
 	channelAdapterClient := client.NewChannelAdapterClient(channelAdapterURL)
+	logger.Info(fmt.Sprintf("渠道适配器客户端初始化: %s", channelAdapterURL))
 
 	// 3. 初始化Repository
 	accountRepo := repository.NewAccountRepository(application.DB)
@@ -90,9 +133,9 @@ func main() {
 	// 7. 注册账户路由
 	accountHandler.RegisterRoutes(application.Router)
 
-	// 8. 初始化Kafka (事件驱动架构)
+	// 8. 初始化Kafka (事件驱动架构，优先从配置中心获取)
 	var kafkaBrokers []string
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
+	kafkaBrokersStr := getConfig("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
 		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
@@ -122,8 +165,8 @@ func main() {
 		logger.Info("未配置Kafka Brokers，事件消费Workers未启动 (手动记账模式)")
 	}
 
-	// 9. 初始化 JWT 认证中间件
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	// 9. 初始化 JWT 认证中间件（优先从配置中心获取）
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 

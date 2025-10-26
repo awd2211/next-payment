@@ -18,6 +18,7 @@ import (
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
+	"github.com/payment-platform/pkg/configclient"
 	exportpkg "github.com/payment-platform/pkg/export"
 	"github.com/payment-platform/pkg/health"
 	"github.com/payment-platform/pkg/idempotency"
@@ -89,7 +90,56 @@ func main() {
 
 	logger.Info("正在启动 Payment Gateway Service...")
 
-	// 2. 初始化 Prometheus 业务指标（支付特定）
+	// 2. 初始化配置客户端（可选，失败不影响启动）
+	var configClient *configclient.Client
+	enableConfigClient := config.GetEnv("ENABLE_CONFIG_CLIENT", "false") == "true"
+
+	if enableConfigClient {
+		// 检查是否启用 mTLS
+		enableConfigMTLS := config.GetEnvBool("CONFIG_CLIENT_MTLS", false)
+
+		clientCfg := configclient.ClientConfig{
+			ServiceName: "payment-gateway",
+			Environment: config.GetEnv("ENV", "production"),
+			ConfigURL:   config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010"),
+			RefreshRate: 30 * time.Second,
+		}
+
+		// 如果启用 mTLS,添加证书配置
+		if enableConfigMTLS {
+			clientCfg.EnableMTLS = true
+			clientCfg.TLSCertFile = config.GetEnv("TLS_CERT_FILE", "")
+			clientCfg.TLSKeyFile = config.GetEnv("TLS_KEY_FILE", "")
+			clientCfg.TLSCAFile = config.GetEnv("TLS_CA_FILE", "")
+			logger.Info("配置客户端启用 mTLS",
+				zap.String("cert", clientCfg.TLSCertFile),
+				zap.String("ca", clientCfg.TLSCAFile))
+		}
+
+		client, err := configclient.NewClient(clientCfg)
+		if err != nil {
+			logger.Warn("配置客户端初始化失败，将使用环境变量", zap.Error(err))
+		} else {
+			configClient = client
+			defer configClient.Stop()
+			logger.Info("配置客户端初始化成功",
+				zap.String("config_url", config.GetEnv("CONFIG_SERVICE_URL", "http://localhost:40010")),
+				zap.Bool("mtls_enabled", enableConfigMTLS))
+		}
+	}
+
+	// 定义配置获取函数：优先从配置中心获取，失败则使用环境变量
+	getConfig := func(key, defaultValue string) string {
+		if configClient != nil {
+			if val := configClient.Get(key); val != "" {
+				logger.Debug("从配置中心读取配置", zap.String("key", key))
+				return val
+			}
+		}
+		return config.GetEnv(key, defaultValue)
+	}
+
+	// 3. 初始化 Prometheus 业务指标（支付特定）
 	paymentMetrics := metrics.NewPaymentMetrics("payment_gateway")
 	logger.Info("支付业务指标初始化完成")
 
@@ -100,11 +150,11 @@ func main() {
 	webhookNotificationRepo := repository.NewWebhookNotificationRepository(application.DB)
 
 	// 4. 初始化微服务客户端
-	orderServiceURL := config.GetEnv("ORDER_SERVICE_URL", "http://localhost:40004")
-	channelServiceURL := config.GetEnv("CHANNEL_SERVICE_URL", "http://localhost:40005")
-	riskServiceURL := config.GetEnv("RISK_SERVICE_URL", "http://localhost:40006")
-	notificationServiceURL := config.GetEnv("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
-	analyticsServiceURL := config.GetEnv("ANALYTICS_SERVICE_URL", "http://localhost:40009")
+	orderServiceURL := getConfig("ORDER_SERVICE_URL", "http://localhost:40004")
+	channelServiceURL := getConfig("CHANNEL_SERVICE_URL", "http://localhost:40005")
+	riskServiceURL := getConfig("RISK_SERVICE_URL", "http://localhost:40006")
+	notificationServiceURL := getConfig("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	analyticsServiceURL := getConfig("ANALYTICS_SERVICE_URL", "http://localhost:40009")
 
 	orderClient := client.NewOrderClient(orderServiceURL)
 	channelClient := client.NewChannelClient(channelServiceURL)
@@ -120,7 +170,7 @@ func main() {
 
 	// 5. 初始化Kafka Brokers（可选，如果未配置则为nil）
 	var kafkaBrokers []string
-	kafkaBrokersStr := config.GetEnv("KAFKA_BROKERS", "localhost:40092")
+	kafkaBrokersStr := getConfig("KAFKA_BROKERS", "localhost:40092")
 	if kafkaBrokersStr != "" {
 		kafkaBrokers = strings.Split(kafkaBrokersStr, ",")
 		logger.Info(fmt.Sprintf("Kafka Brokers配置完成: %v", kafkaBrokers))
@@ -413,7 +463,7 @@ func main() {
 
 	// 商户后台查询路由（JWT认证 - 用于商户后台界面）
 	// 创建JWT Manager用于验证token
-	jwtSecret := config.GetEnv("JWT_SECRET", "payment-platform-secret-key-2024")
+	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 
