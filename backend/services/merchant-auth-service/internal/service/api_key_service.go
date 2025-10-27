@@ -7,9 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"payment-platform/merchant-auth-service/internal/model"
 	"payment-platform/merchant-auth-service/internal/repository"
 )
@@ -99,7 +101,16 @@ func (s *apiKeyService) ListAPIKeys(ctx context.Context, merchantID uuid.UUID) (
 
 // DeleteAPIKey 删除API Key
 func (s *apiKeyService) DeleteAPIKey(ctx context.Context, merchantID uuid.UUID, keyID uuid.UUID) error {
-	// TODO: 验证key属于该merchant
+	// 验证API Key是否属于该商户 (安全检查)
+	_, err := s.repo.GetByIDAndMerchantID(ctx, keyID, merchantID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("API Key不存在或不属于该商户")
+		}
+		return fmt.Errorf("验证API Key归属失败: %w", err)
+	}
+
+	// 验证通过,执行删除
 	return s.repo.Delete(ctx, keyID)
 }
 

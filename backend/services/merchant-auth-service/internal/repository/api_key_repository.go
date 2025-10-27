@@ -16,6 +16,7 @@ type APIKeyRepository interface {
 	Create(ctx context.Context, key *model.APIKey) error
 	GetByMerchantID(ctx context.Context, merchantID uuid.UUID) ([]*model.APIKey, error)
 	Delete(ctx context.Context, id uuid.UUID) error
+	GetByIDAndMerchantID(ctx context.Context, id uuid.UUID, merchantID uuid.UUID) (*model.APIKey, error)
 }
 
 type apiKeyRepository struct {
@@ -69,4 +70,16 @@ func (r *apiKeyRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		Model(&model.APIKey{}).
 		Where("id = ?", id).
 		Update("is_active", false).Error
+}
+
+// GetByIDAndMerchantID 验证API Key是否属于指定商户
+func (r *apiKeyRepository) GetByIDAndMerchantID(ctx context.Context, id uuid.UUID, merchantID uuid.UUID) (*model.APIKey, error) {
+	var key model.APIKey
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND merchant_id = ? AND is_active = ?", id, merchantID, true).
+		First(&key).Error
+	if err != nil {
+		return nil, err
+	}
+	return &key, nil
 }
