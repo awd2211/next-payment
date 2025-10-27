@@ -54,7 +54,7 @@ export interface UpdateMerchantRequest {
 
 export const merchantService = {
   list: (params: ListMerchantsParams) => {
-    return request.get<ListMerchantsResponse>('/merchant', { params })
+    return request.get<ListMerchantsResponse>('/api/v1/admin/merchants', { params })
   },
 
   getById: (id: string) => {
@@ -62,7 +62,7 @@ export const merchantService = {
   },
 
   create: (data: CreateMerchantRequest) => {
-    return request.post('/merchant', data)
+    return request.post('/api/v1/admin/merchants', data)
   },
 
   update: (id: string, data: UpdateMerchantRequest) => {
