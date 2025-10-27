@@ -1380,9 +1380,55 @@ func (s *paymentService) matchRoute(payment *model.Payment, route *model.Payment
 	}
 
 	// 国家/地区
-	// TODO: 根据customer_ip或其他信息判断国家
+	if countries, ok := conditions["countries"].([]interface{}); ok && len(countries) > 0 {
+		// 如果有国家限制,需要从payment中获取客户IP并判断国家
+		if payment.CustomerIP != "" {
+			customerCountry := getCountryFromIP(payment.CustomerIP)
+			if customerCountry == "" {
+				// 无法获取国家信息,不匹配此路由
+				return false
+			}
+
+			matched := false
+			for _, c := range countries {
+				if country, ok := c.(string); ok && country == customerCountry {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
+		} else {
+			// 没有IP信息,无法判断国家,不匹配
+			return false
+		}
+	}
 
 	return true
+}
+
+// getCountryFromIP 根据IP地址获取国家代码
+// 这是一个简化实现,实际生产环境应该使用GeoIP库(如MaxMind GeoLite2)
+func getCountryFromIP(ip string) string {
+	// TODO: 集成 GeoIP 库实现真实的IP地理位置查询
+	// 推荐使用: github.com/oschwald/geoip2-golang
+
+	// 临时实现:根据IP前缀做简单判断(仅供示例)
+	if strings.HasPrefix(ip, "127.") || strings.HasPrefix(ip, "localhost") {
+		return "CN" // 本地测试默认为中国
+	}
+
+	// 生产环境应该:
+	// 1. 使用 GeoIP2 数据库查询
+	// 2. 添加缓存层减少查询开销
+	// 3. 处理IPv6地址
+	// 4. 定期更新GeoIP数据库
+
+	logger.Warn("使用简化的国家判断逻辑,生产环境应集成GeoIP库",
+		zap.String("ip", ip))
+
+	return "" // 无法判断时返回空字符串
 }
 
 // 工具函数
