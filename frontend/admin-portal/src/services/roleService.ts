@@ -50,41 +50,41 @@ export interface UpdateRoleRequest {
 
 export const roleService = {
   list: (params: ListRolesParams) => {
-    return request.get<ListRolesResponse>('/roles', { params })
+    return request.get<ListRolesResponse>('/api/v1/admin/roles', { params })
   },
 
   getById: (id: string) => {
-    return request.get(`/roles/${id}`)
+    return request.get(`/api/v1/admin/roles/${id}`)
   },
 
   create: (data: CreateRoleRequest) => {
-    return request.post('/roles', data)
+    return request.post('/api/v1/admin/roles', data)
   },
 
   update: (id: string, data: UpdateRoleRequest) => {
-    return request.put(`/roles/${id}`, data)
+    return request.put(`/api/v1/admin/roles/${id}`, data)
   },
 
   delete: (id: string) => {
-    return request.delete(`/roles/${id}`)
+    return request.delete(`/api/v1/admin/roles/${id}`)
   },
 
   assignPermissions: (roleId: string, permissionIds: string[]) => {
-    return request.post(`/roles/${roleId}/permissions`, { permission_ids: permissionIds })
+    return request.post(`/api/v1/admin/roles/${roleId}/permissions`, { permission_ids: permissionIds })
   },
 
   assignToAdmin: (adminId: string, roleIds: string[]) => {
-    return request.post('/roles/assign', { admin_id: adminId, role_ids: roleIds })
+    return request.post('/api/v1/admin/roles/assign', { admin_id: adminId, role_ids: roleIds })
   },
 }
 
 export const permissionService = {
   list: (resource?: string) => {
-    return request.get('/permissions', { params: { resource } })
+    return request.get('/api/v1/admin/permissions', { params: { resource } })
   },
 
   listGrouped: () => {
-    return request.get('/permissions/grouped')
+    return request.get('/api/v1/admin/permissions/grouped')
   },
 
   getById: (id: string) => {

@@ -24,10 +24,10 @@ export const getDashboardData = async (
     // 聚合多个API的数据
     const [merchantsResponse, adminsResponse, ordersStatsResponse, paymentsResponse] =
       await Promise.all([
-        request.get('/api/v1/merchant', { params: { page: 1, page_size: 1 } }),
+        request.get('/api/v1/admin/merchants', { params: { page: 1, page_size: 1 } }),
         request.get('/api/v1/admin', { params: { page: 1, page_size: 1 } }),
-        request.get('/api/v1/orders/stats', { params: { period: timePeriod } }),
-        request.get('/api/v1/payments', { params: { page: 1, page_size: 10 } }),
+        request.get('/api/v1/admin/orders/stats', { params: { period: timePeriod } }),
+        request.get('/api/v1/admin/payments', { params: { page: 1, page_size: 10 } }),
       ])
 
     // 组装Dashboard数据
@@ -54,8 +54,8 @@ export const getDashboardData = async (
 export const getDashboardStats = async () => {
   try {
     const [ordersStats, transactionsStats] = await Promise.all([
-      request.get('/api/v1/orders/stats'),
-      request.get('/api/v1/transactions/stats'),
+      request.get('/api/v1/admin/orders/stats'),
+      request.get('/api/v1/admin/transactions/stats'),
     ])
 
     return {
@@ -72,7 +72,7 @@ export const getDashboardStats = async () => {
  * 获取交易趋势数据 - 注意: 后端需要实现此接口
  */
 export const getTrendData = async (period: 'today' | '7days' | '30days' = 'today') => {
-  const { data } = await request.get('/api/v1/analytics/trend', {
+  const { data } = await request.get('/api/v1/admin/analytics/trend', {
     params: { period },
   })
   return data
@@ -82,7 +82,7 @@ export const getTrendData = async (period: 'today' | '7days' | '30days' = 'today
  * 获取渠道分布数据 - 注意: 后端需要实现此接口
  */
 export const getChannelDistribution = async () => {
-  const { data } = await request.get('/api/v1/analytics/channel-distribution')
+  const { data } = await request.get('/api/v1/admin/analytics/channel-distribution')
   return data
 }
 
@@ -90,7 +90,7 @@ export const getChannelDistribution = async () => {
  * 获取商户排行 - 注意: 后端需要实现此接口
  */
 export const getMerchantRanks = async (limit = 5) => {
-  const { data } = await request.get('/api/v1/analytics/merchant-ranks', {
+  const { data } = await request.get('/api/v1/admin/analytics/merchant-ranks', {
     params: { limit },
   })
   return data
@@ -100,7 +100,7 @@ export const getMerchantRanks = async (limit = 5) => {
  * 获取近期活动 - 从审计日志获取
  */
 export const getRecentActivities = async (limit = 5) => {
-  const { data } = await request.get('/api/v1/audit-logs', {
+  const { data } = await request.get('/api/v1/admin/audit-logs', {
     params: { page: 1, page_size: limit },
   })
   return data

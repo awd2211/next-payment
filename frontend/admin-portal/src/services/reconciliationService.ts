@@ -110,14 +110,14 @@ export const reconciliationService = {
    * Get reconciliation detail by ID
    */
   getDetail: (id: string) => {
-    return request.get<ReconciliationDetailResponse>(`/api/v1/reconciliation/tasks/${id}`)
+    return request.get<ReconciliationDetailResponse>(`/api/v1/admin/reconciliation/tasks/${id}`)
   },
 
   /**
    * Get unmatched items for a reconciliation - 对应后端的records接口
    */
   getUnmatchedItems: (reconId: string) => {
-    return request.get<UnmatchedItemsResponse>(`/api/v1/reconciliation/records`, {
+    return request.get<UnmatchedItemsResponse>(`/api/v1/admin/reconciliation/records`, {
       params: { task_id: reconId }
     })
   },
@@ -143,21 +143,21 @@ export const reconciliationService = {
    * Confirm reconciliation result - 注意: 后端需要实现此接口
    */
   confirm: (id: string, data: ConfirmReconciliationRequest) => {
-    return request.post<ConfirmReconciliationResponse>(`/api/v1/reconciliation/tasks/${id}/confirm`, data)
+    return request.post<ConfirmReconciliationResponse>(`/api/v1/admin/reconciliation/tasks/${id}/confirm`, data)
   },
 
   /**
    * Retry failed reconciliation
    */
   retry: (id: string) => {
-    return request.post(`/api/v1/reconciliation/tasks/${id}/retry`)
+    return request.post(`/api/v1/admin/reconciliation/tasks/${id}/retry`)
   },
 
   /**
    * Download reconciliation report
    */
   downloadReport: (id: string) => {
-    return request.get(`/api/v1/reconciliation/reports/${id}`, {
+    return request.get(`/api/v1/admin/reconciliation/reports/${id}`, {
       responseType: 'blob',
     })
   },
@@ -183,6 +183,6 @@ export const reconciliationService = {
    * Resolve unmatched item
    */
   resolveUnmatched: (reconId: string, itemId: string, data: { action: 'resolve' | 'ignore'; notes?: string }) => {
-    return request.post(`/api/v1/reconciliation/records/${itemId}/resolve`, data)
+    return request.post(`/api/v1/admin/reconciliation/records/${itemId}/resolve`, data)
   },
 }

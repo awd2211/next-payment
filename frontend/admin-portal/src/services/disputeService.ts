@@ -93,21 +93,21 @@ export const disputeService = {
    * Get dispute detail by ID
    */
   getDetail: (id: string) => {
-    return request.get<DisputeDetailResponse>(`/api/v1/disputes/${id}`)
+    return request.get<DisputeDetailResponse>(`/api/v1/admin/disputes/${id}`)
   },
 
   /**
    * Get evidence list for a dispute
    */
   getEvidence: (disputeId: string) => {
-    return request.get<EvidenceListResponse>(`/api/v1/disputes/${disputeId}/evidence`)
+    return request.get<EvidenceListResponse>(`/api/v1/admin/disputes/${disputeId}/evidence`)
   },
 
   /**
    * Resolve a dispute (accept or reject) - 对应后端的status update
    */
   resolve: (id: string, data: ResolveDisputeRequest) => {
-    return request.put<ResolveDisputeResponse>(`/api/v1/disputes/${id}/status`, {
+    return request.put<ResolveDisputeResponse>(`/api/v1/admin/disputes/${id}/status`, {
       status: data.decision === 'accept' ? 'accepted' : 'rejected',
       reason: data.reason,
     })
@@ -117,7 +117,7 @@ export const disputeService = {
    * Upload evidence file
    */
   uploadEvidence: (disputeId: string, formData: FormData) => {
-    return request.post(`/api/v1/disputes/${disputeId}/evidence`, formData, {
+    return request.post(`/api/v1/admin/disputes/${disputeId}/evidence`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -128,7 +128,7 @@ export const disputeService = {
    * Download evidence file
    */
   downloadEvidence: (disputeId: string, evidenceId: string) => {
-    return request.get(`/api/v1/disputes/evidence/${evidenceId}`, {
+    return request.get(`/api/v1/admin/disputes/evidence/${evidenceId}`, {
       responseType: 'blob',
     })
   },

@@ -35,27 +35,27 @@ export interface UpdatePreferencesRequest {
 export const preferencesService = {
   // Get current admin's preferences
   getPreferences: () => {
-    return request.get<{ data: AdminPreferences }>('/preferences')
+    return request.get<{ data: AdminPreferences }>('/api/v1/admin/preferences')
   },
 
   // Update current admin's preferences
   updatePreferences: (data: UpdatePreferencesRequest) => {
-    return request.put<{ data: AdminPreferences }>('/preferences', data)
+    return request.put<{ data: AdminPreferences }>('/api/v1/admin/preferences', data)
   },
 
   // Get specific admin's preferences (admin only)
   getAdminPreferences: (adminId: string) => {
-    return request.get<{ data: AdminPreferences }>(`/admin/${adminId}/preferences`)
+    return request.get<{ data: AdminPreferences }>(`/api/v1/admin/admins/${adminId}/preferences`)
   },
 
   // Update specific admin's preferences (admin only)
   updateAdminPreferences: (adminId: string, data: UpdatePreferencesRequest) => {
-    return request.put<{ data: AdminPreferences }>(`/admin/${adminId}/preferences`, data)
+    return request.put<{ data: AdminPreferences }>(`/api/v1/admin/admins/${adminId}/preferences`, data)
   },
 
   // Reset to default preferences
   resetPreferences: () => {
-    return request.delete('/preferences')
+    return request.delete('/api/v1/admin/preferences')
   },
 }
 

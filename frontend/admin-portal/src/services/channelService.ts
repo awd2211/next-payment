@@ -150,28 +150,28 @@ export interface ExchangeRate {
 export const channelService = {
   // Admin Channel Management
   listAdminChannels: (params?: ListChannelsParams) => {
-    return request.get<{ data: Channel[] }>('/admin/channels', { params })
+    return request.get<{ data: Channel[] }>('/api/v1/admin/channels', { params })
   },
 
   getAdminChannel: (code: string) => {
-    return request.get<{ data: Channel }>(`/admin/channels/${code}`)
+    return request.get<{ data: Channel }>(`/api/v1/admin/admins/channels/${code}`)
   },
 
   createAdminChannel: (data: CreateChannelRequest) => {
-    return request.post<{ data: Channel }>('/admin/channels', data)
+    return request.post<{ data: Channel }>('/api/v1/admin/channels', data)
   },
 
   updateAdminChannel: (code: string, data: UpdateChannelRequest) => {
-    return request.put<{ data: Channel }>(`/admin/channels/${code}`, data)
+    return request.put<{ data: Channel }>(`/api/v1/admin/admins/channels/${code}`, data)
   },
 
   deleteAdminChannel: (code: string) => {
-    return request.delete(`/admin/channels/${code}`)
+    return request.delete(`/api/v1/admin/admins/channels/${code}`)
   },
 
   // Channel Payment Operations
   createChannelPayment: (data: CreateChannelPaymentRequest) => {
-    return request.post<{ data: ChannelPaymentResponse }>('/channel/payments', data)
+    return request.post<{ data: ChannelPaymentResponse }>('/api/v1/admin/channel/payments', data)
   },
 
   queryChannelPayment: (paymentNo: string) => {
@@ -190,7 +190,7 @@ export const channelService = {
     currency: string
     reason?: string
   }) => {
-    return request.post('/channel/refunds', data)
+    return request.post('/api/v1/admin/channel/refunds', data)
   },
 
   queryChannelRefund: (refundNo: string) => {
@@ -199,18 +199,18 @@ export const channelService = {
 
   // Pre-authorization (Stripe specific)
   createPreAuth: (data: PreAuthRequest) => {
-    return request.post<{ data: PreAuthResponse }>('/channel/pre-auth', data)
+    return request.post<{ data: PreAuthResponse }>('/api/v1/admin/channel/pre-auth', data)
   },
 
   capturePreAuth: (data: {
     channel_pre_auth_no: string
     amount?: number
   }) => {
-    return request.post('/channel/pre-auth/capture', data)
+    return request.post('/api/v1/admin/channel/pre-auth/capture', data)
   },
 
   cancelPreAuth: (channelPreAuthNo: string) => {
-    return request.post('/channel/pre-auth/cancel', {
+    return request.post('/api/v1/admin/channel/pre-auth/cancel', {
       channel_pre_auth_no: channelPreAuthNo
     })
   },
@@ -221,7 +221,7 @@ export const channelService = {
 
   // Channel Configuration
   listChannelConfigs: () => {
-    return request.get('/channel/config')
+    return request.get('/api/v1/admin/channel/config')
   },
 
   getChannelConfig: (channel: string) => {
@@ -243,11 +243,11 @@ export const channelService = {
 
   // Legacy/Compatibility APIs
   list: (params: ListChannelsParams) => {
-    return request.get<ListChannelsResponse>('/admin/channels', { params })
+    return request.get<ListChannelsResponse>('/api/v1/admin/channels', { params })
   },
 
   getById: (id: string) => {
-    return request.get<Channel>(`/channels/${id}`)
+    return request.get<Channel>(`/api/v1/admin/channels/${id}`)
   },
 
   create: (data: CreateChannelRequest) => {
@@ -255,19 +255,19 @@ export const channelService = {
   },
 
   update: (id: string, data: UpdateChannelRequest) => {
-    return request.put<Channel>(`/channels/${id}`, data)
+    return request.put<Channel>(`/api/v1/admin/channels/${id}`, data)
   },
 
   delete: (id: string) => {
-    return request.delete(`/channels/${id}`)
+    return request.delete(`/api/v1/admin/channels/${id}`)
   },
 
   toggleEnable: (id: string, is_enabled: boolean) => {
-    return request.put(`/channels/${id}/toggle`, { is_enabled })
+    return request.put(`/api/v1/admin/channels/${id}/toggle`, { is_enabled })
   },
 
   toggleTestMode: (id: string, is_test_mode: boolean) => {
-    return request.put(`/channels/${id}/test-mode`, { is_test_mode })
+    return request.put(`/api/v1/admin/channels/${id}/test-mode`, { is_test_mode })
   },
 
   getStats: () => {
@@ -275,7 +275,7 @@ export const channelService = {
   },
 
   testConnection: (id: string) => {
-    return request.post<{ success: boolean; message: string }>(`/channels/${id}/test`)
+    return request.post<{ success: boolean; message: string }>(`/api/v1/admin/channels/${id}/test`)
   },
 
   getHealthStatus: () => {
@@ -283,11 +283,11 @@ export const channelService = {
   },
 
   getSupportedCurrencies: (channelType: string) => {
-    return request.get<string[]>(`/channels/supported-currencies/${channelType}`)
+    return request.get<string[]>(`/api/v1/admin/channels/supported-currencies/${channelType}`)
   },
 
   getSupportedPaymentMethods: (channelType: string) => {
-    return request.get<string[]>(`/channels/supported-methods/${channelType}`)
+    return request.get<string[]>(`/api/v1/admin/channels/supported-methods/${channelType}`)
   },
 
   batchToggle: (ids: string[], is_enabled: boolean) => {

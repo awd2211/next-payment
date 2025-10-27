@@ -83,19 +83,19 @@ export interface RefundListParams {
 export const paymentService = {
   // Payment Management
   list: (params: PaymentListParams) => {
-    return request.get<PaymentListResponse>('/payments', { params })
+    return request.get<PaymentListResponse>('/api/v1/admin/payments', { params })
   },
 
   get: (paymentNo: string) => {
-    return request.get<{ data: Payment }>(`/payments/${paymentNo}`)
+    return request.get<{ data: Payment }>(`/api/v1/admin/payments/${paymentNo}`)
   },
 
   batchGet: (paymentNos: string[]) => {
-    return request.post<{ data: Payment[] }>('/payments/batch', { payment_nos: paymentNos })
+    return request.post<{ data: Payment[] }>('/api/v1/admin/payments/batch', { payment_nos: paymentNos })
   },
 
   cancel: (paymentNo: string) => {
-    return request.post(`/payments/${paymentNo}/cancel`)
+    return request.post(`/api/v1/admin/payments/${paymentNo}/cancel`)
   },
 
   // Refund Management
@@ -104,19 +104,19 @@ export const paymentService = {
     amount: number
     reason?: string
   }) => {
-    return request.post<{ data: Refund }>('/refunds', data)
+    return request.post<{ data: Refund }>('/api/v1/admin/refunds', data)
   },
 
   getRefund: (refundNo: string) => {
-    return request.get<{ data: Refund }>(`/refunds/${refundNo}`)
+    return request.get<{ data: Refund }>(`/api/v1/admin/refunds/${refundNo}`)
   },
 
   listRefunds: (params: RefundListParams) => {
-    return request.get<{ data: Refund[]; pagination: any }>('/refunds', { params })
+    return request.get<{ data: Refund[]; pagination: any }>('/api/v1/admin/refunds', { params })
   },
 
   batchGetRefunds: (refundNos: string[]) => {
-    return request.post<{ data: Refund[] }>('/refunds/batch', { refund_nos: refundNos })
+    return request.post<{ data: Refund[] }>('/api/v1/admin/refunds/batch', { refund_nos: refundNos })
   },
 
   // Merchant Portal APIs (with merchant auth)
@@ -125,7 +125,7 @@ export const paymentService = {
   },
 
   merchantGetPayment: (paymentNo: string) => {
-    return request.get(`/merchant/payments/${paymentNo}`)
+    return request.get(`/api/v1/admin/merchants/payments/${paymentNo}`)
   },
 
   merchantBatchGetPayments: (paymentNos: string[]) => {
@@ -137,7 +137,7 @@ export const paymentService = {
   },
 
   merchantGetRefund: (refundNo: string) => {
-    return request.get(`/merchant/refunds/${refundNo}`)
+    return request.get(`/api/v1/admin/merchants/refunds/${refundNo}`)
   },
 
   merchantBatchGetRefunds: (refundNos: string[]) => {
@@ -146,7 +146,7 @@ export const paymentService = {
 
   // Statistics
   getStats: (params: PaymentStatsParams) => {
-    return request.get<{ data: PaymentStats }>('/payments/stats', { params })
+    return request.get<{ data: PaymentStats }>('/api/v1/admin/payments/stats', { params })
   },
 }
 

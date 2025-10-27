@@ -69,40 +69,40 @@ export interface ListFeatureFlagsParams {
 export const configService = {
   // Configuration Management
   createConfig: (data: Partial<SystemConfig>) => {
-    return request.post('/configs', data)
+    return request.post('/api/v1/admin/configs', data)
   },
 
   listConfigs: (params: ListConfigsParams) => {
-    return request.get('/configs', { params })
+    return request.get('/api/v1/admin/configs', { params })
   },
 
   getConfig: (id: string) => {
-    return request.get<{ data: SystemConfig }>(`/configs/${id}`)
+    return request.get<{ data: SystemConfig }>(`/api/v1/admin/configs/${id}`)
   },
 
   updateConfig: (id: string, data: Partial<SystemConfig>) => {
-    return request.put(`/configs/${id}`, data)
+    return request.put(`/api/v1/admin/configs/${id}`, data)
   },
 
   deleteConfig: (id: string) => {
-    return request.delete(`/configs/${id}`)
+    return request.delete(`/api/v1/admin/configs/${id}`)
   },
 
   getConfigHistory: (id: string) => {
-    return request.get<{ data: ConfigHistoryItem[] }>(`/configs/${id}/history`)
+    return request.get<{ data: ConfigHistoryItem[] }>(`/api/v1/admin/configs/${id}/history`)
   },
 
   rollbackConfig: (id: string, version: number) => {
-    return request.post(`/configs/${id}/rollback`, { version })
+    return request.post(`/api/v1/admin/configs/${id}/rollback`, { version })
   },
 
   // Feature Flags
   createFeatureFlag: (data: Partial<FeatureFlag>) => {
-    return request.post('/feature-flags', data)
+    return request.post('/api/v1/admin/feature-flags', data)
   },
 
   listFeatureFlags: (params?: ListFeatureFlagsParams) => {
-    return request.get<{ data: FeatureFlag[] }>('/feature-flags', { params })
+    return request.get<{ data: FeatureFlag[] }>('/api/v1/admin/feature-flags', { params })
   },
 
   getFeatureFlag: (key: string) => {

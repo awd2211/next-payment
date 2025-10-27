@@ -72,15 +72,15 @@ export const merchantAuthService = {
   },
 
   getAPIKey: (id: string) => {
-    return request.get<{ data: APIKey }>(`/api-keys/${id}`)
+    return request.get<{ data: APIKey }>(`/api/v1/admin/api-keys/${id}`)
   },
 
   rotateAPIKey: (id: string) => {
-    return request.post<{ data: APIKey }>(`/api-keys/${id}/rotate`)
+    return request.post<{ data: APIKey }>(`/api/v1/admin/api-keys/${id}/rotate`)
   },
 
   deleteAPIKey: (id: string) => {
-    return request.delete(`/api-keys/${id}`)
+    return request.delete(`/api/v1/admin/api-keys/${id}`)
   },
 
   // Session Management

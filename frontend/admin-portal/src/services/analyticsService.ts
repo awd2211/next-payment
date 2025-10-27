@@ -58,34 +58,34 @@ export interface AnalyticsParams {
 export const analyticsService = {
   // Payment Analytics
   getPaymentMetrics: (params: AnalyticsParams) => {
-    return request.get<{ data: PaymentMetrics }>('/analytics/payments/metrics', { params })
+    return request.get<{ data: PaymentMetrics }>('/api/v1/admin/analytics/payments/metrics', { params })
   },
 
   getPaymentSummary: (params: AnalyticsParams) => {
-    return request.get<{ data: PaymentSummary[] }>('/analytics/payments/summary', { params })
+    return request.get<{ data: PaymentSummary[] }>('/api/v1/admin/analytics/payments/summary', { params })
   },
 
   // Merchant Analytics
   getMerchantMetrics: (params: Omit<AnalyticsParams, 'merchant_id'>) => {
-    return request.get<{ data: MerchantMetrics }>('/analytics/merchants/metrics', { params })
+    return request.get<{ data: MerchantMetrics }>('/api/v1/admin/analytics/merchants/metrics', { params })
   },
 
   getMerchantSummary: (params: Omit<AnalyticsParams, 'merchant_id'>) => {
-    return request.get('/analytics/merchants/summary', { params })
+    return request.get('/api/v1/admin/analytics/merchants/summary', { params })
   },
 
   // Channel Analytics
   getChannelMetrics: (params: AnalyticsParams) => {
-    return request.get<{ data: ChannelMetrics[] }>('/analytics/channels/metrics', { params })
+    return request.get<{ data: ChannelMetrics[] }>('/api/v1/admin/analytics/channels/metrics', { params })
   },
 
   getChannelSummary: (params: AnalyticsParams) => {
-    return request.get('/analytics/channels/summary', { params })
+    return request.get('/api/v1/admin/analytics/channels/summary', { params })
   },
 
   // Real-time Statistics
   getRealtimeStats: () => {
-    return request.get<{ data: RealtimeStats }>('/analytics/realtime/stats')
+    return request.get<{ data: RealtimeStats }>('/api/v1/admin/analytics/realtime/stats')
   },
 }
 

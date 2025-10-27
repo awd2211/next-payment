@@ -71,74 +71,74 @@ export interface ListLoginAttemptsParams {
 export const securityService = {
   // Security Events
   listSecurityEvents: (params: ListSecurityEventsParams) => {
-    return request.get('/security/events', { params })
+    return request.get('/api/v1/admin/security/events', { params })
   },
 
   getSecurityEvent: (id: string) => {
-    return request.get<{ data: SecurityEvent }>(`/security/events/${id}`)
+    return request.get<{ data: SecurityEvent }>(`/api/v1/admin/security/events/${id}`)
   },
 
   // Login Attempts
   listLoginAttempts: (params: ListLoginAttemptsParams) => {
-    return request.get('/security/login-attempts', { params })
+    return request.get('/api/v1/admin/security/login-attempts', { params })
   },
 
   getLoginAttempt: (id: string) => {
-    return request.get<{ data: LoginAttempt }>(`/security/login-attempts/${id}`)
+    return request.get<{ data: LoginAttempt }>(`/api/v1/admin/security/login-attempts/${id}`)
   },
 
   // IP Whitelist
   addIPToWhitelist: (data: { ip_address: string; description?: string }) => {
-    return request.post<{ data: IPWhitelist }>('/security/ip-whitelist', data)
+    return request.post<{ data: IPWhitelist }>('/api/v1/admin/security/ip-whitelist', data)
   },
 
   listIPWhitelist: (adminId?: string) => {
-    return request.get<{ data: IPWhitelist[] }>('/security/ip-whitelist', {
+    return request.get<{ data: IPWhitelist[] }>('/api/v1/admin/security/ip-whitelist', {
       params: { admin_id: adminId }
     })
   },
 
   removeIPFromWhitelist: (id: string) => {
-    return request.delete(`/security/ip-whitelist/${id}`)
+    return request.delete(`/api/v1/admin/security/ip-whitelist/${id}`)
   },
 
   checkIPWhitelisted: (ipAddress: string) => {
-    return request.get<{ data: { is_whitelisted: boolean } }>('/security/ip-whitelist/check', {
+    return request.get<{ data: { is_whitelisted: boolean } }>('/api/v1/admin/security/ip-whitelist/check', {
       params: { ip_address: ipAddress }
     })
   },
 
   // Security Settings
   getSecuritySettings: () => {
-    return request.get<{ data: SecuritySettings }>('/security/settings')
+    return request.get<{ data: SecuritySettings }>('/api/v1/admin/security/settings')
   },
 
   updateSecuritySettings: (data: Partial<SecuritySettings>) => {
-    return request.put<{ data: SecuritySettings }>('/security/settings', data)
+    return request.put<{ data: SecuritySettings }>('/api/v1/admin/security/settings', data)
   },
 
   // Account Security
   unlockAccount: (adminId: string) => {
-    return request.post(`/security/unlock/${adminId}`)
+    return request.post(`/api/v1/admin/security/unlock/${adminId}`)
   },
 
   forcePasswordReset: (adminId: string) => {
-    return request.post(`/security/force-password-reset/${adminId}`)
+    return request.post(`/api/v1/admin/security/force-password-reset/${adminId}`)
   },
 
   // Session Management
   listActiveSessions: (adminId?: string) => {
-    return request.get('/security/sessions', {
+    return request.get('/api/v1/admin/security/sessions', {
       params: { admin_id: adminId }
     })
   },
 
   terminateSession: (sessionId: string) => {
-    return request.delete(`/security/sessions/${sessionId}`)
+    return request.delete(`/api/v1/admin/security/sessions/${sessionId}`)
   },
 
   terminateAllSessions: (adminId: string) => {
-    return request.delete(`/security/sessions/admin/${adminId}`)
+    return request.delete(`/api/v1/admin/security/sessions/admin/${adminId}`)
   },
 }
 

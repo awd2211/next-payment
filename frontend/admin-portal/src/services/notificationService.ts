@@ -66,43 +66,43 @@ export interface ListNotificationsParams {
 export const notificationService = {
   // Email Notifications
   sendEmail: (data: EmailNotification) => {
-    return request.post('/notifications/email', data)
+    return request.post('/api/v1/admin/notifications/email', data)
   },
 
   // SMS Notifications
   sendSMS: (data: SMSNotification) => {
-    return request.post('/notifications/sms', data)
+    return request.post('/api/v1/admin/notifications/sms', data)
   },
 
   // Webhook Notifications
   sendWebhook: (data: WebhookNotification) => {
-    return request.post('/notifications/webhook', data)
+    return request.post('/api/v1/admin/notifications/webhook', data)
   },
 
   // Email Template Management
   createTemplate: (data: Partial<EmailTemplate>) => {
-    return request.post('/email-templates', data)
+    return request.post('/api/v1/admin/email-templates', data)
   },
 
   getTemplate: (id: string) => {
-    return request.get<{ data: EmailTemplate }>(`/email-templates/${id}`)
+    return request.get<{ data: EmailTemplate }>(`/api/v1/admin/email-templates/${id}`)
   },
 
   listTemplates: (params: ListTemplatesParams) => {
-    return request.get('/email-templates', { params })
+    return request.get('/api/v1/admin/email-templates', { params })
   },
 
   updateTemplate: (id: string, data: Partial<EmailTemplate>) => {
-    return request.put(`/email-templates/${id}`, data)
+    return request.put(`/api/v1/admin/email-templates/${id}`, data)
   },
 
   deleteTemplate: (id: string) => {
-    return request.delete(`/email-templates/${id}`)
+    return request.delete(`/api/v1/admin/email-templates/${id}`)
   },
 
   // Notification History
   listNotifications: (params: ListNotificationsParams) => {
-    return request.get('/notifications/history', { params })
+    return request.get('/api/v1/admin/notifications/history', { params })
   },
 
   getNotification: (id: string) => {

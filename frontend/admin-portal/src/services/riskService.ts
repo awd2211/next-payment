@@ -96,17 +96,17 @@ export const riskService = {
   },
 
   updateRule: (id: string, data: Partial<RiskRule>) => {
-    return request.put<RiskRule>(`/api/v1/rules/${id}`, data)
+    return request.put<RiskRule>(`/api/v1/admin/rules/${id}`, data)
   },
 
   deleteRule: (id: string) => {
-    return request.delete(`/api/v1/rules/${id}`)
+    return request.delete(`/api/v1/admin/rules/${id}`)
   },
 
   // 切换规则状态 - 对应后端的enable/disable接口
   toggleRule: (id: string, enabled: boolean) => {
     const action = enabled ? 'enable' : 'disable'
-    return request.post(`/api/v1/rules/${id}/${action}`)
+    return request.post(`/api/v1/admin/rules/${id}/${action}`)
   },
 
   // 风险检查记录管理 (后端使用/checks而不是/alerts)
@@ -115,12 +115,12 @@ export const riskService = {
   },
 
   getAlert: (id: string) => {
-    return request.get<RiskAlert>(`/api/v1/checks/${id}`)
+    return request.get<RiskAlert>(`/api/v1/admin/checks/${id}`)
   },
 
   // 处理告警 - 注意: 后端需要实现此接口
   handleAlert: (id: string, action: string, remark: string) => {
-    return request.post(`/api/v1/checks/${id}/handle`, { action, remark })
+    return request.post(`/api/v1/admin/checks/${id}/handle`, { action, remark })
   },
 
   // 黑名单管理

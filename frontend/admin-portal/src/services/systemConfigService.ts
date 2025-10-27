@@ -59,7 +59,7 @@ export const systemConfigService = {
    * 获取单个配置
    */
   getById: (id: string) => {
-    return request.get<SystemConfig>(`/configs/${id}`)
+    return request.get<SystemConfig>(`/api/v1/admin/configs/${id}`)
   },
 
   /**
@@ -73,28 +73,28 @@ export const systemConfigService = {
    * 更新配置
    */
   update: (id: string, data: Partial<SystemConfig>) => {
-    return request.put<SystemConfig>(`/configs/${id}`, data)
+    return request.put<SystemConfig>(`/api/v1/admin/configs/${id}`, data)
   },
 
   /**
    * 删除配置
    */
   delete: (id: string) => {
-    return request.delete(`/configs/${id}`)
+    return request.delete(`/api/v1/admin/configs/${id}`)
   },
 
   /**
    * 获取配置历史记录
    */
   getHistory: (id: string) => {
-    return request.get<{ list: ConfigHistoryItem[] }>(`/configs/${id}/history`)
+    return request.get<{ list: ConfigHistoryItem[] }>(`/api/v1/admin/configs/${id}/history`)
   },
 
   /**
    * 回滚配置到指定版本
    */
   rollback: (id: string, historyId: string) => {
-    return request.post<SystemConfig>(`/configs/${id}/rollback`, { history_id: historyId })
+    return request.post<SystemConfig>(`/api/v1/admin/configs/${id}/rollback`, { history_id: historyId })
   },
 }
 

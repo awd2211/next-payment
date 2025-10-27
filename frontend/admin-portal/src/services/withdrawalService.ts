@@ -89,42 +89,42 @@ export const withdrawalService = {
    * 获取单个提现申请详情
    */
   getById: (id: string) => {
-    return request.get<{ data: Withdrawal }>(`/api/v1/withdrawals/${id}`)
+    return request.get<{ data: Withdrawal }>(`/api/v1/admin/withdrawals/${id}`)
   },
 
   /**
    * 批准提现申请
    */
   approve: (id: string, data: ApproveWithdrawalRequest) => {
-    return request.post(`/api/v1/withdrawals/${id}/approve`, data)
+    return request.post(`/api/v1/admin/withdrawals/${id}/approve`, data)
   },
 
   /**
    * 拒绝提现申请
    */
   reject: (id: string, data: RejectWithdrawalRequest) => {
-    return request.post(`/api/v1/withdrawals/${id}/reject`, data)
+    return request.post(`/api/v1/admin/withdrawals/${id}/reject`, data)
   },
 
   /**
    * 处理提现（标记为处理中）- 注意: 后端使用execute接口
    */
   process: (id: string, data: ProcessWithdrawalRequest) => {
-    return request.post(`/api/v1/withdrawals/${id}/execute`, data)
+    return request.post(`/api/v1/admin/withdrawals/${id}/execute`, data)
   },
 
   /**
    * 完成提现 - 对应后端的execute接口
    */
   complete: (id: string) => {
-    return request.post(`/api/v1/withdrawals/${id}/execute`)
+    return request.post(`/api/v1/admin/withdrawals/${id}/execute`)
   },
 
   /**
    * 标记提现失败 - 注意: 后端需要实现此接口
    */
   fail: (id: string, reason: string) => {
-    return request.post(`/api/v1/withdrawals/${id}/fail`, { reason })
+    return request.post(`/api/v1/admin/withdrawals/${id}/fail`, { reason })
   },
 
   /**

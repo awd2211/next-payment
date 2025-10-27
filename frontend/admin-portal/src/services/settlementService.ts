@@ -62,7 +62,7 @@ export const settlementService = {
 
   // 获取结算详情
   get: (id: string) => {
-    return request.get<Settlement>(`/api/v1/settlements/${id}`)
+    return request.get<Settlement>(`/api/v1/admin/settlements/${id}`)
   },
 
   // 获取结算统计 (注意: 后端需要实现此接口)
@@ -77,22 +77,22 @@ export const settlementService = {
 
   // 更新结算单 (注意: 后端不支持PUT更新，使用approve/reject/execute代替)
   update: (id: string, data: Partial<Settlement>) => {
-    return request.put<Settlement>(`/api/v1/settlements/${id}`, data)
+    return request.put<Settlement>(`/api/v1/admin/settlements/${id}`, data)
   },
 
   // 批准结算 (对应后端的approve接口)
   confirm: (id: string) => {
-    return request.post(`/api/v1/settlements/${id}/approve`)
+    return request.post(`/api/v1/admin/settlements/${id}/approve`)
   },
 
   // 执行结算 (对应后端的execute接口)
   complete: (id: string, remark: string) => {
-    return request.post(`/api/v1/settlements/${id}/execute`, { remark })
+    return request.post(`/api/v1/admin/settlements/${id}/execute`, { remark })
   },
 
   // 拒绝结算 (对应后端的reject接口)
   cancel: (id: string, reason: string) => {
-    return request.post(`/api/v1/settlements/${id}/reject`, { reason })
+    return request.post(`/api/v1/admin/settlements/${id}/reject`, { reason })
   },
 
   // 导出结算数据 (注意: 后端需要实现此接口)

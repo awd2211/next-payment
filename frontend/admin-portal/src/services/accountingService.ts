@@ -199,23 +199,23 @@ export interface CurrencyConversion {
 export const accountingService = {
   // Account Management
   createAccount: (data: Partial<Account>) => {
-    return request.post<{ data: Account }>('/accounts', data)
+    return request.post<{ data: Account }>('/api/v1/admin/accounts', data)
   },
 
   getAccount: (id: string) => {
-    return request.get<{ data: Account }>(`/accounts/${id}`)
+    return request.get<{ data: Account }>(`/api/v1/admin/accounts/${id}`)
   },
 
   listAccounts: (params?: { page?: number; page_size?: number; merchant_id?: string }) => {
-    return request.get('/accounts', { params })
+    return request.get('/api/v1/admin/accounts', { params })
   },
 
   freezeAccount: (id: string) => {
-    return request.post(`/accounts/${id}/freeze`)
+    return request.post(`/api/v1/admin/accounts/${id}/freeze`)
   },
 
   unfreezeAccount: (id: string) => {
-    return request.post(`/accounts/${id}/unfreeze`)
+    return request.post(`/api/v1/admin/accounts/${id}/unfreeze`)
   },
 
   // Transaction Management (Double-entry Accounting)
@@ -227,7 +227,7 @@ export const accountingService = {
     transaction_type: string
     description?: string
   }) => {
-    return request.post<{ data: Transaction }>('/transactions', data)
+    return request.post<{ data: Transaction }>('/api/v1/admin/transactions', data)
   },
 
   getTransaction: (transactionNo: string) => {
@@ -240,7 +240,7 @@ export const accountingService = {
     merchant_id?: string
     transaction_type?: string
   }) => {
-    return request.get('/transactions', { params })
+    return request.get('/api/v1/admin/transactions', { params })
   },
 
   reverseTransaction: (transactionNo: string, reason: string) => {
@@ -254,7 +254,7 @@ export const accountingService = {
     currency: string
     settlement_date?: string
   }) => {
-    return request.post<{ data: Settlement }>('/settlements', data)
+    return request.post<{ data: Settlement }>('/api/v1/admin/settlements', data)
   },
 
   getSettlement: (settlementNo: string) => {
@@ -267,7 +267,7 @@ export const accountingService = {
     merchant_id?: string
     status?: string
   }) => {
-    return request.get('/settlements', { params })
+    return request.get('/api/v1/admin/settlements', { params })
   },
 
   processSettlement: (settlementNo: string) => {

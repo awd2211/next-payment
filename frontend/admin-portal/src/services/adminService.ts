@@ -56,30 +56,30 @@ export interface UpdateAdminRequest {
 
 export const adminService = {
   list: (params: ListAdminsParams) => {
-    return request.get<ListAdminsResponse>('/admin', { params })
+    return request.get<ListAdminsResponse>('/api/v1/admin/admins', { params })
   },
 
   getById: (id: string) => {
-    return request.get(`/admin/${id}`)
+    return request.get(`/api/v1/admin/admins/${id}`)
   },
 
   create: (data: CreateAdminRequest) => {
-    return request.post('/admin', data)
+    return request.post('/api/v1/admin/admins', data)
   },
 
   update: (id: string, data: UpdateAdminRequest) => {
-    return request.put(`/admin/${id}`, data)
+    return request.put(`/api/v1/admin/admins/${id}`, data)
   },
 
   delete: (id: string) => {
-    return request.delete(`/admin/${id}`)
+    return request.delete(`/api/v1/admin/admins/${id}`)
   },
 
   changePassword: (data: { old_password: string; new_password: string }) => {
-    return request.post('/admin/change-password', data)
+    return request.post('/api/v1/admin/change-password', data)
   },
 
   resetPassword: (id: string, new_password: string) => {
-    return request.post(`/admin/${id}/reset-password`, { new_password })
+    return request.post(`/api/v1/admin/admins/${id}/reset-password`, { new_password })
   },
 }

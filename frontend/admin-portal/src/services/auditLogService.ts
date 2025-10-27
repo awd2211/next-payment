@@ -53,19 +53,19 @@ export interface AuditLogStats {
 
 export const auditLogService = {
   list: (params: ListAuditLogsParams) => {
-    return request.get<ListAuditLogsResponse>('/audit-logs', { params })
+    return request.get<ListAuditLogsResponse>('/api/v1/admin/audit-logs', { params })
   },
 
   getById: (id: string) => {
-    return request.get(`/audit-logs/${id}`)
+    return request.get(`/api/v1/admin/audit-logs/${id}`)
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return request.get<AuditLogStats>('/audit-logs/stats', { params })
+    return request.get<AuditLogStats>('/api/v1/admin/audit-logs/stats', { params })
   },
 
   export: (params: ListAuditLogsParams) => {
-    return request.get('/audit-logs/export', {
+    return request.get('/api/v1/admin/audit-logs/export', {
       params,
       responseType: 'blob',
     })

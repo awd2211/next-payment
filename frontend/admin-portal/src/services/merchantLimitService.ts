@@ -81,35 +81,35 @@ export const merchantLimitService = {
    * 创建限额层级
    */
   createTier: (data: Partial<LimitTier>) => {
-    return request.post<LimitTier>('/api/v1/tiers', data)
+    return request.post<LimitTier>('/api/v1/admin/tiers', data)
   },
 
   /**
    * 获取层级列表
    */
   listTiers: (params: ListTiersParams) => {
-    return request.get<ListTiersResponse>('/api/v1/tiers', { params })
+    return request.get<ListTiersResponse>('/api/v1/admin/tiers', { params })
   },
 
   /**
    * 获取单个层级详情
    */
   getTier: (tierId: string) => {
-    return request.get<{ data: LimitTier }>(`/api/v1/tiers/${tierId}`)
+    return request.get<{ data: LimitTier }>(`/api/v1/admin/tiers/${tierId}`)
   },
 
   /**
    * 更新层级
    */
   updateTier: (tierId: string, data: Partial<LimitTier>) => {
-    return request.put<LimitTier>(`/api/v1/tiers/${tierId}`, data)
+    return request.put<LimitTier>(`/api/v1/admin/tiers/${tierId}`, data)
   },
 
   /**
    * 删除层级
    */
   deleteTier: (tierId: string) => {
-    return request.delete(`/api/v1/tiers/${tierId}`)
+    return request.delete(`/api/v1/admin/tiers/${tierId}`)
   },
 
   // ===== 商户限额管理 API =====
@@ -118,7 +118,7 @@ export const merchantLimitService = {
    * 初始化商户限额
    */
   initializeLimit: (merchantId: string, tierId: string) => {
-    return request.post('/api/v1/limits/initialize', {
+    return request.post('/api/v1/admin/limits/initialize', {
       merchant_id: merchantId,
       tier_id: tierId,
     })
@@ -128,21 +128,21 @@ export const merchantLimitService = {
    * 获取商户限额
    */
   getMerchantLimit: (merchantId: string) => {
-    return request.get<{ data: MerchantLimit }>(`/api/v1/limits/${merchantId}`)
+    return request.get<{ data: MerchantLimit }>(`/api/v1/admin/limits/${merchantId}`)
   },
 
   /**
    * 更新商户限额
    */
   updateMerchantLimit: (merchantId: string, data: Partial<MerchantLimit>) => {
-    return request.put(`/api/v1/limits/${merchantId}`, data)
+    return request.put(`/api/v1/admin/limits/${merchantId}`, data)
   },
 
   /**
    * 变更商户层级
    */
   changeTier: (merchantId: string, newTierId: string, reason?: string) => {
-    return request.post(`/api/v1/limits/${merchantId}/change-tier`, {
+    return request.post(`/api/v1/admin/limits/${merchantId}/change-tier`, {
       new_tier_id: newTierId,
       reason,
     })
@@ -152,14 +152,14 @@ export const merchantLimitService = {
    * 暂停商户交易
    */
   suspendMerchant: (merchantId: string, reason: string) => {
-    return request.post(`/api/v1/limits/${merchantId}/suspend`, { reason })
+    return request.post(`/api/v1/admin/limits/${merchantId}/suspend`, { reason })
   },
 
   /**
    * 恢复商户交易
    */
   unsuspendMerchant: (merchantId: string) => {
-    return request.post(`/api/v1/limits/${merchantId}/unsuspend`)
+    return request.post(`/api/v1/admin/limits/${merchantId}/unsuspend`)
   },
 
   /**
@@ -169,7 +169,7 @@ export const merchantLimitService = {
     merchantId: string,
     params?: { page?: number; page_size?: number; start_date?: string; end_date?: string },
   ) => {
-    return request.get<{ data: UsageHistory[]; pagination: any }>(`/api/v1/limits/${merchantId}/usage-history`, {
+    return request.get<{ data: UsageHistory[]; pagination: any }>(`/api/v1/admin/limits/${merchantId}/usage-history`, {
       params,
     })
   },
@@ -178,7 +178,7 @@ export const merchantLimitService = {
    * 获取商户使用统计
    */
   getStatistics: (merchantId: string) => {
-    return request.get<{ data: UsageStatistics }>(`/api/v1/limits/${merchantId}/statistics`)
+    return request.get<{ data: UsageStatistics }>(`/api/v1/admin/limits/${merchantId}/statistics`)
   },
 }
 

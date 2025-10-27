@@ -58,7 +58,7 @@ export const merchantService = {
   },
 
   getById: (id: string) => {
-    return request.get(`/merchant/${id}`)
+    return request.get(`/api/v1/admin/merchants/${id}`)
   },
 
   create: (data: CreateMerchantRequest) => {
@@ -66,18 +66,18 @@ export const merchantService = {
   },
 
   update: (id: string, data: UpdateMerchantRequest) => {
-    return request.put(`/merchant/${id}`, data)
+    return request.put(`/api/v1/admin/merchants/${id}`, data)
   },
 
   delete: (id: string) => {
-    return request.delete(`/merchant/${id}`)
+    return request.delete(`/api/v1/admin/merchants/${id}`)
   },
 
   updateStatus: (id: string, status: string) => {
-    return request.put(`/merchant/${id}/status`, { status })
+    return request.put(`/api/v1/admin/merchants/${id}/status`, { status })
   },
 
   updateKYCStatus: (id: string, kyc_status: string) => {
-    return request.put(`/merchant/${id}/kyc-status`, { kyc_status })
+    return request.put(`/api/v1/admin/merchants/${id}/kyc-status`, { kyc_status })
   },
 }
