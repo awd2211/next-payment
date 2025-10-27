@@ -114,6 +114,16 @@ func (h *ConfigHandler) ListConfigs(c *gin.Context) {
 	}
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	configs, total, err := h.configService.ListConfigs(c.Request.Context(), query)
 	if err != nil {
@@ -283,6 +293,16 @@ func (h *ConfigHandler) ListFeatureFlags(c *gin.Context) {
 	query := &repository.FeatureFlagQuery{Environment: c.Query("environment")}
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 	flags, total, err := h.configService.ListFeatureFlags(c.Request.Context(), query)
 	if err != nil {
 		traceID := middleware.GetRequestID(c)

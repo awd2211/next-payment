@@ -294,15 +294,17 @@ func (s *NotificationServer) RetryWebhook(ctx context.Context, req *pb.RetryWebh
 		return nil, status.Errorf(codes.InvalidArgument, "Webhook日志ID不能为空")
 	}
 
-	// 解析delivery ID
-	deliveryID, err := uuid.Parse(req.WebhookLogId)
+	// 解析notification ID
+	notificationID, err := uuid.Parse(req.WebhookLogId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "无效的Webhook日志ID")
 	}
 
-	// 这里需要实现重试逻辑，暂时返回成功
-	// 实际应该调用类似 s.notificationService.RetryWebhookDelivery(ctx, deliveryID)
-	_ = deliveryID
+	// 调用服务层重试方法
+	err = s.notificationService.RetryWebhookDelivery(ctx, notificationID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "重试失败: %v", err)
+	}
 
 	return &pb.RetryWebhookResponse{
 		Success: true,

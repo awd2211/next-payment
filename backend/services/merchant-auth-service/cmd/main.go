@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"go.uber.org/zap"
 	"github.com/payment-platform/pkg/app"
 	"github.com/payment-platform/pkg/auth"
 	"github.com/payment-platform/pkg/config"
@@ -80,7 +81,7 @@ func main() {
 	logger.Info("正在启动 Merchant Auth Service...")
 
 	// 2. 初始化 Merchant Service 客户端
-	merchantServiceURL := config.GetEnv("MERCHANT_SERVICE_URL", "http://localhost:8002")
+	merchantServiceURL := config.GetEnv("MERCHANT_SERVICE_URL", "http://localhost:40002")
 	merchantClient := client.NewMerchantClient(merchantServiceURL)
 	logger.Info(fmt.Sprintf("Merchant Service 客户端初始化成功: %s", merchantServiceURL))
 
@@ -97,7 +98,17 @@ func main() {
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 
 	// 6. 初始化JWT Manager
-	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
+	// ⚠️ 安全要求: JWT_SECRET必须在生产环境中设置，不能使用默认值
+	jwtSecret := getConfig("JWT_SECRET", "")
+	if jwtSecret == "" {
+		logger.Fatal("JWT_SECRET environment variable is required and cannot be empty")
+	}
+	if len(jwtSecret) < 32 {
+		logger.Fatal("JWT_SECRET must be at least 32 characters for security",
+			zap.Int("current_length", len(jwtSecret)),
+			zap.Int("minimum_length", 32))
+	}
+	logger.Info("JWT_SECRET validation passed", zap.Int("length", len(jwtSecret)))
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

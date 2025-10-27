@@ -30,12 +30,13 @@ var DefaultAutoSettlementConfig = AutoSettlementConfig{
 
 // AutoSettlementTask 自动结算任务
 type AutoSettlementTask struct {
-	db                 *gorm.DB
-	settlementRepo     repository.SettlementRepository
-	accountingClient   *client.AccountingClient
-	merchantClient     *client.MerchantClient
-	notificationClient *client.NotificationClient
-	config             AutoSettlementConfig
+	db                   *gorm.DB
+	settlementRepo       repository.SettlementRepository
+	accountingClient     *client.AccountingClient
+	merchantClient       *client.MerchantClient
+	merchantConfigClient *client.MerchantConfigClient
+	notificationClient   *client.NotificationClient
+	config               AutoSettlementConfig
 }
 
 // NewAutoSettlementTask 创建自动结算任务
@@ -44,15 +45,17 @@ func NewAutoSettlementTask(
 	settlementRepo repository.SettlementRepository,
 	accountingClient *client.AccountingClient,
 	merchantClient *client.MerchantClient,
+	merchantConfigClient *client.MerchantConfigClient,
 	notificationClient *client.NotificationClient,
 ) *AutoSettlementTask {
 	return &AutoSettlementTask{
-		db:                 db,
-		settlementRepo:     settlementRepo,
-		accountingClient:   accountingClient,
-		merchantClient:     merchantClient,
-		notificationClient: notificationClient,
-		config:             DefaultAutoSettlementConfig,
+		db:                   db,
+		settlementRepo:       settlementRepo,
+		accountingClient:     accountingClient,
+		merchantClient:       merchantClient,
+		merchantConfigClient: merchantConfigClient,
+		notificationClient:   notificationClient,
+		config:               DefaultAutoSettlementConfig,
 	}
 }
 
@@ -98,18 +101,23 @@ func (t *AutoSettlementTask) Run(ctx context.Context) error {
 
 // getAutoSettlementMerchants 获取启用自动结算的商户列表
 func (t *AutoSettlementTask) getAutoSettlementMerchants(ctx context.Context) ([]uuid.UUID, error) {
-	// 查询昨天有交易但今天还没生成结算单的商户
 	var merchantIDs []uuid.UUID
 
+	// FIXED TODO #1: 从merchant-config-service查询启用自动结算的商户列表
+	if t.merchantConfigClient != nil {
+		merchants, err := t.merchantConfigClient.ListAutoSettlementMerchants(ctx)
+		if err != nil {
+			logger.Warn("从配置服务获取自动结算商户列表失败（已降级）", zap.Error(err))
+			// 降级到方法2：从本地数据库查询
+		} else if len(merchants) > 0 {
+			logger.Info(fmt.Sprintf("从配置服务获取到 %d 个启用自动结算的商户", len(merchants)))
+			return merchants, nil
+		}
+	}
+
+	// 降级方案：查询过去7天有过结算的商户
 	yesterday := time.Now().AddDate(0, 0, -1).Truncate(24 * time.Hour)
 
-	// 方法1: 从本地数据库查询昨天未结算的商户（如果settlement_items表有merchant_id）
-	// 由于settlement_items没有merchant_id，我们需要通过accounting service获取
-
-	// 方法2: 硬编码测试商户（生产环境应该从merchant_config表查询启用自动结算的商户）
-	// TODO: 实现merchant_config_service后从配置表查询启用自动结算的商户列表
-
-	// 临时方案：查询昨天有交易的所有商户
 	query := `
 		SELECT DISTINCT merchant_id
 		FROM settlements
@@ -126,13 +134,13 @@ func (t *AutoSettlementTask) getAutoSettlementMerchants(ctx context.Context) ([]
 		return nil, fmt.Errorf("查询商户失败: %w", err)
 	}
 
-	// 如果没有历史记录，返回空列表（生产环境应该从merchant service获取）
+	// 如果没有历史记录，返回空列表
 	if len(merchantIDs) == 0 {
 		logger.Info("没有找到历史结算商户，自动结算任务跳过")
 		return []uuid.UUID{}, nil
 	}
 
-	logger.Info(fmt.Sprintf("找到 %d 个候选商户进行自动结算检查", len(merchantIDs)))
+	logger.Info(fmt.Sprintf("找到 %d 个候选商户进行自动结算检查（降级方案）", len(merchantIDs)))
 	return merchantIDs, nil
 }
 
@@ -180,7 +188,20 @@ func (t *AutoSettlementTask) settleMerchant(ctx context.Context, merchantID uuid
 
 	settlementAmount := totalAmount - totalFee
 
-	// 4. 检查最小结算金额
+	// 4. FIXED TODO #2: 从accounting service获取退款数据
+	refundSummary, err := t.accountingClient.GetRefundSummary(ctx, merchantID, yesterday, today)
+	if err != nil {
+		logger.Warn("获取退款汇总失败（已降级）",
+			zap.String("merchant_id", merchantID.String()),
+			zap.Error(err))
+		// 降级：使用空退款数据，不阻塞结算流程
+		refundSummary = &client.RefundSummary{
+			TotalCount:  0,
+			TotalAmount: 0,
+		}
+	}
+
+	// 5. 检查最小结算金额
 	if settlementAmount < t.config.MinSettlementAmount {
 		logger.Info("结算金额低于最小值，跳过",
 			zap.String("merchant_id", merchantID.String()),
@@ -189,7 +210,7 @@ func (t *AutoSettlementTask) settleMerchant(ctx context.Context, merchantID uuid
 		return nil
 	}
 
-	// 5. 创建结算单
+	// 6. 创建结算单
 	settlement := &model.Settlement{
 		MerchantID:       merchantID,
 		SettlementNo:     generateSettlementNo(),
@@ -201,8 +222,8 @@ func (t *AutoSettlementTask) settleMerchant(ctx context.Context, merchantID uuid
 		Cycle:            model.SettlementCycleDaily,
 		StartDate:        yesterday,
 		EndDate:          today,
-		RefundAmount:     0, // TODO: 从accounting获取退款数据
-		RefundCount:      0,
+		RefundAmount:     refundSummary.TotalAmount, // FIXED: 实际退款金额
+		RefundCount:      refundSummary.TotalCount,  // FIXED: 实际退款笔数
 	}
 
 	// 开始数据库事务
@@ -370,18 +391,43 @@ func (t *AutoSettlementTask) sendSettlementNotification(ctx context.Context, mer
 		accountInfo,
 	)
 
-	// 发送通知（简化版本，实际应该调用notification service）
-	logger.Info("发送结算通知",
+	// FIXED TODO #3: 实际调用notification client发送通知
+	logger.Info("准备发送结算通知",
 		zap.String("merchant_id", merchantID.String()),
-		zap.String("settlement_no", settlement.SettlementNo),
-		zap.String("message", message))
+		zap.String("settlement_no", settlement.SettlementNo))
 
-	// TODO: 实际调用notification client发送邮件/短信
-	// err = t.notificationClient.SendEmail(ctx, &client.SendEmailRequest{
-	// 	To:      merchantEmail,
-	// 	Subject: "结算单生成通知",
-	// 	Body:    message,
-	// })
+	// 调用notification service发送通知
+	err = t.notificationClient.SendSettlementNotification(ctx, &client.SendNotificationRequest{
+		MerchantID: merchantID,
+		Type:       "settlement_complete",
+		Title:      "结算单生成通知",
+		Content:    message,
+		Priority:   "high",
+		Data: map[string]interface{}{
+			"settlement_no":     settlement.SettlementNo,
+			"settlement_amount": settlement.SettlementAmount,
+			"total_amount":      settlement.TotalAmount,
+			"fee_amount":        settlement.FeeAmount,
+			"total_count":       settlement.TotalCount,
+			"status":            settlement.Status,
+			"cycle":             settlement.Cycle,
+			"start_date":        settlement.StartDate.Format("2006-01-02"),
+			"end_date":          settlement.EndDate.Format("2006-01-02"),
+		},
+	})
+
+	if err != nil {
+		logger.Warn("发送结算通知失败（非致命）",
+			zap.String("merchant_id", merchantID.String()),
+			zap.String("settlement_no", settlement.SettlementNo),
+			zap.Error(err))
+		// 通知失败不影响结算流程，只记录警告日志
+		return nil
+	}
+
+	logger.Info("结算通知发送成功",
+		zap.String("merchant_id", merchantID.String()),
+		zap.String("settlement_no", settlement.SettlementNo))
 
 	return nil
 }
@@ -413,8 +459,9 @@ func RunDailySettlement(
 	settlementRepo repository.SettlementRepository,
 	accountingClient *client.AccountingClient,
 	merchantClient *client.MerchantClient,
+	merchantConfigClient *client.MerchantConfigClient,
 	notificationClient *client.NotificationClient,
 ) func(context.Context) error {
-	task := NewAutoSettlementTask(db, settlementRepo, accountingClient, merchantClient, notificationClient)
+	task := NewAutoSettlementTask(db, settlementRepo, accountingClient, merchantClient, merchantConfigClient, notificationClient)
 	return task.Run
 }

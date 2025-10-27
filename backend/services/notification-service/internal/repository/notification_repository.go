@@ -43,6 +43,8 @@ type NotificationRepository interface {
 	ListPendingNotifications(ctx context.Context, limit int) ([]*model.Notification, error)
 	// 查询待重试的投递
 	ListPendingDeliveries(ctx context.Context, limit int) ([]*model.WebhookDelivery, error)
+	// 查询失败的通知（用于重试）
+	GetFailedNotifications(ctx context.Context, channel string, maxRetries int) ([]*model.Notification, error)
 
 	// 通知偏好管理
 	CreatePreference(ctx context.Context, preference *model.NotificationPreference) error
@@ -434,4 +436,27 @@ func (r *notificationRepository) CheckPreference(ctx context.Context, merchantID
 
 	// 返回偏好设置的 is_enabled 状态
 	return preference.IsEnabled, nil
+}
+
+// GetFailedNotifications 查询失败的通知（用于重试）
+func (r *notificationRepository) GetFailedNotifications(ctx context.Context, channel string, maxRetries int) ([]*model.Notification, error) {
+	var notifications []*model.Notification
+
+	// 查询条件：
+	// 1. Status = "failed"
+	// 2. Channel = 指定渠道
+	// 3. RetryCount < maxRetries
+	// 4. UpdatedAt > 现在 - 24小时（避免重试过期的通知）
+	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
+
+	err := r.db.WithContext(ctx).
+		Where("status = ?", model.StatusFailed).
+		Where("channel = ?", channel).
+		Where("retry_count < ?", maxRetries).
+		Where("updated_at > ?", twentyFourHoursAgo).
+		Order("created_at ASC").
+		Limit(100). // 一次最多处理100条
+		Find(&notifications).Error
+
+	return notifications, err
 }

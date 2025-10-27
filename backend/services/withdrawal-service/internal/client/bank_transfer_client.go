@@ -330,37 +330,367 @@ func (c *BankTransferClient) queryICBC(ctx context.Context, channelTradeNo strin
 // 实现方式类似，这里提供框架
 // ============================================================
 
+// transferABC 农业银行转账实现
 func (c *BankTransferClient) transferABC(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
-	// TODO: 实现农业银行API调用
-	logger.Warn("农业银行API暂未实现，使用Mock模式", zap.String("order_no", req.OrderNo))
-	return c.mockTransfer(ctx, req)
+	logger.Info("调用农业银行API执行转账", zap.String("order_no", req.OrderNo))
+
+	// 农业银行API参数格式（与工商银行类似，但字段名可能不同）
+	params := map[string]interface{}{
+		"merchantNo":   c.config.MerchantID,
+		"orderNo":      req.OrderNo,
+		"payeeName":    req.BankAccountName,
+		"payeeAccount": req.BankAccountNo,
+		"amount":       fmt.Sprintf("%.2f", float64(req.Amount)/100),
+		"currency":     req.Currency,
+		"memo":         req.Remarks,
+		"requestTime":  time.Now().Format("20060102150405"), // ABC使用格式化时间
+	}
+
+	// 生成签名
+	sign := c.generateSignature(params, c.config.APISecret)
+	params["signature"] = sign
+
+	// 发送HTTP请求
+	httpReq := &httpclient.Request{
+		Method: "POST",
+		URL:    c.config.APIEndpoint + "/transfer/singlePay",
+		Body:   params,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+			"AppId":        c.config.APIKey, // ABC使用AppId而非X-Api-Key
+		},
+	}
+
+	resp, err := c.breaker.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("农业银行API调用失败: %w", err)
+	}
+
+	// 解析响应（ABC响应格式）
+	var apiResp struct {
+		ReturnCode string `json:"returnCode"`
+		ReturnMsg  string `json:"returnMsg"`
+		TradeNo    string `json:"tradeNo"`
+		Status     string `json:"status"`
+	}
+
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if apiResp.ReturnCode != "0000" { // ABC使用0000表示成功
+		return nil, fmt.Errorf("转账失败: %s", apiResp.ReturnMsg)
+	}
+
+	return &TransferResponse{
+		ChannelTradeNo: apiResp.TradeNo,
+		Status:         apiResp.Status,
+		Message:        apiResp.ReturnMsg,
+	}, nil
 }
 
+// queryABC 农业银行查询实现
 func (c *BankTransferClient) queryABC(ctx context.Context, channelTradeNo string) (*TransferResponse, error) {
-	// TODO: 实现农业银行查询API
-	return c.mockQueryStatus(ctx, channelTradeNo)
+	logger.Info("调用农业银行API查询转账状态", zap.String("trade_no", channelTradeNo))
+
+	// 构建查询请求
+	params := map[string]interface{}{
+		"merchantNo":  c.config.MerchantID,
+		"tradeNo":     channelTradeNo,
+		"requestTime": time.Now().Format("20060102150405"),
+	}
+
+	sign := c.generateSignature(params, c.config.APISecret)
+	params["signature"] = sign
+
+	url := fmt.Sprintf("%s/transfer/query?%s", c.config.APIEndpoint, c.buildQueryString(params))
+
+	httpReq := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"AppId": c.config.APIKey,
+		},
+	}
+
+	resp, err := c.breaker.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("农业银行查询API调用失败: %w", err)
+	}
+
+	var apiResp struct {
+		ReturnCode string `json:"returnCode"`
+		ReturnMsg  string `json:"returnMsg"`
+		TradeNo    string `json:"tradeNo"`
+		Status     string `json:"status"`
+	}
+
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if apiResp.ReturnCode != "0000" {
+		return nil, fmt.Errorf("查询失败: %s", apiResp.ReturnMsg)
+	}
+
+	return &TransferResponse{
+		ChannelTradeNo: apiResp.TradeNo,
+		Status:         apiResp.Status,
+		Message:        apiResp.ReturnMsg,
+	}, nil
 }
 
+// transferBOC 中国银行转账实现
 func (c *BankTransferClient) transferBOC(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
-	// TODO: 实现中国银行API调用
-	logger.Warn("中国银行API暂未实现，使用Mock模式", zap.String("order_no", req.OrderNo))
-	return c.mockTransfer(ctx, req)
+	logger.Info("调用中国银行API执行转账", zap.String("order_no", req.OrderNo))
+
+	// 中国银行API参数格式
+	params := map[string]interface{}{
+		"mchId":       c.config.MerchantID,
+		"mchOrderNo":  req.OrderNo,
+		"accountName": req.BankAccountName,
+		"accountNo":   req.BankAccountNo,
+		"tranAmt":     fmt.Sprintf("%.2f", float64(req.Amount)/100),
+		"currency":    req.Currency,
+		"remark":      req.Remarks,
+		"reqTime":     time.Now().Format("2006-01-02 15:04:05"), // BOC使用标准时间格式
+	}
+
+	// 生成签名
+	sign := c.generateSignature(params, c.config.APISecret)
+	params["sign"] = sign
+
+	// 发送HTTP请求
+	httpReq := &httpclient.Request{
+		Method: "POST",
+		URL:    c.config.APIEndpoint + "/api/payment/transfer",
+		Body:   params,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type":  "application/json",
+			"Authorization": "Bearer " + c.config.APIKey, // BOC使用Bearer token
+		},
+	}
+
+	resp, err := c.breaker.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("中国银行API调用失败: %w", err)
+	}
+
+	// 解析响应（BOC响应格式）
+	var apiResp struct {
+		RespCode string `json:"respCode"`
+		RespMsg  string `json:"respMsg"`
+		OrderNo  string `json:"orderNo"`
+		Status   string `json:"status"`
+	}
+
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if apiResp.RespCode != "SUCCESS" { // BOC使用SUCCESS表示成功
+		return nil, fmt.Errorf("转账失败: %s", apiResp.RespMsg)
+	}
+
+	return &TransferResponse{
+		ChannelTradeNo: apiResp.OrderNo,
+		Status:         apiResp.Status,
+		Message:        apiResp.RespMsg,
+	}, nil
 }
 
+// queryBOC 中国银行查询实现
 func (c *BankTransferClient) queryBOC(ctx context.Context, channelTradeNo string) (*TransferResponse, error) {
-	// TODO: 实现中国银行查询API
-	return c.mockQueryStatus(ctx, channelTradeNo)
+	logger.Info("调用中国银行API查询转账状态", zap.String("trade_no", channelTradeNo))
+
+	// 构建查询请求
+	params := map[string]interface{}{
+		"mchId":   c.config.MerchantID,
+		"orderNo": channelTradeNo,
+		"reqTime": time.Now().Format("2006-01-02 15:04:05"),
+	}
+
+	sign := c.generateSignature(params, c.config.APISecret)
+	params["sign"] = sign
+
+	url := fmt.Sprintf("%s/api/payment/query?%s", c.config.APIEndpoint, c.buildQueryString(params))
+
+	httpReq := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Authorization": "Bearer " + c.config.APIKey,
+		},
+	}
+
+	resp, err := c.breaker.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("中国银行查询API调用失败: %w", err)
+	}
+
+	var apiResp struct {
+		RespCode string `json:"respCode"`
+		RespMsg  string `json:"respMsg"`
+		OrderNo  string `json:"orderNo"`
+		Status   string `json:"status"`
+	}
+
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if apiResp.RespCode != "SUCCESS" {
+		return nil, fmt.Errorf("查询失败: %s", apiResp.RespMsg)
+	}
+
+	return &TransferResponse{
+		ChannelTradeNo: apiResp.OrderNo,
+		Status:         apiResp.Status,
+		Message:        apiResp.RespMsg,
+	}, nil
 }
 
+// transferCCB 建设银行转账实现
 func (c *BankTransferClient) transferCCB(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
-	// TODO: 实现建设银行API调用
-	logger.Warn("建设银行API暂未实现，使用Mock模式", zap.String("order_no", req.OrderNo))
-	return c.mockTransfer(ctx, req)
+	logger.Info("调用建设银行API执行转账", zap.String("order_no", req.OrderNo))
+
+	// 建设银行API参数格式
+	params := map[string]interface{}{
+		"partnerid":       c.config.MerchantID,
+		"out_trade_no":    req.OrderNo,
+		"payee_real_name": req.BankAccountName,
+		"payee_account":   req.BankAccountNo,
+		"trans_amount":    fmt.Sprintf("%.2f", float64(req.Amount)/100),
+		"fee_type":        req.Currency,
+		"desc":            req.Remarks,
+		"timestamp":       fmt.Sprintf("%d", time.Now().Unix()), // CCB使用Unix时间戳
+	}
+
+	// 生成签名
+	sign := c.generateSignature(params, c.config.APISecret)
+	params["sign"] = sign
+
+	// 发送HTTP请求
+	httpReq := &httpclient.Request{
+		Method: "POST",
+		URL:    c.config.APIEndpoint + "/mmpaymkttransfers/promotion/transfers",
+		Body:   params,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+			"Mchid":        c.config.MerchantID, // CCB使用Mchid header
+			"ApiKey":       c.config.APIKey,
+		},
+	}
+
+	resp, err := c.breaker.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("建设银行API调用失败: %w", err)
+	}
+
+	// 解析响应（CCB响应格式）
+	var apiResp struct {
+		ResultCode   string `json:"result_code"`
+		ErrCodeDes   string `json:"err_code_des"`
+		PaymentNo    string `json:"payment_no"`
+		PaymentTime  string `json:"payment_time"`
+		TransferStatus string `json:"transfer_status"`
+	}
+
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if apiResp.ResultCode != "SUCCESS" { // CCB使用SUCCESS表示成功
+		return nil, fmt.Errorf("转账失败: %s", apiResp.ErrCodeDes)
+	}
+
+	// 映射CCB状态到标准状态
+	status := "processing"
+	if apiResp.TransferStatus == "SUCCESS" {
+		status = "success"
+	} else if apiResp.TransferStatus == "FAILED" {
+		status = "failed"
+	}
+
+	return &TransferResponse{
+		ChannelTradeNo: apiResp.PaymentNo,
+		Status:         status,
+		Message:        "转账提交成功",
+	}, nil
 }
 
+// queryCCB 建设银行查询实现
 func (c *BankTransferClient) queryCCB(ctx context.Context, channelTradeNo string) (*TransferResponse, error) {
-	// TODO: 实现建设银行查询API
-	return c.mockQueryStatus(ctx, channelTradeNo)
+	logger.Info("调用建设银行API查询转账状态", zap.String("trade_no", channelTradeNo))
+
+	// 构建查询请求
+	params := map[string]interface{}{
+		"partnerid":    c.config.MerchantID,
+		"payment_no":   channelTradeNo,
+		"timestamp":    fmt.Sprintf("%d", time.Now().Unix()),
+	}
+
+	sign := c.generateSignature(params, c.config.APISecret)
+	params["sign"] = sign
+
+	url := fmt.Sprintf("%s/mmpaymkttransfers/gettransferinfo?%s", c.config.APIEndpoint, c.buildQueryString(params))
+
+	httpReq := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
+		Headers: map[string]string{
+			"Mchid":  c.config.MerchantID,
+			"ApiKey": c.config.APIKey,
+		},
+	}
+
+	resp, err := c.breaker.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("建设银行查询API调用失败: %w", err)
+	}
+
+	var apiResp struct {
+		ResultCode     string `json:"result_code"`
+		ErrCodeDes     string `json:"err_code_des"`
+		PaymentNo      string `json:"payment_no"`
+		TransferStatus string `json:"transfer_status"`
+		Reason         string `json:"reason"`
+	}
+
+	if err := json.Unmarshal(resp.Body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if apiResp.ResultCode != "SUCCESS" {
+		return nil, fmt.Errorf("查询失败: %s", apiResp.ErrCodeDes)
+	}
+
+	// 映射CCB状态到标准状态
+	status := "processing"
+	if apiResp.TransferStatus == "SUCCESS" {
+		status = "success"
+	} else if apiResp.TransferStatus == "FAILED" {
+		status = "failed"
+	}
+
+	message := "转账处理中"
+	if status == "success" {
+		message = "转账成功"
+	} else if status == "failed" {
+		message = apiResp.Reason
+	}
+
+	return &TransferResponse{
+		ChannelTradeNo: apiResp.PaymentNo,
+		Status:         status,
+		Message:        message,
+	}, nil
 }
 
 // ============================================================

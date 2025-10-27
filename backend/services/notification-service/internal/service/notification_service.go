@@ -60,6 +60,9 @@ type NotificationService interface {
 	// 后台处理
 	ProcessPendingNotifications(ctx context.Context) error
 	ProcessPendingWebhookDeliveries(ctx context.Context) error
+
+	// Webhook重试
+	RetryWebhookDelivery(ctx context.Context, notificationID uuid.UUID) error
 }
 
 type notificationService struct {
@@ -725,6 +728,71 @@ func (s *notificationService) ProcessPendingWebhookDeliveries(ctx context.Contex
 
 		// 投递 Webhook
 		go s.deliverWebhook(ctx, delivery, endpoint)
+	}
+
+	return nil
+}
+
+// RetryWebhookDelivery 重试Webhook投递
+func (s *notificationService) RetryWebhookDelivery(ctx context.Context, notificationID uuid.UUID) error {
+	// 查询通知
+	notification, err := s.repo.GetByID(ctx, notificationID)
+	if err != nil {
+		return fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// 检查是否为Webhook通知
+	if notification.Channel != "webhook" {
+		return fmt.Errorf("notification is not webhook type: %s", notification.Channel)
+	}
+
+	// 检查是否超过最大重试次数
+	if notification.RetryCount >= 3 {
+		return fmt.Errorf("notification exceeded max retries: %d", notification.RetryCount)
+	}
+
+	// 解析Webhook配置
+	var webhookConfig struct {
+		URL    string                 `json:"url"`
+		Secret string                 `json:"secret"`
+		Data   map[string]interface{} `json:"data"`
+	}
+
+	if err := json.Unmarshal([]byte(notification.Content), &webhookConfig); err != nil {
+		return fmt.Errorf("failed to parse webhook config: %w", err)
+	}
+
+	// 发送Webhook
+	req := &provider.WebhookRequest{
+		URL:       webhookConfig.URL,
+		Secret:    webhookConfig.Secret,
+		EventType: "webhook_retry",
+		EventID:   notification.ID.String(),
+		Data:      webhookConfig.Data,
+		Timestamp: time.Now().Unix(),
+	}
+
+	response, err := s.webhookProvider.Send(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to send webhook: %w", err)
+	}
+
+	// 更新通知状态
+	notification.RetryCount++
+
+	if response.Status == "delivered" {
+		notification.Status = model.StatusSent
+		now := time.Now()
+		notification.SentAt = &now
+		notification.ErrorMessage = ""
+	} else {
+		notification.Status = model.StatusFailed
+		notification.ErrorMessage = response.ErrorMessage
+	}
+
+	// 保存更新
+	if err := s.repo.Update(ctx, notification); err != nil {
+		return fmt.Errorf("failed to update notification: %w", err)
 	}
 
 	return nil

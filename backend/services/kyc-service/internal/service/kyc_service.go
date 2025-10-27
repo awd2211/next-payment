@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -48,14 +49,16 @@ type kycService struct {
 	db                 *gorm.DB
 	kycRepo            repository.KYCRepository
 	notificationClient *client.NotificationClient
+	ocrClient          *client.OCRClient
 }
 
 // NewKYCService 创建KYC服务
-func NewKYCService(db *gorm.DB, kycRepo repository.KYCRepository, notificationClient *client.NotificationClient) KYCService {
+func NewKYCService(db *gorm.DB, kycRepo repository.KYCRepository, notificationClient *client.NotificationClient, ocrClient *client.OCRClient) KYCService {
 	return &kycService{
 		db:                 db,
 		kycRepo:            kycRepo,
 		notificationClient: notificationClient,
+		ocrClient:          ocrClient,
 	}
 }
 
@@ -89,16 +92,105 @@ func (s *kycService) SubmitDocument(ctx context.Context, input *SubmitDocumentIn
 		Status:         model.KYCStatusPending,
 	}
 
-	// TODO: 调用OCR服务识别文档信息
-	// ocrData, err := ocrService.Extract(document.DocumentURL)
-	// document.OCRData = ocrData
+	// 调用OCR服务识别文档信息（异步处理，不阻塞主流程）
+	if s.ocrClient != nil && input.FrontImageURL != "" {
+		go func(doc *model.KYCDocument, imageURL string) {
+			ocrCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			// 根据文档类型选择OCR方法
+			var ocrData *client.OCRData
+			var err error
+
+			switch doc.DocumentType {
+			case model.DocumentTypePassport:
+				ocrData, err = s.ocrClient.ExtractPassport(ocrCtx, imageURL)
+			case model.DocumentTypeIDCard:
+				ocrData, err = s.ocrClient.ExtractIDCard(ocrCtx, imageURL)
+			case model.DocumentTypeBusinessLicense:
+				ocrData, err = s.ocrClient.ExtractBusinessLicense(ocrCtx, imageURL)
+			default:
+				ocrData, err = s.ocrClient.ExtractDocument(ocrCtx, &client.OCRExtractRequest{
+					ImageURL:     imageURL,
+					DocumentType: string(doc.DocumentType),
+					Language:     "auto",
+				})
+			}
+
+			if err != nil {
+				logger.Warn("OCR识别失败（非致命）",
+					zap.Error(err),
+					zap.String("document_id", doc.ID.String()),
+					zap.String("document_type", string(doc.DocumentType)))
+				return
+			}
+
+			// 验证OCR质量
+			isValid, validationMsg := client.ValidateOCRQuality(ocrData)
+			if !isValid {
+				logger.Warn("OCR质量验证失败",
+					zap.String("document_id", doc.ID.String()),
+					zap.String("reason", validationMsg),
+					zap.Float64("confidence", ocrData.Confidence))
+			}
+
+			// 更新文档OCR数据（序列化为JSON字符串）
+			ocrDataBytes, jsonErr := json.Marshal(ocrData)
+			if jsonErr != nil {
+				logger.Error("序列化OCR数据失败",
+					zap.Error(jsonErr),
+					zap.String("document_id", doc.ID.String()))
+				return
+			}
+			doc.OCRData = string(ocrDataBytes)
+
+			// 如果OCR识别出的文档号与用户输入不一致，记录警告
+			if ocrData.DocumentNumber != "" && doc.DocumentNumber != "" && ocrData.DocumentNumber != doc.DocumentNumber {
+				logger.Warn("OCR识别的文档号与用户输入不一致",
+					zap.String("document_id", doc.ID.String()),
+					zap.String("user_input", doc.DocumentNumber),
+					zap.String("ocr_result", ocrData.DocumentNumber))
+			}
+
+			// 异步更新数据库
+			if err := s.kycRepo.UpdateDocument(context.Background(), doc); err != nil {
+				logger.Error("更新文档OCR数据失败",
+					zap.Error(err),
+					zap.String("document_id", doc.ID.String()))
+			}
+		}(document, input.FrontImageURL)
+	}
 
 	if err := s.kycRepo.CreateDocument(ctx, document); err != nil {
 		return nil, fmt.Errorf("创建文档失败: %w", err)
 	}
 
-	// TODO: 发送审核通知
-	// notificationService.NotifyReviewers(document)
+	// 发送审核通知（异步）
+	if s.notificationClient != nil {
+		go func(doc *model.KYCDocument) {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			err := s.notificationClient.SendKYCNotification(notifyCtx, &client.SendNotificationRequest{
+				MerchantID: doc.MerchantID,
+				Type:       "kyc_submitted",
+				Title:      "KYC 文档已提交",
+				Content:    fmt.Sprintf("您的 %s 已提交，正在审核中", doc.DocumentType),
+				Priority:   "medium",
+				Data: map[string]interface{}{
+					"document_id":   doc.ID.String(),
+					"document_type": doc.DocumentType,
+					"status":        doc.Status,
+				},
+			})
+			if err != nil {
+				logger.Warn("发送KYC提交通知失败（非致命）",
+					zap.Error(err),
+					zap.String("merchant_id", doc.MerchantID.String()),
+					zap.String("document_id", doc.ID.String()))
+			}
+		}(document)
+	}
 
 	return document, nil
 }

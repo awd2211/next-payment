@@ -91,18 +91,21 @@ type DisputeListResult struct {
 
 // disputeService 拒付服务实现
 type disputeService struct {
-	repo         repository.DisputeRepository
-	stripeClient *client.StripeDisputeClient
+	repo          repository.DisputeRepository
+	stripeClient  *client.StripeDisputeClient
+	paymentClient client.PaymentClient
 }
 
 // NewDisputeService 创建拒付服务实例
 func NewDisputeService(
 	repo repository.DisputeRepository,
 	stripeClient *client.StripeDisputeClient,
+	paymentClient client.PaymentClient,
 ) DisputeService {
 	return &disputeService{
-		repo:         repo,
-		stripeClient: stripeClient,
+		repo:          repo,
+		stripeClient:  stripeClient,
+		paymentClient: paymentClient,
 	}
 }
 
@@ -465,8 +468,22 @@ func (s *disputeService) SyncFromStripe(ctx context.Context, channelDisputeID st
 		return existing, nil
 	}
 
-	// Create new dispute
-	var merchantID uuid.UUID // TODO: Get from payment record
+	// Create new dispute - Get payment info first
+	var merchantID uuid.UUID
+	var paymentNo string
+
+	// Fetch payment information from payment-gateway using channel_trade_no (Stripe Charge ID)
+	if s.paymentClient != nil && stripeDispute.Charge != nil {
+		paymentInfo, err := s.paymentClient.GetPaymentByChannelTradeNo(ctx, stripeDispute.Charge.ID)
+		if err != nil {
+			// Log error but continue with partial data
+			// In production, you might want to retry or queue this for later processing
+			fmt.Printf("Warning: Failed to fetch payment info for charge %s: %v\n", stripeDispute.Charge.ID, err)
+		} else {
+			merchantID = paymentInfo.MerchantID
+			paymentNo = paymentInfo.PaymentNo
+		}
+	}
 
 	evidenceDueBy := (*time.Time)(nil)
 	if stripeDispute.EvidenceDetails != nil && stripeDispute.EvidenceDetails.DueBy > 0 {
@@ -477,7 +494,7 @@ func (s *disputeService) SyncFromStripe(ctx context.Context, channelDisputeID st
 	input := &CreateDisputeInput{
 		Channel:          "stripe",
 		ChannelDisputeID: stripeDispute.ID,
-		PaymentNo:        "", // TODO: Get from payment record
+		PaymentNo:        paymentNo,
 		MerchantID:       merchantID,
 		ChannelTradeNo:   stripeDispute.Charge.ID,
 		Amount:           stripeDispute.Amount,

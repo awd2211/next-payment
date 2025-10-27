@@ -121,11 +121,13 @@ func main() {
 	accountingServiceURL := getConfig("ACCOUNTING_SERVICE_URL", "http://localhost:40007")
 	withdrawalServiceURL := getConfig("WITHDRAWAL_SERVICE_URL", "http://localhost:40014")
 	merchantServiceURL := getConfig("MERCHANT_SERVICE_URL", "http://localhost:40002")
+	merchantConfigServiceURL := getConfig("MERCHANT_CONFIG_SERVICE_URL", "http://localhost:40012")
 	notificationServiceURL := getConfig("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
 
 	accountingClient := client.NewAccountingClient(accountingServiceURL)
 	withdrawalClient := client.NewWithdrawalClient(withdrawalServiceURL)
 	merchantClient := client.NewMerchantClient(merchantServiceURL)
+	merchantConfigClient := client.NewMerchantConfigClient(merchantConfigServiceURL)
 	notificationClient := client.NewNotificationClient(notificationServiceURL)
 
 	logger.Info("HTTP客户端初始化完成")
@@ -150,11 +152,11 @@ func main() {
 	// 初始化定时任务调度器
 	taskScheduler := scheduler.NewScheduler(application.DB, application.Redis)
 
-	// 注册自动结算任务（每天凌晨2点执行）
+	// 注册自动结算任务（每天凌晨2点执行）- UPDATED: 传入 merchantConfigClient
 	taskScheduler.RegisterTask(&scheduler.Task{
 		Name:        "daily_auto_settlement",
 		Interval:    24 * time.Hour, // 每24小时
-		Func:        service.RunDailySettlement(application.DB, settlementRepo, accountingClient, merchantClient, notificationClient),
+		Func:        service.RunDailySettlement(application.DB, settlementRepo, accountingClient, merchantClient, merchantConfigClient, notificationClient),
 		Description: "每日自动结算任务",
 	})
 
@@ -210,7 +212,17 @@ func main() {
 	logger.Info("Settlement Saga Service 初始化完成")
 
 	// 7. 初始化 JWT Manager（用于认证，优先从配置中心获取）
-	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
+	// ⚠️ 安全要求: JWT_SECRET必须在生产环境中设置，不能使用默认值
+	jwtSecret := getConfig("JWT_SECRET", "")
+	if jwtSecret == "" {
+		logger.Fatal("JWT_SECRET environment variable is required and cannot be empty")
+	}
+	if len(jwtSecret) < 32 {
+		logger.Fatal("JWT_SECRET must be at least 32 characters for security",
+			zap.Int("current_length", len(jwtSecret)),
+			zap.Int("minimum_length", 32))
+	}
+	logger.Info("JWT_SECRET validation passed", zap.Int("length", len(jwtSecret)))
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

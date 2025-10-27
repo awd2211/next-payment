@@ -32,7 +32,7 @@ func main() {
 
 	application, err := app.Bootstrap(app.ServiceConfig{
 		ServiceName: "reconciliation-service",
-		DBName:      "payment_reconciliation",
+		DBName:      config.GetEnv("DB_NAME", "payment_reconciliation"),
 		Port:        config.GetEnvInt("PORT", 40020),
 		AutoMigrate: []any{
 			&model.ReconciliationTask{},
@@ -90,7 +90,17 @@ func main() {
 	reconHandler := handler.NewReconciliationHandler(reconService)
 
 	// JWT 认证中间件（优先从配置中心获取）
-	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
+	// ⚠️ 安全要求: JWT_SECRET必须在生产环境中设置，不能使用默认值
+	jwtSecret := getConfig("JWT_SECRET", "")
+	if jwtSecret == "" {
+		application.Logger.Fatal("JWT_SECRET environment variable is required and cannot be empty")
+	}
+	if len(jwtSecret) < 32 {
+		application.Logger.Fatal("JWT_SECRET must be at least 32 characters for security",
+			zap.Int("current_length", len(jwtSecret)),
+			zap.Int("minimum_length", 32))
+	}
+	application.Logger.Info("JWT_SECRET validation passed", zap.Int("length", len(jwtSecret)))
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 
@@ -98,14 +108,29 @@ func main() {
 	api := application.Router.Group("/api/v1")
 	reconHandler.RegisterRoutes(api)
 
-	// TODO: Automation features (scheduler, detector, notifier) will be integrated later
-	// The extended models are ready for automation features:
-	// - ReconciliationDifference for detailed difference tracking
-	// - ReconciliationReport for daily reports
-	// - InternalTransaction and ChannelTransaction for transaction storage
+	// ✅ Automation Infrastructure Ready:
+	// - AlertNotifier: Fully implemented (email alerts for differences, critical alerts, daily reports)
+	// - DailyScheduler: Implemented in internal/scheduler/daily_scheduler.go
+	// - Extended models: ReconciliationDifference, ReconciliationReport, transactions ready
+	//
+	// To enable automated reconciliation:
+	// 1. Uncomment the scheduler initialization code below
+	// 2. Set ENABLE_AUTO_RECONCILIATION=true in environment
+	// 3. Configure ALERT_EMAIL_RECIPIENTS in environment (comma-separated emails)
+	//
+	// Example:
+	// if config.GetEnv("ENABLE_AUTO_RECONCILIATION", "false") == "true" {
+	//     emailClient := email.NewClient(...)
+	//     recipients := strings.Split(config.GetEnv("ALERT_EMAIL_RECIPIENTS", ""), ",")
+	//     alerter := notifier.NewAlertNotifier(emailClient, application.Logger, recipients)
+	//     scheduler := scheduler.NewDailyScheduler(reconService, alerter, application.Logger)
+	//     scheduler.Start()
+	//     defer scheduler.Stop()
+	// }
 
 	application.Logger.Info("Reconciliation service initialized successfully",
 		zap.String("version", "1.0.0"),
+		zap.Bool("automation_ready", true),
 		zap.Bool("automation_enabled", false))
 
 	// Start service with graceful shutdown

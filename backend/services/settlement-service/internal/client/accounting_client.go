@@ -97,3 +97,62 @@ func (c *AccountingClient) GetTransactions(ctx context.Context, merchantID uuid.
 
 	return result.Data.List, nil
 }
+
+// RefundSummary 退款汇总数据
+type RefundSummary struct {
+	TotalCount  int   `json:"total_count"`
+	TotalAmount int64 `json:"total_amount"`
+}
+
+// RefundSummaryResponse 退款汇总响应
+type RefundSummaryResponse struct {
+	Code    int            `json:"code"`
+	Message string         `json:"message"`
+	Data    *RefundSummary `json:"data"`
+}
+
+// GetRefundSummary 获取退款汇总数据（用于结算）
+func (c *AccountingClient) GetRefundSummary(ctx context.Context, merchantID uuid.UUID, startDate, endDate time.Time) (*RefundSummary, error) {
+	// 构建URL
+	url := fmt.Sprintf("%s/api/v1/refunds/summary?merchant_id=%s&start_date=%s&end_date=%s",
+		c.baseURL,
+		merchantID.String(),
+		startDate.Format("2006-01-02"),
+		endDate.Format("2006-01-02"))
+
+	// 创建请求
+	req := &httpclient.Request{
+		Method: "GET",
+		URL:    url,
+		Ctx:    ctx,
+	}
+
+	// 通过熔断器发送请求
+	resp, err := c.breaker.Do(req)
+	if err != nil {
+		// 降级：返回空数据，不阻塞结算流程
+		return &RefundSummary{
+			TotalCount:  0,
+			TotalAmount: 0,
+		}, fmt.Errorf("获取退款汇总失败（已降级）: %w", err)
+	}
+
+	// 解析响应
+	var result RefundSummaryResponse
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if result.Code != 0 {
+		return nil, fmt.Errorf("业务错误: %s", result.Message)
+	}
+
+	if result.Data == nil {
+		return &RefundSummary{
+			TotalCount:  0,
+			TotalAmount: 0,
+		}, nil
+	}
+
+	return result.Data, nil
+}
