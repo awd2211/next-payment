@@ -97,7 +97,7 @@ export const configService = {
   },
 
   createFeeConfig: (data: CreateFeeConfigInput) => {
-    return request.post<FeeConfig>('/fee-configs', data)
+    return request.post<FeeConfig>('/merchant/fee-configs', data)
   },
 
   updateFeeConfig: (id: string, data: Partial<CreateFeeConfigInput>) => {
@@ -109,7 +109,7 @@ export const configService = {
   },
 
   calculateFee: (amount: number, channel: string, paymentMethod: string) => {
-    return request.post<{ fee: number; total: number }>('/fee-configs/calculate-fee', {
+    return request.post<{ fee: number; total: number }>('/merchant/fee-configs/calculate-fee', {
       amount,
       channel,
       payment_method: paymentMethod,
@@ -126,7 +126,7 @@ export const configService = {
   },
 
   createTransactionLimit: (data: CreateTransactionLimitInput) => {
-    return request.post<TransactionLimit>('/transaction-limits', data)
+    return request.post<TransactionLimit>('/merchant/transaction-limits', data)
   },
 
   updateTransactionLimit: (id: string, data: Partial<CreateTransactionLimitInput>) => {
@@ -138,7 +138,7 @@ export const configService = {
   },
 
   checkLimit: (amount: number, currency: string) => {
-    return request.post<{ allowed: boolean; reason?: string }>('/transaction-limits/check-limit', {
+    return request.post<{ allowed: boolean; reason?: string }>('/merchant/transaction-limits/check-limit', {
       amount,
       currency,
     })
@@ -158,7 +158,7 @@ export const configService = {
   },
 
   createChannelConfig: (data: CreateChannelConfigInput) => {
-    return request.post<ChannelConfig>('/channel-configs', data)
+    return request.post<ChannelConfig>('/merchant/channel-configs', data)
   },
 
   updateChannelConfig: (id: string, data: Partial<CreateChannelConfigInput>) => {

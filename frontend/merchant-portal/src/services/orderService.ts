@@ -94,7 +94,7 @@ export interface CreateOrderRequest {
 
 export const orderService = {
   list: (params: ListOrdersParams) => {
-    return request.get<ListOrdersResponse>('/orders', { params })
+    return request.get<ListOrdersResponse>('/merchant/orders', { params })
   },
 
   getById: (id: string) => {
@@ -102,7 +102,7 @@ export const orderService = {
   },
 
   create: (data: CreateOrderRequest) => {
-    return request.post('/orders', data)
+    return request.post('/merchant/orders', data)
   },
 
   cancel: (id: string, reason: string) => {
@@ -110,6 +110,6 @@ export const orderService = {
   },
 
   getStats: (params: { start_time?: string; end_time?: string }) => {
-    return request.get<OrderStats>('/orders/stats', { params })
+    return request.get<OrderStats>('/merchant/orders/stats', { params })
   },
 }

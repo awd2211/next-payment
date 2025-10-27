@@ -57,7 +57,7 @@ export interface SettlementStatsParams {
 export const settlementService = {
   // 获取结算列表
   list: (params: SettlementListParams) => {
-    return request.get<SettlementListResponse>('/settlements', { params })
+    return request.get<SettlementListResponse>('/merchant/settlements', { params })
   },
 
   // 获取结算详情
@@ -67,12 +67,12 @@ export const settlementService = {
 
   // 获取结算统计
   getStats: (params: SettlementStatsParams) => {
-    return request.get<SettlementStats>('/settlements/stats', { params })
+    return request.get<SettlementStats>('/merchant/settlements/stats', { params })
   },
 
   // 创建结算单
   create: (data: Partial<Settlement>) => {
-    return request.post<Settlement>('/settlements', data)
+    return request.post<Settlement>('/merchant/settlements', data)
   },
 
   // 更新结算单
@@ -97,7 +97,7 @@ export const settlementService = {
 
   // 导出结算数据
   export: (params: SettlementListParams) => {
-    return request.get('/settlements/export', { params, responseType: 'blob' })
+    return request.get('/merchant/settlements/export', { params, responseType: 'blob' })
   },
 }
 

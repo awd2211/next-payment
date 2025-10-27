@@ -103,21 +103,21 @@ export const reconciliationService = {
    * Get reconciliation records list
    */
   list: (params: ListReconciliationParams) => {
-    return request.get<ListReconciliationResponse>('/api/v1/admin/reconciliation', { params })
+    return request.get<ListReconciliationResponse>('/merchant/reconciliation', { params })
   },
 
   /**
    * Get reconciliation detail by ID
    */
   getDetail: (id: string) => {
-    return request.get<ReconciliationDetailResponse>(`/api/v1/admin/reconciliation/${id}`)
+    return request.get<ReconciliationDetailResponse>(`/merchant/reconciliation/${id}`)
   },
 
   /**
    * Get unmatched items for a reconciliation
    */
   getUnmatchedItems: (reconId: string) => {
-    return request.get<UnmatchedItemsResponse>(`/api/v1/admin/reconciliation/${reconId}/unmatched`)
+    return request.get<UnmatchedItemsResponse>(`/merchant/reconciliation/${reconId}/unmatched`)
   },
 
   /**
@@ -130,7 +130,7 @@ export const reconciliationService = {
     formData.append('recon_date', data.recon_date)
     if (data.file) formData.append('file', data.file)
 
-    return request.post<CreateReconciliationResponse>('/api/v1/admin/reconciliation', formData, {
+    return request.post<CreateReconciliationResponse>('/merchant/reconciliation', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -141,21 +141,21 @@ export const reconciliationService = {
    * Confirm reconciliation result
    */
   confirm: (id: string, data: ConfirmReconciliationRequest) => {
-    return request.post<ConfirmReconciliationResponse>(`/api/v1/admin/reconciliation/${id}/confirm`, data)
+    return request.post<ConfirmReconciliationResponse>(`/merchant/reconciliation/${id}/confirm`, data)
   },
 
   /**
    * Retry failed reconciliation
    */
   retry: (id: string) => {
-    return request.post(`/api/v1/admin/reconciliation/${id}/retry`)
+    return request.post(`/merchant/reconciliation/${id}/retry`)
   },
 
   /**
    * Download reconciliation report
    */
   downloadReport: (id: string) => {
-    return request.get(`/api/v1/admin/reconciliation/${id}/report`, {
+    return request.get(`/merchant/reconciliation/${id}/report`, {
       responseType: 'blob',
     })
   },
@@ -164,7 +164,7 @@ export const reconciliationService = {
    * Export reconciliation records
    */
   export: (params: ListReconciliationParams) => {
-    return request.get('/api/v1/admin/reconciliation/export', {
+    return request.get('/merchant/reconciliation/export', {
       params,
       responseType: 'blob',
     })
@@ -174,13 +174,13 @@ export const reconciliationService = {
    * Get reconciliation statistics
    */
   getStats: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get('/api/v1/admin/reconciliation/stats', { params })
+    return request.get('/merchant/reconciliation/stats', { params })
   },
 
   /**
    * Resolve unmatched item
    */
   resolveUnmatched: (reconId: string, itemId: string, data: { action: 'resolve' | 'ignore'; notes?: string }) => {
-    return request.post(`/api/v1/admin/reconciliation/${reconId}/unmatched/${itemId}/resolve`, data)
+    return request.post(`/merchant/reconciliation/${reconId}/unmatched/${itemId}/resolve`, data)
   },
 }

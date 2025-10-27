@@ -71,7 +71,7 @@ export interface ListLoginAttemptsParams {
 export const securityService = {
   // Security Events
   listSecurityEvents: (params: ListSecurityEventsParams) => {
-    return request.get('/security/events', { params })
+    return request.get('/merchant/security/events', { params })
   },
 
   getSecurityEvent: (id: string) => {
@@ -80,7 +80,7 @@ export const securityService = {
 
   // Login Attempts
   listLoginAttempts: (params: ListLoginAttemptsParams) => {
-    return request.get('/security/login-attempts', { params })
+    return request.get('/merchant/security/login-attempts', { params })
   },
 
   getLoginAttempt: (id: string) => {
@@ -89,11 +89,11 @@ export const securityService = {
 
   // IP Whitelist
   addIPToWhitelist: (data: { ip_address: string; description?: string }) => {
-    return request.post<IPWhitelist>('/security/ip-whitelist', data)
+    return request.post<IPWhitelist>('/merchant/security/ip-whitelist', data)
   },
 
   listIPWhitelist: (adminId?: string) => {
-    return request.get<IPWhitelist[]>('/security/ip-whitelist', {
+    return request.get<IPWhitelist[]>('/merchant/security/ip-whitelist', {
       params: { admin_id: adminId }
     })
   },
@@ -103,18 +103,18 @@ export const securityService = {
   },
 
   checkIPWhitelisted: (ipAddress: string) => {
-    return request.get<{ is_whitelisted: boolean }>('/security/ip-whitelist/check', {
+    return request.get<{ is_whitelisted: boolean }>('/merchant/security/ip-whitelist/check', {
       params: { ip_address: ipAddress }
     })
   },
 
   // Security Settings
   getSecuritySettings: () => {
-    return request.get<SecuritySettings>('/security/settings')
+    return request.get<SecuritySettings>('/merchant/security/settings')
   },
 
   updateSecuritySettings: (data: Partial<SecuritySettings>) => {
-    return request.put<SecuritySettings>('/security/settings', data)
+    return request.put<SecuritySettings>('/merchant/security/settings', data)
   },
 
   // Account Security
@@ -128,7 +128,7 @@ export const securityService = {
 
   // Session Management
   listActiveSessions: (adminId?: string) => {
-    return request.get('/security/sessions', {
+    return request.get('/merchant/security/sessions', {
       params: { admin_id: adminId }
     })
   },

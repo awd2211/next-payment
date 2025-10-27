@@ -104,7 +104,7 @@ export const authService = {
    * 刷新Token
    */
   refreshToken: (refreshToken: string) => {
-    return request.post<{ token: string; refresh_token: string }>('/auth/refresh', {
+    return request.post<{ token: string; refresh_token: string }>('/merchant/refresh', {
       refresh_token: refreshToken,
     })
   },

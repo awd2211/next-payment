@@ -66,22 +66,22 @@ export interface ListNotificationsParams {
 export const notificationService = {
   // Email Notifications
   sendEmail: (data: EmailNotification) => {
-    return request.post('/notifications/email', data)
+    return request.post('/merchant/notifications/email', data)
   },
 
   // SMS Notifications
   sendSMS: (data: SMSNotification) => {
-    return request.post('/notifications/sms', data)
+    return request.post('/merchant/notifications/sms', data)
   },
 
   // Webhook Notifications
   sendWebhook: (data: WebhookNotification) => {
-    return request.post('/notifications/webhook', data)
+    return request.post('/merchant/notifications/webhook', data)
   },
 
   // Email Template Management
   createTemplate: (data: Partial<EmailTemplate>) => {
-    return request.post('/email-templates', data)
+    return request.post('/merchant/email-templates', data)
   },
 
   getTemplate: (id: string) => {
@@ -89,7 +89,7 @@ export const notificationService = {
   },
 
   listTemplates: (params: ListTemplatesParams) => {
-    return request.get('/email-templates', { params })
+    return request.get('/merchant/email-templates', { params })
   },
 
   updateTemplate: (id: string, data: Partial<EmailTemplate>) => {
@@ -102,7 +102,7 @@ export const notificationService = {
 
   // Notification History
   listNotifications: (params: ListNotificationsParams) => {
-    return request.get('/notifications/history', { params })
+    return request.get('/merchant/notifications/history', { params })
   },
 
   getNotification: (id: string) => {

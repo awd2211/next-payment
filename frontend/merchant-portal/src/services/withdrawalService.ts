@@ -82,7 +82,7 @@ export const withdrawalService = {
    * 获取提现申请列表
    */
   list: (params: ListWithdrawalsParams) => {
-    return request.get<ListWithdrawalsResponse>('/withdrawals', { params })
+    return request.get<ListWithdrawalsResponse>('/merchant/withdrawals', { params })
   },
 
   /**
@@ -131,21 +131,21 @@ export const withdrawalService = {
    * 获取提现统计信息
    */
   getStats: (params?: { start_time?: string; end_time?: string; currency?: string }) => {
-    return request.get<WithdrawalStats>('/withdrawals/stats', { params })
+    return request.get<WithdrawalStats>('/merchant/withdrawals/stats', { params })
   },
 
   /**
    * 批量批准提现申请
    */
   batchApprove: (ids: string[], remark?: string) => {
-    return request.post('/withdrawals/batch/approve', { ids, remark })
+    return request.post('/merchant/withdrawals/batch/approve', { ids, remark })
   },
 
   /**
    * 导出提现记录
    */
   export: (params: ListWithdrawalsParams) => {
-    return request.download('/withdrawals/export', 'withdrawals.xlsx', { params })
+    return request.download('/merchant/withdrawals/export', 'withdrawals.xlsx', { params })
   },
 }
 

@@ -33,16 +33,16 @@ export interface BalanceInfo {
 export const dashboardService = {
   // 获取Dashboard概览数据
   getDashboard: () => {
-    return request.get<DashboardData>('/dashboard')
+    return request.get<DashboardData>('/merchant/dashboard')
   },
 
   // 获取交易汇总
   getTransactionSummary: (params: { start_date?: string; end_date?: string }) => {
-    return request.get<TransactionSummary>('/dashboard/transaction-summary', { params })
+    return request.get<TransactionSummary>('/merchant/dashboard/transaction-summary', { params })
   },
 
   // 获取余额信息
   getBalanceInfo: () => {
-    return request.get<BalanceInfo>('/dashboard/balance')
+    return request.get<BalanceInfo>('/merchant/dashboard/balance')
   },
 }

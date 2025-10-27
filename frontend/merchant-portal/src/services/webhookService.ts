@@ -107,42 +107,42 @@ export const webhookService = {
    * Get webhook logs list
    */
   list: (params: ListWebhookLogsParams) => {
-    return request.get<ListWebhookLogsResponse>('/api/v1/admin/webhooks/logs', { params })
+    return request.get<ListWebhookLogsResponse>('/merchant/webhooks/logs', { params })
   },
 
   /**
    * Get webhook log detail by ID
    */
   getDetail: (id: string) => {
-    return request.get<WebhookLogDetailResponse>(`/api/v1/admin/webhooks/logs/${id}`)
+    return request.get<WebhookLogDetailResponse>(`/merchant/webhooks/logs/${id}`)
   },
 
   /**
    * Retry failed webhook
    */
   retry: (id: string) => {
-    return request.post<RetryWebhookResponse>(`/api/v1/admin/webhooks/logs/${id}/retry`)
+    return request.post<RetryWebhookResponse>(`/merchant/webhooks/logs/${id}/retry`)
   },
 
   /**
    * Batch retry failed webhooks
    */
   batchRetry: (ids: string[]) => {
-    return request.post('/api/v1/admin/webhooks/logs/batch-retry', { ids })
+    return request.post('/merchant/webhooks/logs/batch-retry', { ids })
   },
 
   /**
    * Get webhook statistics
    */
   getStats: (params?: { merchant_id?: string; start_date?: string; end_date?: string }) => {
-    return request.get<WebhookStatsResponse>('/api/v1/admin/webhooks/stats', { params })
+    return request.get<WebhookStatsResponse>('/merchant/webhooks/stats', { params })
   },
 
   /**
    * Export webhook logs
    */
   export: (params: ListWebhookLogsParams) => {
-    return request.get('/api/v1/admin/webhooks/logs/export', {
+    return request.get('/merchant/webhooks/logs/export', {
       params,
       responseType: 'blob',
     })
@@ -152,41 +152,41 @@ export const webhookService = {
    * Get webhook configs list
    */
   listConfigs: (params?: { merchant_id?: string }) => {
-    return request.get<ListWebhookConfigsResponse>('/api/v1/admin/webhooks/configs', { params })
+    return request.get<ListWebhookConfigsResponse>('/merchant/webhooks/configs', { params })
   },
 
   /**
    * Get webhook config detail
    */
   getConfig: (id: string) => {
-    return request.get(`/api/v1/admin/webhooks/configs/${id}`)
+    return request.get(`/merchant/webhooks/configs/${id}`)
   },
 
   /**
    * Update webhook config
    */
   updateConfig: (id: string, data: UpdateWebhookConfigRequest) => {
-    return request.put(`/api/v1/admin/webhooks/configs/${id}`, data)
+    return request.put(`/merchant/webhooks/configs/${id}`, data)
   },
 
   /**
    * Test webhook endpoint
    */
   testWebhook: (merchantId: string, data: { event_type: string; test_data?: any }) => {
-    return request.post(`/api/v1/admin/webhooks/merchants/${merchantId}/test`, data)
+    return request.post(`/merchant/webhooks/merchants/${merchantId}/test`, data)
   },
 
   /**
    * Get retry history for a webhook
    */
   getRetryHistory: (id: string) => {
-    return request.get(`/api/v1/admin/webhooks/logs/${id}/retry-history`)
+    return request.get(`/merchant/webhooks/logs/${id}/retry-history`)
   },
 
   /**
    * Get available event types
    */
   getEventTypes: () => {
-    return request.get<{ code: number; message: string; data: string[] }>('/api/v1/admin/webhooks/event-types')
+    return request.get<{ code: number; message: string; data: string[] }>('/merchant/webhooks/event-types')
   },
 }

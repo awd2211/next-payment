@@ -199,7 +199,7 @@ export interface CurrencyConversion {
 export const accountingService = {
   // Account Management
   createAccount: (data: Partial<Account>) => {
-    return request.post<Account>('/accounts', data)
+    return request.post<Account>('/merchant/accounts', data)
   },
 
   getAccount: (id: string) => {
@@ -207,7 +207,7 @@ export const accountingService = {
   },
 
   listAccounts: (params?: { page?: number; page_size?: number; merchant_id?: string }) => {
-    return request.get('/accounts', { params })
+    return request.get('/merchant/accounts', { params })
   },
 
   freezeAccount: (id: string) => {
@@ -227,7 +227,7 @@ export const accountingService = {
     transaction_type: string
     description?: string
   }) => {
-    return request.post<Transaction>('/transactions', data)
+    return request.post<Transaction>('/merchant/transactions', data)
   },
 
   getTransaction: (transactionNo: string) => {
@@ -240,7 +240,7 @@ export const accountingService = {
     merchant_id?: string
     transaction_type?: string
   }) => {
-    return request.get('/transactions', { params })
+    return request.get('/merchant/transactions', { params })
   },
 
   reverseTransaction: (transactionNo: string, reason: string) => {
@@ -254,7 +254,7 @@ export const accountingService = {
     currency: string
     settlement_date?: string
   }) => {
-    return request.post<Settlement>('/settlements', data)
+    return request.post<Settlement>('/merchant/settlements', data)
   },
 
   getSettlement: (settlementNo: string) => {
@@ -267,7 +267,7 @@ export const accountingService = {
     merchant_id?: string
     status?: string
   }) => {
-    return request.get('/settlements', { params })
+    return request.get('/merchant/settlements', { params })
   },
 
   processSettlement: (settlementNo: string) => {
@@ -281,7 +281,7 @@ export const accountingService = {
     currency: string
     bank_account_id: string
   }) => {
-    return request.post<Withdrawal>('/withdrawals', data)
+    return request.post<Withdrawal>('/merchant/withdrawals', data)
   },
 
   getWithdrawal: (withdrawalNo: string) => {
@@ -294,7 +294,7 @@ export const accountingService = {
     merchant_id?: string
     status?: string
   }) => {
-    return request.get('/withdrawals', { params })
+    return request.get('/merchant/withdrawals', { params })
   },
 
   approveWithdrawal: (withdrawalNo: string) => {
@@ -329,7 +329,7 @@ export const accountingService = {
     due_date: string
     items?: any[]
   }) => {
-    return request.post<Invoice>('/invoices', data)
+    return request.post<Invoice>('/merchant/invoices', data)
   },
 
   getInvoice: (invoiceNo: string) => {
@@ -342,7 +342,7 @@ export const accountingService = {
     merchant_id?: string
     status?: string
   }) => {
-    return request.get('/invoices', { params })
+    return request.get('/merchant/invoices', { params })
   },
 
   payInvoice: (invoiceNo: string, payment_method?: string) => {
@@ -363,7 +363,7 @@ export const accountingService = {
     end_date: string
     merchant_id?: string
   }) => {
-    return request.post<Reconciliation>('/reconciliations', data)
+    return request.post<Reconciliation>('/merchant/reconciliations', data)
   },
 
   getReconciliation: (reconciliationNo: string) => {
@@ -375,7 +375,7 @@ export const accountingService = {
     page_size?: number
     status?: string
   }) => {
-    return request.get('/reconciliations', { params })
+    return request.get('/merchant/reconciliations', { params })
   },
 
   processReconciliation: (reconciliationNo: string) => {
@@ -414,7 +414,7 @@ export const accountingService = {
     to_currency: string
     from_amount: number
   }) => {
-    return request.post<CurrencyConversion>('/conversions', data)
+    return request.post<CurrencyConversion>('/merchant/conversions', data)
   },
 
   getConversion: (conversionNo: string) => {
@@ -426,7 +426,7 @@ export const accountingService = {
     page_size?: number
     merchant_id?: string
   }) => {
-    return request.get('/conversions', { params })
+    return request.get('/merchant/conversions', { params })
   },
 
   processConversion: (conversionNo: string) => {
@@ -439,7 +439,7 @@ export const accountingService = {
 
   // Legacy/Existing APIs
   listEntries: (params: ListEntriesParams) => {
-    return request.get<ListEntriesResponse>('/accounting/entries', { params })
+    return request.get<ListEntriesResponse>('/merchant/accounting/entries', { params })
   },
 
   getEntryById: (id: string) => {
@@ -447,51 +447,51 @@ export const accountingService = {
   },
 
   createEntry: (data: CreateEntryRequest) => {
-    return request.post<AccountingEntry>('/accounting/entries', data)
+    return request.post<AccountingEntry>('/merchant/accounting/entries', data)
   },
 
   listBalances: (params: ListBalancesParams) => {
-    return request.get<ListBalancesResponse>('/accounting/balances', { params })
+    return request.get<ListBalancesResponse>('/merchant/accounting/balances', { params })
   },
 
   getLedger: (params: GetLedgerParams) => {
-    return request.get<Ledger>('/accounting/ledger', { params })
+    return request.get<Ledger>('/merchant/accounting/ledger', { params })
   },
 
   getGeneralLedger: (params: { start_date: string; end_date: string; currency?: string }) => {
-    return request.get<Ledger[]>('/accounting/general-ledger', { params })
+    return request.get<Ledger[]>('/merchant/accounting/general-ledger', { params })
   },
 
   getSummary: (params: { start_date: string; end_date: string; currency?: string; merchant_id?: string }) => {
-    return request.get<AccountingSummary>('/accounting/summary', { params })
+    return request.get<AccountingSummary>('/merchant/accounting/summary', { params })
   },
 
   getBalanceSheet: (params: { as_of_date: string; currency?: string }) => {
-    return request.get('/accounting/balance-sheet', { params })
+    return request.get('/merchant/accounting/balance-sheet', { params })
   },
 
   getIncomeStatement: (params: { start_date: string; end_date: string; currency?: string }) => {
-    return request.get('/accounting/income-statement', { params })
+    return request.get('/merchant/accounting/income-statement', { params })
   },
 
   getCashFlowStatement: (params: { start_date: string; end_date: string; currency?: string }) => {
-    return request.get('/accounting/cash-flow', { params })
+    return request.get('/merchant/accounting/cash-flow', { params })
   },
 
   exportEntries: (params: ListEntriesParams) => {
-    return request.download('/accounting/entries/export', 'accounting-entries.xlsx', { params })
+    return request.download('/merchant/accounting/entries/export', 'accounting-entries.xlsx', { params })
   },
 
   exportBalances: (params: ListBalancesParams) => {
-    return request.download('/accounting/balances/export', 'account-balances.xlsx', { params })
+    return request.download('/merchant/accounting/balances/export', 'account-balances.xlsx', { params })
   },
 
   closeMonth: (params: { year: number; month: number; currency: string }) => {
-    return request.post('/accounting/close-month', params)
+    return request.post('/merchant/accounting/close-month', params)
   },
 
   getChartOfAccounts: () => {
-    return request.get('/accounting/chart-of-accounts')
+    return request.get('/merchant/accounting/chart-of-accounts')
   },
 }
 

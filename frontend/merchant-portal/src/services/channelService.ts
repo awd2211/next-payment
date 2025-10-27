@@ -150,7 +150,7 @@ export interface ExchangeRate {
 export const channelService = {
   // Admin Channel Management
   listAdminChannels: (params?: ListChannelsParams) => {
-    return request.get<Channel[]>('/admin/channels', { params })
+    return request.get<Channel[]>('/merchant/admin/channels', { params })
   },
 
   getAdminChannel: (code: string) => {
@@ -158,7 +158,7 @@ export const channelService = {
   },
 
   createAdminChannel: (data: CreateChannelRequest) => {
-    return request.post<Channel>('/admin/channels', data)
+    return request.post<Channel>('/merchant/admin/channels', data)
   },
 
   updateAdminChannel: (code: string, data: UpdateChannelRequest) => {
@@ -171,7 +171,7 @@ export const channelService = {
 
   // Channel Payment Operations
   createChannelPayment: (data: CreateChannelPaymentRequest) => {
-    return request.post<ChannelPaymentResponse>('/channel/payments', data)
+    return request.post<ChannelPaymentResponse>('/merchant/channel/payments', data)
   },
 
   queryChannelPayment: (paymentNo: string) => {
@@ -190,7 +190,7 @@ export const channelService = {
     currency: string
     reason?: string
   }) => {
-    return request.post('/channel/refunds', data)
+    return request.post('/merchant/channel/refunds', data)
   },
 
   queryChannelRefund: (refundNo: string) => {
@@ -199,18 +199,18 @@ export const channelService = {
 
   // Pre-authorization (Stripe specific)
   createPreAuth: (data: PreAuthRequest) => {
-    return request.post<PreAuthResponse>('/channel/pre-auth', data)
+    return request.post<PreAuthResponse>('/merchant/channel/pre-auth', data)
   },
 
   capturePreAuth: (data: {
     channel_pre_auth_no: string
     amount?: number
   }) => {
-    return request.post('/channel/pre-auth/capture', data)
+    return request.post('/merchant/channel/pre-auth/capture', data)
   },
 
   cancelPreAuth: (channelPreAuthNo: string) => {
-    return request.post('/channel/pre-auth/cancel', {
+    return request.post('/merchant/channel/pre-auth/cancel', {
       channel_pre_auth_no: channelPreAuthNo
     })
   },
@@ -221,7 +221,7 @@ export const channelService = {
 
   // Channel Configuration
   listChannelConfigs: () => {
-    return request.get('/channel/config')
+    return request.get('/merchant/channel/config')
   },
 
   getChannelConfig: (channel: string) => {
@@ -230,20 +230,20 @@ export const channelService = {
 
   // Exchange Rates
   getExchangeRates: (fromCurrency?: string, toCurrency?: string) => {
-    return request.get<ExchangeRate[]>('/exchange-rates', {
+    return request.get<ExchangeRate[]>('/merchant/exchange-rates', {
       params: { from_currency: fromCurrency, to_currency: toCurrency }
     })
   },
 
   getExchangeRate: (fromCurrency: string, toCurrency: string) => {
-    return request.get<ExchangeRate>('/exchange-rates/convert', {
+    return request.get<ExchangeRate>('/merchant/exchange-rates/convert', {
       params: { from: fromCurrency, to: toCurrency }
     })
   },
 
   // Legacy/Compatibility APIs
   list: (params: ListChannelsParams) => {
-    return request.get<ListChannelsResponse>('/channels', { params })
+    return request.get<ListChannelsResponse>('/merchant/channels', { params })
   },
 
   getById: (id: string) => {
@@ -251,7 +251,7 @@ export const channelService = {
   },
 
   create: (data: CreateChannelRequest) => {
-    return request.post<Channel>('/channels', data)
+    return request.post<Channel>('/merchant/channels', data)
   },
 
   update: (id: string, data: UpdateChannelRequest) => {
@@ -271,7 +271,7 @@ export const channelService = {
   },
 
   getStats: () => {
-    return request.get<ChannelStats>('/channels/stats')
+    return request.get<ChannelStats>('/merchant/channels/stats')
   },
 
   testConnection: (id: string) => {
@@ -279,7 +279,7 @@ export const channelService = {
   },
 
   getHealthStatus: () => {
-    return request.get<ChannelHealthStatus[]>('/channels/health')
+    return request.get<ChannelHealthStatus[]>('/merchant/channels/health')
   },
 
   getSupportedCurrencies: (channelType: string) => {
@@ -291,7 +291,7 @@ export const channelService = {
   },
 
   batchToggle: (ids: string[], is_enabled: boolean) => {
-    return request.post('/channels/batch/toggle', { ids, is_enabled })
+    return request.post('/merchant/channels/batch/toggle', { ids, is_enabled })
   },
 }
 

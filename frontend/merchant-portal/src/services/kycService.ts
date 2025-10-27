@@ -71,7 +71,7 @@ export const kycService = {
    * 获取KYC申请列表
    */
   list: (params: ListKYCParams) => {
-    return request.get<ListKYCResponse>('/kyc/applications', { params })
+    return request.get<ListKYCResponse>('/merchant/kyc/applications', { params })
   },
 
   /**
@@ -106,7 +106,7 @@ export const kycService = {
    * 获取KYC统计信息
    */
   getStats: () => {
-    return request.get<KYCStats>('/kyc/stats')
+    return request.get<KYCStats>('/merchant/kyc/stats')
   },
 
   /**

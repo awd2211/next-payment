@@ -86,35 +86,35 @@ export const disputeService = {
    * Get disputes list with filters
    */
   list: (params: ListDisputesParams) => {
-    return request.get<ListDisputesResponse>('/api/v1/admin/disputes', { params })
+    return request.get<ListDisputesResponse>('/merchant/disputes', { params })
   },
 
   /**
    * Get dispute detail by ID
    */
   getDetail: (id: string) => {
-    return request.get<DisputeDetailResponse>(`/api/v1/admin/disputes/${id}`)
+    return request.get<DisputeDetailResponse>(`/merchant/disputes/${id}`)
   },
 
   /**
    * Get evidence list for a dispute
    */
   getEvidence: (disputeId: string) => {
-    return request.get<EvidenceListResponse>(`/api/v1/admin/disputes/${disputeId}/evidence`)
+    return request.get<EvidenceListResponse>(`/merchant/disputes/${disputeId}/evidence`)
   },
 
   /**
    * Resolve a dispute (accept or reject)
    */
   resolve: (id: string, data: ResolveDisputeRequest) => {
-    return request.post<ResolveDisputeResponse>(`/api/v1/admin/disputes/${id}/resolve`, data)
+    return request.post<ResolveDisputeResponse>(`/merchant/disputes/${id}/resolve`, data)
   },
 
   /**
    * Upload evidence file
    */
   uploadEvidence: (disputeId: string, formData: FormData) => {
-    return request.post(`/api/v1/admin/disputes/${disputeId}/evidence`, formData, {
+    return request.post(`/merchant/disputes/${disputeId}/evidence`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -125,7 +125,7 @@ export const disputeService = {
    * Download evidence file
    */
   downloadEvidence: (disputeId: string, evidenceId: string) => {
-    return request.get(`/api/v1/admin/disputes/${disputeId}/evidence/${evidenceId}/download`, {
+    return request.get(`/merchant/disputes/${disputeId}/evidence/${evidenceId}/download`, {
       responseType: 'blob',
     })
   },
@@ -134,7 +134,7 @@ export const disputeService = {
    * Export disputes report
    */
   export: (params: ListDisputesParams) => {
-    return request.get('/api/v1/admin/disputes/export', {
+    return request.get('/merchant/disputes/export', {
       params,
       responseType: 'blob',
     })
@@ -144,6 +144,6 @@ export const disputeService = {
    * Get dispute statistics
    */
   getStats: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get('/api/v1/admin/disputes/stats', { params })
+    return request.get('/merchant/disputes/stats', { params })
   },
 }

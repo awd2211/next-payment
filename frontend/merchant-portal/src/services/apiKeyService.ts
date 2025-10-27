@@ -48,14 +48,14 @@ export const apiKeyService = {
    * 注意：API Key和Secret只在创建时返回一次，请妥善保管
    */
   createAPIKey: (data: CreateAPIKeyInput) => {
-    return request.post<CreateAPIKeyResponse>('/api-keys', data)
+    return request.post<CreateAPIKeyResponse>('/merchant/api-keys', data)
   },
 
   /**
    * 列出商户的所有API Keys
    */
   listAPIKeys: () => {
-    return request.get<APIKey[]>('/api-keys')
+    return request.get<APIKey[]>('/merchant/api-keys')
   },
 
   /**
@@ -70,41 +70,41 @@ export const apiKeyService = {
    * 修改密码
    */
   changePassword: (data: ChangePasswordInput) => {
-    return request.put('/security/password', data)
+    return request.put('/merchant/security/password', data)
   },
 
   /**
    * 启用双因素认证
    */
   enable2FA: () => {
-    return request.post<{ qr_code: string; secret: string }>('/security/2fa/enable')
+    return request.post<{ qr_code: string; secret: string }>('/merchant/security/2fa/enable')
   },
 
   /**
    * 验证双因素认证
    */
   verify2FA: (code: string) => {
-    return request.post('/security/2fa/verify', { code })
+    return request.post('/merchant/security/2fa/verify', { code })
   },
 
   /**
    * 禁用双因素认证
    */
   disable2FA: (password: string) => {
-    return request.post('/security/2fa/disable', { password })
+    return request.post('/merchant/security/2fa/disable', { password })
   },
 
   /**
    * 获取安全设置
    */
   getSecuritySettings: () => {
-    return request.get<SecuritySettings>('/security/settings')
+    return request.get<SecuritySettings>('/merchant/security/settings')
   },
 
   /**
    * 更新安全设置
    */
   updateSecuritySettings: (data: Partial<SecuritySettings>) => {
-    return request.put<SecuritySettings>('/security/settings', data)
+    return request.put<SecuritySettings>('/merchant/security/settings', data)
   },
 }
