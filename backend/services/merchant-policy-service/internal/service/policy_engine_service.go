@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -45,6 +46,13 @@ func NewPolicyEngineService(
 		bindingRepo:     bindingRepo,
 		tierRepo:        tierRepo,
 	}
+}
+
+// TieredRule 阶梯费率规则
+type TieredRule struct {
+	MinAmount  int64    `json:"min_amount"`            // 最小金额（分）
+	MaxAmount  *int64   `json:"max_amount,omitempty"`  // 最大金额（分，null表示无上限）
+	Percentage float64  `json:"percentage"`            // 费率百分比
 }
 
 // FeeCalculationResult 费用计算结果
@@ -159,9 +167,31 @@ func (s *policyEngineService) CalculateFee(ctx context.Context, merchantID uuid.
 		result.CalculationNotes = fmt.Sprintf("固定费用: %d 分", policy.FeeFixed)
 
 	case model.FeeTypeTiered:
-		// TODO: 解析 TieredRules JSON 实现阶梯费率
-		result.FeeAmount = int64(float64(amount) * policy.FeePercentage)
-		result.CalculationNotes = "阶梯费率（待实现）"
+		// ✅ FIXED: 解析 TieredRules JSON 实现阶梯费率
+		if policy.TieredRules == "" {
+			return nil, fmt.Errorf("阶梯费率策略缺少TieredRules配置")
+		}
+
+		var rules []TieredRule
+		if err := json.Unmarshal([]byte(policy.TieredRules), &rules); err != nil {
+			return nil, fmt.Errorf("解析阶梯费率规则失败: %w", err)
+		}
+
+		// 根据交易金额找到匹配的阶梯
+		matchedRule := findMatchingTieredRule(rules, amount)
+		if matchedRule == nil {
+			return nil, fmt.Errorf("未找到匹配的阶梯费率规则（金额: %d）", amount)
+		}
+
+		result.FeeAmount = int64(float64(amount) * matchedRule.Percentage)
+		result.FeePercentage = matchedRule.Percentage
+		if matchedRule.MaxAmount != nil {
+			result.CalculationNotes = fmt.Sprintf("阶梯费率: 金额区间 [%d, %d], 费率 %.2f%%",
+				matchedRule.MinAmount, *matchedRule.MaxAmount, matchedRule.Percentage*100)
+		} else {
+			result.CalculationNotes = fmt.Sprintf("阶梯费率: 金额区间 [%d, +∞), 费率 %.2f%%",
+				matchedRule.MinAmount, matchedRule.Percentage*100)
+		}
 
 	default:
 		return nil, fmt.Errorf("不支持的费率类型: %s", policy.FeeType)
@@ -227,4 +257,20 @@ func (s *policyEngineService) CheckLimit(ctx context.Context, merchantID uuid.UU
 	}
 
 	return result, nil
+}
+
+// findMatchingTieredRule 根据金额找到匹配的阶梯费率规则
+func findMatchingTieredRule(rules []TieredRule, amount int64) *TieredRule {
+	for i := range rules {
+		rule := &rules[i]
+		// 金额必须 >= MinAmount
+		if amount < rule.MinAmount {
+			continue
+		}
+		// 如果MaxAmount为null（表示无上限）或金额 <= MaxAmount，则匹配
+		if rule.MaxAmount == nil || amount <= *rule.MaxAmount {
+			return rule
+		}
+	}
+	return nil
 }

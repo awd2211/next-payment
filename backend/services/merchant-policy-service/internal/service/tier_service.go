@@ -21,13 +21,15 @@ type TierService interface {
 }
 
 type tierService struct {
-	tierRepo repository.TierRepository
+	tierRepo    repository.TierRepository
+	bindingRepo repository.PolicyBindingRepository
 }
 
 // NewTierService 创建等级服务实例
-func NewTierService(tierRepo repository.TierRepository) TierService {
+func NewTierService(tierRepo repository.TierRepository, bindingRepo repository.PolicyBindingRepository) TierService {
 	return &tierService{
-		tierRepo: tierRepo,
+		tierRepo:    tierRepo,
+		bindingRepo: bindingRepo,
 	}
 }
 
@@ -153,7 +155,14 @@ func (s *tierService) DeleteTier(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("等级不存在")
 	}
 
-	// TODO: 检查是否有商户使用此等级（需要调用 PolicyBindingRepository）
+	// ✅ FIXED: 检查是否有商户使用此等级
+	_, count, err := s.bindingRepo.ListByTierID(ctx, id, 0, 1)
+	if err != nil {
+		return fmt.Errorf("检查等级使用情况失败: %w", err)
+	}
+	if count > 0 {
+		return fmt.Errorf("等级正在被 %d 个商户使用，无法删除", count)
+	}
 
 	if err := s.tierRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("删除等级失败: %w", err)

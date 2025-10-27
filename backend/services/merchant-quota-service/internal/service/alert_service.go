@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"payment-platform/merchant-quota-service/internal/client"
 	"payment-platform/merchant-quota-service/internal/model"
 	"payment-platform/merchant-quota-service/internal/repository"
 	"github.com/payment-platform/pkg/logger"
@@ -34,20 +35,24 @@ type AlertService interface {
 }
 
 type alertService struct {
-	alertRepo    repository.AlertRepository
-	quotaRepo    repository.QuotaRepository
-	// TODO: 添加 NotificationClient 用于发送预警通知
-	// notificationClient client.NotificationClient
+	alertRepo          repository.AlertRepository
+	quotaRepo          repository.QuotaRepository
+	policyClient       client.PolicyClient
+	notificationClient *client.NotificationClient
 }
 
 // NewAlertService 创建预警服务实例
 func NewAlertService(
 	alertRepo repository.AlertRepository,
 	quotaRepo repository.QuotaRepository,
+	policyClient client.PolicyClient,
+	notificationClient *client.NotificationClient,
 ) AlertService {
 	return &alertService{
-		alertRepo: alertRepo,
-		quotaRepo: quotaRepo,
+		alertRepo:          alertRepo,
+		quotaRepo:          quotaRepo,
+		policyClient:       policyClient,
+		notificationClient: notificationClient,
 	}
 }
 
@@ -81,16 +86,21 @@ func (s *alertService) CheckQuotaAlerts(ctx context.Context) error {
 	totalAlerts := 0
 
 	for _, quota := range quotas {
-		// TODO: 调用 policy-service 获取限额策略
-		// limitPolicy, err := s.policyClient.GetEffectiveLimitPolicy(ctx, quota.MerchantID, "all", quota.Currency)
-		// if err != nil {
-		//     logger.Error("获取限额策略失败", zap.Error(err))
-		//     continue
-		// }
+		// ✅ FIXED: 调用 policy-service 获取限额策略
+		limitPolicy, err := s.policyClient.GetEffectiveLimitPolicy(ctx, quota.MerchantID, "all", quota.Currency)
+		if err != nil {
+			logger.Error("获取限额策略失败，使用默认限额",
+				zap.String("merchant_id", quota.MerchantID.String()),
+				zap.Error(err))
+			// 使用默认限额作为降级方案
+			limitPolicy = &client.LimitPolicy{
+				DailyLimit:   500000000,  // $5,000,000
+				MonthlyLimit: 10000000000, // $100,000,000
+			}
+		}
 
-		// 临时使用硬编码限额进行测试
-		dailyLimit := int64(1000000)   // 10,000.00 USD
-		monthlyLimit := int64(10000000) // 100,000.00 USD
+		dailyLimit := limitPolicy.DailyLimit
+		monthlyLimit := limitPolicy.MonthlyLimit
 
 		alerts := s.checkQuotaThresholds(quota, dailyLimit, monthlyLimit)
 		for _, alert := range alerts {
@@ -110,8 +120,32 @@ func (s *alertService) CheckQuotaAlerts(ctx context.Context) error {
 				continue
 			}
 
-			// TODO: 发送预警通知
-			// s.notificationClient.SendAlert(ctx, alert)
+			// ✅ FIXED: 发送预警通知
+			if s.notificationClient != nil {
+				notifReq := &client.SendQuotaAlertRequest{
+					MerchantID: alert.MerchantID,
+					Type:       getNotificationType(alert.AlertLevel),
+					Title:      "配额预警通知",
+					Content:    alert.Message,
+					Data: map[string]interface{}{
+						"alert_id":      alert.ID.String(),
+						"alert_type":    alert.AlertType,
+						"alert_level":   alert.AlertLevel,
+						"currency":      alert.Currency,
+						"current_used":  alert.CurrentUsed,
+						"limit":         alert.Limit,
+						"usage_percent": alert.UsagePercent,
+					},
+					Priority: getPriority(alert.AlertLevel),
+				}
+
+				if err := s.notificationClient.SendQuotaAlert(ctx, notifReq); err != nil {
+					logger.Error("发送配额预警通知失败",
+						zap.String("alert_id", alert.ID.String()),
+						zap.Error(err))
+					// 不阻止流程继续，通知发送失败不影响预警创建
+				}
+			}
 
 			logger.Warn("配额预警",
 				zap.String("merchant_id", alert.MerchantID.String()),
@@ -143,9 +177,21 @@ func (s *alertService) CheckMerchantQuotaAlert(ctx context.Context, merchantID u
 		return fmt.Errorf("配额不存在")
 	}
 
-	// TODO: 调用 policy-service 获取限额策略
-	dailyLimit := int64(1000000)
-	monthlyLimit := int64(10000000)
+	// ✅ FIXED: 调用 policy-service 获取限额策略
+	limitPolicy, err := s.policyClient.GetEffectiveLimitPolicy(ctx, merchantID, "all", currency)
+	if err != nil {
+		logger.Error("获取限额策略失败，使用默认限额",
+			zap.String("merchant_id", merchantID.String()),
+			zap.Error(err))
+		// 使用默认限额作为降级方案
+		limitPolicy = &client.LimitPolicy{
+			DailyLimit:   500000000,  // $5,000,000
+			MonthlyLimit: 10000000000, // $100,000,000
+		}
+	}
+
+	dailyLimit := limitPolicy.DailyLimit
+	monthlyLimit := limitPolicy.MonthlyLimit
 
 	alerts := s.checkQuotaThresholds(quota, dailyLimit, monthlyLimit)
 	for _, alert := range alerts {
@@ -297,7 +343,31 @@ func (s *alertService) ListAlerts(ctx context.Context, merchantID *uuid.UUID, al
 	}, nil
 }
 
-// Helper function
+// Helper functions
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// getNotificationType 根据预警级别返回通知类型
+func getNotificationType(alertLevel string) string {
+	switch alertLevel {
+	case "critical":
+		return "quota_critical"
+	case "warning":
+		return "quota_warning"
+	default:
+		return "quota_info"
+	}
+}
+
+// getPriority 根据预警级别返回通知优先级
+func getPriority(alertLevel string) string {
+	switch alertLevel {
+	case "critical":
+		return "high"
+	case "warning":
+		return "medium"
+	default:
+		return "low"
+	}
 }

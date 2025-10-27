@@ -11,6 +11,7 @@ import (
 	"github.com/payment-platform/pkg/configclient"
 	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
+	"payment-platform/merchant-quota-service/internal/client"
 	"payment-platform/merchant-quota-service/internal/handler"
 	"payment-platform/merchant-quota-service/internal/model"
 	"payment-platform/merchant-quota-service/internal/repository"
@@ -102,9 +103,14 @@ func main() {
 
 	logger.Info("正在启动 Merchant Quota Service...")
 
-	// 3. TODO: 初始化 merchant-policy-service 客户端 (下阶段实现)
-	// policyServiceURL := getConfig("POLICY_SERVICE_URL", "http://localhost:40012")
-	// policyClient := client.NewPolicyClient(policyServiceURL)
+	// 3. 初始化服务客户端
+	policyServiceURL := getConfig("POLICY_SERVICE_URL", "http://localhost:40012")
+	policyClient := client.NewPolicyClient(policyServiceURL)
+	logger.Info("PolicyClient初始化成功", zap.String("url", policyServiceURL))
+
+	notificationServiceURL := getConfig("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
+	notificationClient := client.NewNotificationClient(notificationServiceURL)
+	logger.Info("NotificationClient初始化成功", zap.String("url", notificationServiceURL))
 
 	// 4. 初始化 Repository
 	quotaRepo := repository.NewQuotaRepository(application.DB)
@@ -112,11 +118,21 @@ func main() {
 	alertRepo := repository.NewAlertRepository(application.DB)
 
 	// 5. 初始化 Service
-	quotaService := service.NewQuotaService(quotaRepo, usageLogRepo)
-	alertService := service.NewAlertService(alertRepo, quotaRepo)
+	quotaService := service.NewQuotaService(quotaRepo, usageLogRepo, policyClient)
+	alertService := service.NewAlertService(alertRepo, quotaRepo, policyClient, notificationClient)
 
 	// 6. JWT 认证中间件（优先从配置中心获取）
-	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
+	// ⚠️ 安全要求: JWT_SECRET必须在生产环境中设置，不能使用默认值
+	jwtSecret := getConfig("JWT_SECRET", "")
+	if jwtSecret == "" {
+		logger.Fatal("JWT_SECRET environment variable is required and cannot be empty")
+	}
+	if len(jwtSecret) < 32 {
+		logger.Fatal("JWT_SECRET must be at least 32 characters for security",
+			zap.Int("current_length", len(jwtSecret)),
+			zap.Int("minimum_length", 32))
+	}
+	logger.Info("JWT_SECRET validation passed", zap.Int("length", len(jwtSecret)))
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

@@ -29,18 +29,24 @@ type PolicyBindingService interface {
 }
 
 type policyBindingService struct {
-	bindingRepo repository.PolicyBindingRepository
-	tierRepo    repository.TierRepository
+	bindingRepo     repository.PolicyBindingRepository
+	tierRepo        repository.TierRepository
+	feePolicyRepo   repository.FeePolicyRepository
+	limitPolicyRepo repository.LimitPolicyRepository
 }
 
 // NewPolicyBindingService 创建策略绑定服务实例
 func NewPolicyBindingService(
 	bindingRepo repository.PolicyBindingRepository,
 	tierRepo repository.TierRepository,
+	feePolicyRepo repository.FeePolicyRepository,
+	limitPolicyRepo repository.LimitPolicyRepository,
 ) PolicyBindingService {
 	return &policyBindingService{
-		bindingRepo: bindingRepo,
-		tierRepo:    tierRepo,
+		bindingRepo:     bindingRepo,
+		tierRepo:        tierRepo,
+		feePolicyRepo:   feePolicyRepo,
+		limitPolicyRepo: limitPolicyRepo,
 	}
 }
 
@@ -165,7 +171,32 @@ func (s *policyBindingService) SetCustomPolicy(ctx context.Context, input *SetCu
 		return nil, fmt.Errorf("商户未绑定等级")
 	}
 
-	// TODO: 验证自定义策略ID是否存在（需要 FeePolicyRepository 和 LimitPolicyRepository）
+	// ✅ FIXED: 验证自定义策略ID是否存在
+	if input.CustomFeePolicyID != nil {
+		feePolicy, err := s.feePolicyRepo.GetByID(ctx, *input.CustomFeePolicyID)
+		if err != nil {
+			return nil, fmt.Errorf("查询自定义费率策略失败: %w", err)
+		}
+		if feePolicy == nil {
+			return nil, fmt.Errorf("自定义费率策略不存在 (ID: %s)", input.CustomFeePolicyID.String())
+		}
+		if feePolicy.Status != model.FeeStatusActive {
+			return nil, fmt.Errorf("自定义费率策略未启用 (状态: %s)", feePolicy.Status)
+		}
+	}
+
+	if input.CustomLimitPolicyID != nil {
+		limitPolicy, err := s.limitPolicyRepo.GetByID(ctx, *input.CustomLimitPolicyID)
+		if err != nil {
+			return nil, fmt.Errorf("查询自定义限额策略失败: %w", err)
+		}
+		if limitPolicy == nil {
+			return nil, fmt.Errorf("自定义限额策略不存在 (ID: %s)", input.CustomLimitPolicyID.String())
+		}
+		if limitPolicy.Status != model.LimitStatusActive {
+			return nil, fmt.Errorf("自定义限额策略未启用 (状态: %s)", limitPolicy.Status)
+		}
+	}
 
 	// 更新自定义策略
 	binding.CustomFeePolicyID = input.CustomFeePolicyID
@@ -195,7 +226,22 @@ func (s *policyBindingService) GetMerchantBinding(ctx context.Context, merchantI
 		Tier:    tier,
 	}
 
-	// TODO: 查询自定义费率策略和限额策略（如果有）
+	// ✅ FIXED: 查询自定义费率策略和限额策略（如果有）
+	if binding.CustomFeePolicyID != nil {
+		feePolicy, err := s.feePolicyRepo.GetByID(ctx, *binding.CustomFeePolicyID)
+		if err != nil {
+			return nil, fmt.Errorf("查询自定义费率策略失败: %w", err)
+		}
+		detail.CustomFeePolicy = feePolicy
+	}
+
+	if binding.CustomLimitPolicyID != nil {
+		limitPolicy, err := s.limitPolicyRepo.GetByID(ctx, *binding.CustomLimitPolicyID)
+		if err != nil {
+			return nil, fmt.Errorf("查询自定义限额策略失败: %w", err)
+		}
+		detail.CustomLimitPolicy = limitPolicy
+	}
 
 	return detail, nil
 }

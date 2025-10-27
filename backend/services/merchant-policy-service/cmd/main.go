@@ -111,12 +111,22 @@ func main() {
 	bindingRepo := repository.NewPolicyBindingRepository(application.DB)
 
 	// 4. 初始化 Service
-	tierService := service.NewTierService(tierRepo)
+	tierService := service.NewTierService(tierRepo, bindingRepo)
 	policyEngineService := service.NewPolicyEngineService(feePolicyRepo, limitPolicyRepo, bindingRepo, tierRepo)
-	policyBindingService := service.NewPolicyBindingService(bindingRepo, tierRepo)
+	policyBindingService := service.NewPolicyBindingService(bindingRepo, tierRepo, feePolicyRepo, limitPolicyRepo)
 
 	// 5. JWT 认证中间件（优先从配置中心获取）
-	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
+	// ⚠️ 安全要求: JWT_SECRET必须在生产环境中设置，不能使用默认值
+	jwtSecret := getConfig("JWT_SECRET", "")
+	if jwtSecret == "" {
+		logger.Fatal("JWT_SECRET environment variable is required and cannot be empty")
+	}
+	if len(jwtSecret) < 32 {
+		logger.Fatal("JWT_SECRET must be at least 32 characters for security",
+			zap.Int("current_length", len(jwtSecret)),
+			zap.Int("minimum_length", 32))
+	}
+	logger.Info("JWT_SECRET validation passed", zap.Int("length", len(jwtSecret)))
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"payment-platform/merchant-quota-service/internal/client"
 	"payment-platform/merchant-quota-service/internal/model"
 	"payment-platform/merchant-quota-service/internal/repository"
 	"github.com/payment-platform/pkg/logger"
@@ -42,20 +43,21 @@ type QuotaService interface {
 }
 
 type quotaService struct {
-	quotaRepo     repository.QuotaRepository
-	usageLogRepo  repository.UsageLogRepository
-	// TODO: 添加 PolicyClient 用于调用 merchant-policy-service
-	// policyClient  client.PolicyClient
+	quotaRepo    repository.QuotaRepository
+	usageLogRepo repository.UsageLogRepository
+	policyClient client.PolicyClient
 }
 
 // NewQuotaService 创建配额服务实例
 func NewQuotaService(
 	quotaRepo repository.QuotaRepository,
 	usageLogRepo repository.UsageLogRepository,
+	policyClient client.PolicyClient,
 ) QuotaService {
 	return &quotaService{
 		quotaRepo:    quotaRepo,
 		usageLogRepo: usageLogRepo,
+		policyClient: policyClient,
 	}
 }
 
@@ -119,11 +121,14 @@ func (s *quotaService) InitializeQuota(ctx context.Context, input *InitializeQuo
 		return nil, fmt.Errorf("配额已存在")
 	}
 
-	// TODO: 调用 policy-service 获取商户的限额策略
-	// limitPolicy, err := s.policyClient.GetEffectiveLimitPolicy(ctx, input.MerchantID, "all", input.Currency)
-	// if err != nil {
-	//     return nil, fmt.Errorf("获取限额策略失败: %w", err)
-	// }
+	// 调用 policy-service 获取商户的限额策略
+	limitPolicy, err := s.policyClient.GetEffectiveLimitPolicy(ctx, input.MerchantID, "all", input.Currency)
+	if err != nil {
+		logger.Warn("获取限额策略失败，使用默认值",
+			zap.String("merchant_id", input.MerchantID.String()),
+			zap.Error(err))
+		// 继续使用默认策略
+	}
 
 	// 创建配额记录
 	now := time.Now()
@@ -138,6 +143,14 @@ func (s *quotaService) InitializeQuota(ctx context.Context, input *InitializeQuo
 		MonthlyResetAt: now,
 		IsSuspended:    false,
 		Version:        1,
+	}
+
+	// 如果获取到策略,记录在日志中
+	if limitPolicy != nil {
+		logger.Info("已应用限额策略",
+			zap.String("merchant_id", input.MerchantID.String()),
+			zap.Int64("daily_limit", limitPolicy.DailyLimit),
+			zap.Int64("monthly_limit", limitPolicy.MonthlyLimit))
 	}
 
 	if err := s.quotaRepo.Create(ctx, quota); err != nil {
@@ -171,27 +184,20 @@ func (s *quotaService) ConsumeQuota(ctx context.Context, input *ConsumeQuotaInpu
 		}, nil
 	}
 
-	// 3. TODO: 调用 policy-service 检查限额
-	// limitPolicy, err := s.policyClient.GetEffectiveLimitPolicy(ctx, input.MerchantID, "all", input.Currency)
-	// if err != nil {
-	//     return nil, fmt.Errorf("获取限额策略失败: %w", err)
-	// }
-	//
-	// if quota.DailyUsed + input.Amount > limitPolicy.DailyLimit {
-	//     return &QuotaOperationResult{
-	//         Success: false,
-	//         Message: "超过日限额",
-	//         Quota:   quota,
-	//     }, nil
-	// }
-	//
-	// if quota.MonthlyUsed + input.Amount > limitPolicy.MonthlyLimit {
-	//     return &QuotaOperationResult{
-	//         Success: false,
-	//         Message: "超过月限额",
-	//         Quota:   quota,
-	//     }, nil
-	// }
+	// 3. 调用 policy-service 检查限额
+	limitCheckResult, err := s.policyClient.CheckLimit(ctx, input.MerchantID, "all", input.Currency, input.Amount, quota.DailyUsed, quota.MonthlyUsed)
+	if err != nil {
+		logger.Warn("检查限额策略失败，允许交易继续",
+			zap.String("merchant_id", input.MerchantID.String()),
+			zap.Error(err))
+		// 降级策略：如果无法获取限额策略，允许交易继续
+	} else if !limitCheckResult.IsAllowed {
+		return &QuotaOperationResult{
+			Success: false,
+			Message: limitCheckResult.RejectionReason,
+			Quota:   quota,
+		}, nil
+	}
 
 	// 4. 保存消耗前的快照
 	dailyBefore := quota.DailyUsed
