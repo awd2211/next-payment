@@ -31,29 +31,14 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
-import axios from 'axios';
+import { configService, type SystemConfig } from '../services/configService';
 
 const { Search } = Input;
 const { Option } = Select;
 const { TextArea } = Input;
 const { TabPane } = Tabs;
 
-interface Config {
-  id: string;
-  service_name: string;
-  config_key: string;
-  config_value: string;
-  value_type: string;
-  environment: string;
-  description: string;
-  is_encrypted: boolean;
-  version: number;
-  created_by: string;
-  updated_by: string;
-  created_at: string;
-  updated_at: string;
-}
-
+// Using SystemConfig from configService
 interface ConfigHistory {
   id: string;
   config_id: string;
@@ -69,7 +54,6 @@ interface FeatureFlag {
   flag_key: string;
   flag_value: boolean;
   description: string;
-  environment: string;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -77,19 +61,18 @@ interface FeatureFlag {
 
 const ConfigManagement: React.FC = () => {
   const { t } = useTranslation();
-  const [configs, setConfigs] = useState<Config[]>([]);
+  const [configs, setConfigs] = useState<SystemConfig[]>([]);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
-  const [editingConfig, setEditingConfig] = useState<Config | null>(null);
+  const [editingConfig, setEditingConfig] = useState<SystemConfig | null>(null);
   const [configHistory, setConfigHistory] = useState<ConfigHistory[]>([]);
   const [form] = Form.useForm();
 
   // 筛选条件
   const [filters, setFilters] = useState({
-    service_name: 'all',
-    environment: 'production',
+    category: 'all',
     search: '',
   });
 
@@ -105,26 +88,22 @@ const ConfigManagement: React.FC = () => {
   const loadConfigs = async () => {
     setLoading(true);
     try {
-      const params: any = {
-        environment: filters.environment,
-      };
-      if (filters.service_name !== 'all') {
-        params.service_name = filters.service_name;
+      const params: any = {};
+      if (filters.category !== 'all') {
+        params.category = filters.category;
       }
 
-      const response = await axios.get('http://localhost:40010/api/v1/configs', {
-        params,
-      });
+      const response = await configService.listConfigs(params);
 
-      if (response.data.code === 'SUCCESS') {
-        const configList = response.data.data.list || [];
+      if (response.data) {
+        const configList = Array.isArray(response.data) ? response.data : (response.data.list || []);
         setConfigs(configList);
 
         // 计算统计数据
         setStats({
           total: configList.length,
-          encrypted: configList.filter((c: Config) => c.is_encrypted).length,
-          services: new Set(configList.map((c: Config) => c.service_name)).size,
+          encrypted: configList.filter((c: SystemConfig) => c.is_encrypted).length,
+          services: new Set(configList.map((c: SystemConfig) => c.category)).size,
           flags: featureFlags.length,
         });
       }
@@ -139,11 +118,10 @@ const ConfigManagement: React.FC = () => {
   // 加载功能开关
   const loadFeatureFlags = async () => {
     try {
-      const response = await axios.get('http://localhost:40010/api/v1/feature-flags', {
-        params: { environment: filters.environment },
-      });
-      if (response.data.code === 'SUCCESS') {
-        setFeatureFlags(response.data.data.list || []);
+      const response = await configService.listFeatureFlags();
+      if (response.data) {
+        const flagList = Array.isArray(response.data) ? response.data : (response.data.list || []);
+        setFeatureFlags(flagList);
       }
     } catch (error) {
       console.error('加载功能开关失败:', error);
@@ -160,11 +138,11 @@ const ConfigManagement: React.FC = () => {
     try {
       if (editingConfig) {
         // 更新配置
-        await axios.put(`http://localhost:40010/api/v1/configs/${editingConfig.id}`, values);
+        await configService.updateConfig(editingConfig.id, values);
         message.success('配置更新成功');
       } else {
         // 新增配置
-        await axios.post('http://localhost:40010/api/v1/configs', values);
+        await configService.createConfig(values);
         message.success('配置创建成功');
       }
       setModalVisible(false);
@@ -180,7 +158,7 @@ const ConfigManagement: React.FC = () => {
   // 删除配置
   const handleDeleteConfig = async (id: string) => {
     try {
-      await axios.delete(`http://localhost:40010/api/v1/configs/${id}`);
+      await configService.deleteConfig(id);
       message.success('配置删除成功');
       loadConfigs();
     } catch (error) {
@@ -192,9 +170,10 @@ const ConfigManagement: React.FC = () => {
   // 查看配置历史
   const handleViewHistory = async (configId: string) => {
     try {
-      const response = await axios.get(`http://localhost:40010/api/v1/configs/${configId}/history`);
-      if (response.data.code === 'SUCCESS') {
-        setConfigHistory(response.data.data.list || []);
+      const response = await configService.getConfigHistory(configId);
+      if (response.data) {
+        const historyList = Array.isArray(response.data) ? response.data : (response.data.list || []);
+        setConfigHistory(historyList);
         setHistoryModalVisible(true);
       }
     } catch (error) {
@@ -206,12 +185,11 @@ const ConfigManagement: React.FC = () => {
   // 切换功能开关
   const handleToggleFeatureFlag = async (flagKey: string, enabled: boolean) => {
     try {
-      await axios.put(`http://localhost:40010/api/v1/feature-flags/${flagKey}`, {
-        enabled,
-        environment: filters.environment,
-      });
-      message.success(enabled ? '功能已启用' : '功能已禁用');
-      loadFeatureFlags();
+      // TODO: Add updateFeatureFlag method to configService
+      message.warning('功能开关更新暂不支持');
+      // await configService.updateFeatureFlag(flagKey, { enabled });
+      // message.success(enabled ? '功能已启用' : '功能已禁用');
+      // loadFeatureFlags();
     } catch (error) {
       message.error('操作失败');
       console.error(error);
@@ -219,18 +197,18 @@ const ConfigManagement: React.FC = () => {
   };
 
   // 配置表格列
-  const columns: ColumnsType<Config> = [
+  const columns: ColumnsType<SystemConfig> = [
     {
-      title: '服务名称',
-      dataIndex: 'service_name',
-      key: 'service_name',
+      title: '分类',
+      dataIndex: 'category',
+      key: 'category',
       width: 150,
       render: (text) => <Tag color="blue">{text}</Tag>,
     },
     {
       title: '配置项',
-      dataIndex: 'config_key',
-      key: 'config_key',
+      dataIndex: 'key',
+      key: 'key',
       width: 200,
       render: (text, record) => (
         <Space>
@@ -245,8 +223,8 @@ const ConfigManagement: React.FC = () => {
     },
     {
       title: '配置值',
-      dataIndex: 'config_value',
-      key: 'config_value',
+      dataIndex: 'value',
+      key: 'value',
       width: 200,
       ellipsis: true,
       render: (text, record) => {
@@ -257,19 +235,12 @@ const ConfigManagement: React.FC = () => {
       },
     },
     {
-      title: '类型',
-      dataIndex: 'value_type',
-      key: 'value_type',
+      title: '公开',
+      dataIndex: 'is_public',
+      key: 'is_public',
       width: 100,
-      render: (text) => <Tag>{text}</Tag>,
-    },
-    {
-      title: '环境',
-      dataIndex: 'environment',
-      key: 'environment',
-      width: 100,
-      render: (text) => (
-        <Tag color={text === 'production' ? 'red' : 'green'}>{text}</Tag>
+      render: (isPublic) => (
+        <Tag color={isPublic ? 'green' : 'orange'}>{isPublic ? '公开' : '私有'}</Tag>
       ),
     },
     {
@@ -345,13 +316,6 @@ const ConfigManagement: React.FC = () => {
       key: 'description',
     },
     {
-      title: '环境',
-      dataIndex: 'environment',
-      key: 'environment',
-      width: 100,
-      render: (text) => <Tag color={text === 'production' ? 'red' : 'green'}>{text}</Tag>,
-    },
-    {
       title: '状态',
       dataIndex: 'enabled',
       key: 'enabled',
@@ -377,9 +341,9 @@ const ConfigManagement: React.FC = () => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       return (
-        config.config_key.toLowerCase().includes(searchLower) ||
-        config.config_value.toLowerCase().includes(searchLower) ||
-        config.description.toLowerCase().includes(searchLower)
+        config.key.toLowerCase().includes(searchLower) ||
+        config.value.toLowerCase().includes(searchLower) ||
+        (config.description && config.description.toLowerCase().includes(searchLower))
       );
     }
     return true;
@@ -436,24 +400,14 @@ const ConfigManagement: React.FC = () => {
               <Space>
                 <Select
                   style={{ width: 200 }}
-                  value={filters.service_name}
-                  onChange={(value) => setFilters({ ...filters, service_name: value })}
+                  value={filters.category}
+                  onChange={(value) => setFilters({ ...filters, category: value })}
                 >
-                  <Option value="all">所有服务</Option>
+                  <Option value="all">所有分类</Option>
                   <Option value="global">全局配置</Option>
-                  <Option value="payment-gateway">payment-gateway</Option>
-                  <Option value="order-service">order-service</Option>
-                  <Option value="channel-adapter">channel-adapter</Option>
-                </Select>
-
-                <Select
-                  style={{ width: 150 }}
-                  value={filters.environment}
-                  onChange={(value) => setFilters({ ...filters, environment: value })}
-                >
-                  <Option value="production">生产环境</Option>
-                  <Option value="development">开发环境</Option>
-                  <Option value="staging">预发布环境</Option>
+                  <Option value="payment">支付配置</Option>
+                  <Option value="security">安全配置</Option>
+                  <Option value="notification">通知配置</Option>
                 </Select>
 
                 <Search
@@ -534,32 +488,33 @@ const ConfigManagement: React.FC = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                label="服务名称"
-                name="service_name"
-                rules={[{ required: true, message: '请输入服务名称' }]}
+                label="分类"
+                name="category"
+                rules={[{ required: true, message: '请选择分类' }]}
               >
-                <Input placeholder="如: payment-gateway, global" />
+                <Select placeholder="选择配置分类">
+                  <Option value="global">全局配置</Option>
+                  <Option value="payment">支付配置</Option>
+                  <Option value="security">安全配置</Option>
+                  <Option value="notification">通知配置</Option>
+                </Select>
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
-                label="环境"
-                name="environment"
-                rules={[{ required: true, message: '请选择环境' }]}
-                initialValue="production"
+                label="是否公开"
+                name="is_public"
+                valuePropName="checked"
+                initialValue={false}
               >
-                <Select>
-                  <Option value="production">生产环境</Option>
-                  <Option value="development">开发环境</Option>
-                  <Option value="staging">预发布环境</Option>
-                </Select>
+                <Switch checkedChildren="公开" unCheckedChildren="私有" />
               </Form.Item>
             </Col>
           </Row>
 
           <Form.Item
             label="配置键名"
-            name="config_key"
+            name="key"
             rules={[{ required: true, message: '请输入配置键名' }]}
           >
             <Input placeholder="如: JWT_SECRET, KAFKA_BROKERS" />
@@ -567,39 +522,20 @@ const ConfigManagement: React.FC = () => {
 
           <Form.Item
             label="配置值"
-            name="config_value"
+            name="value"
             rules={[{ required: true, message: '请输入配置值' }]}
           >
             <TextArea rows={3} placeholder="配置的具体值" />
           </Form.Item>
 
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="值类型"
-                name="value_type"
-                rules={[{ required: true, message: '请选择值类型' }]}
-                initialValue="string"
-              >
-                <Select>
-                  <Option value="string">字符串</Option>
-                  <Option value="integer">整数</Option>
-                  <Option value="boolean">布尔值</Option>
-                  <Option value="json">JSON</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="是否加密"
-                name="is_encrypted"
-                valuePropName="checked"
-                initialValue={false}
-              >
-                <Switch checkedChildren="是" unCheckedChildren="否" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item
+            label="是否加密"
+            name="is_encrypted"
+            valuePropName="checked"
+            initialValue={false}
+          >
+            <Switch checkedChildren="是" unCheckedChildren="否" />
+          </Form.Item>
 
           <Form.Item
             label="描述"
