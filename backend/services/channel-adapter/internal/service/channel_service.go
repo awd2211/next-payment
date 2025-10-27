@@ -42,13 +42,15 @@ type ChannelService interface {
 
 type channelService struct {
 	repo           repository.ChannelRepository
+	preAuthRepo    repository.PreAuthRepository
 	adapterFactory *adapter.AdapterFactory
 }
 
 // NewChannelService 创建渠道服务实例
-func NewChannelService(repo repository.ChannelRepository, factory *adapter.AdapterFactory) ChannelService {
+func NewChannelService(repo repository.ChannelRepository, preAuthRepo repository.PreAuthRepository, factory *adapter.AdapterFactory) ChannelService {
 	return &channelService{
 		repo:           repo,
+		preAuthRepo:    preAuthRepo,
 		adapterFactory: factory,
 	}
 }
@@ -640,7 +642,39 @@ func (s *channelService) CreatePreAuth(ctx context.Context, req *CreatePreAuthRe
 		return nil, fmt.Errorf("创建预授权失败: %w", err)
 	}
 
-	// 3. 返回响应
+	// 3. 保存预授权记录到数据库
+	// 转换ExpiresAt: *int64 -> *time.Time
+	var expiresAt *time.Time
+	if adapterResp.ExpiresAt != nil {
+		t := time.Unix(*adapterResp.ExpiresAt, 0)
+		expiresAt = &t
+	}
+
+	// 转换Extra: map -> JSON string
+	extraJSON, _ := json.Marshal(adapterResp.Extra)
+
+	preAuthRecord := &model.PreAuthRecord{
+		MerchantID:       uuid.Nil, // TODO: 从上下文或请求中获取MerchantID
+		OrderNo:          req.OrderNo,
+		PaymentNo:        req.PreAuthNo,
+		Channel:          req.Channel,
+		ChannelPreAuthNo: adapterResp.ChannelPreAuthNo,
+		Amount:           req.Amount,
+		Currency:         req.Currency,
+		Status:           adapterResp.Status,
+		CapturedAmount:   0,
+		ExpiresAt:        expiresAt,
+		Extra:            string(extraJSON),
+	}
+
+	if err := s.preAuthRepo.Create(ctx, preAuthRecord); err != nil {
+		logger.Error("保存预授权记录失败",
+			zap.String("channel_pre_auth_no", adapterResp.ChannelPreAuthNo),
+			zap.Error(err))
+		// 不中断流程,仅记录错误
+	}
+
+	// 4. 返回响应
 	return &CreatePreAuthResponse{
 		PreAuthNo:        req.PreAuthNo,
 		ChannelPreAuthNo: adapterResp.ChannelPreAuthNo,
@@ -725,9 +759,17 @@ func (s *channelService) CancelPreAuth(ctx context.Context, req *CancelPreAuthRe
 
 // QueryPreAuth 查询预授权状态
 func (s *channelService) QueryPreAuth(ctx context.Context, channelPreAuthNo string) (*QueryPreAuthResponse, error) {
-	// TODO: 从数据库获取预授权记录以确定使用哪个渠道
-	// 这里暂时返回错误，需要调用方传递 channel 参数
-	return nil, fmt.Errorf("QueryPreAuth 需要指定渠道，请使用 QueryPreAuthWithChannel")
+	// 1. 从数据库获取预授权记录以确定使用哪个渠道
+	preAuthRecord, err := s.preAuthRepo.GetByChannelPreAuthNo(ctx, channelPreAuthNo)
+	if err != nil {
+		logger.Error("查询预授权记录失败",
+			zap.String("channel_pre_auth_no", channelPreAuthNo),
+			zap.Error(err))
+		return nil, fmt.Errorf("预授权记录不存在: %w", err)
+	}
+
+	// 2. 使用记录中的渠道信息查询
+	return s.QueryPreAuthWithChannel(ctx, preAuthRecord.Channel, channelPreAuthNo)
 }
 
 // QueryPreAuthWithChannel 查询预授权状态（指定渠道）

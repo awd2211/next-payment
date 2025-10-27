@@ -98,6 +98,7 @@ func main() {
 			&model.WebhookLog{},
 			&model.ExchangeRate{},
 			&model.ExchangeRateSnapshot{},
+			&model.PreAuthRecord{},
 		},
 
 		// 启用企业级功能
@@ -207,9 +208,10 @@ func main() {
 
 	// 10. 初始化Repository
 	channelRepo := repository.NewChannelRepository(application.DB)
+	preAuthRepo := repository.NewPreAuthRepository(application.DB)
 
 	// 11. 初始化Service
-	channelService := service.NewChannelService(channelRepo, adapterFactory)
+	channelService := service.NewChannelService(channelRepo, preAuthRepo, adapterFactory)
 
 	// 12. 初始化Handler
 	channelHandler := handler.NewChannelHandler(channelService)

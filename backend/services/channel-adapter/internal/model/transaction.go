@@ -81,3 +81,36 @@ const (
 	TransactionStatusCancelled  = "cancelled"  // 已取消
 	TransactionStatusRefunded   = "refunded"   // 已退款
 )
+
+// PreAuthRecord 预授权记录表
+type PreAuthRecord struct {
+	ID                uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	MerchantID        uuid.UUID      `gorm:"type:uuid;not null;index" json:"merchant_id"`           // 商户ID
+	OrderNo           string         `gorm:"type:varchar(64);index" json:"order_no"`                // 订单号
+	PaymentNo         string         `gorm:"type:varchar(64);index" json:"payment_no"`              // 支付流水号
+	Channel           string         `gorm:"type:varchar(50);not null;index" json:"channel"`        // 渠道
+	ChannelPreAuthNo  string         `gorm:"type:varchar(200);unique;index" json:"channel_pre_auth_no"` // 渠道预授权号
+	Amount            int64          `gorm:"type:bigint;not null" json:"amount"`                    // 预授权金额（分）
+	Currency          string         `gorm:"type:varchar(10);not null" json:"currency"`             // 货币
+	Status            string         `gorm:"type:varchar(20);not null;index" json:"status"`         // 状态
+	CapturedAmount    int64          `gorm:"type:bigint;default:0" json:"captured_amount"`          // 已捕获金额（分）
+	ExpiresAt         *time.Time     `gorm:"type:timestamptz" json:"expires_at"`                    // 过期时间
+	Extra             string         `gorm:"type:jsonb" json:"extra"`                               // 扩展信息
+	CreatedAt         time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	UpdatedAt         time.Time      `gorm:"type:timestamptz;default:now()" json:"updated_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// TableName 指定表名
+func (PreAuthRecord) TableName() string {
+	return "pre_auth_records"
+}
+
+// 预授权状态常量
+const (
+	PreAuthStatusPending   = "pending"   // 待处理
+	PreAuthStatusAuthorized = "authorized" // 已授权
+	PreAuthStatusCaptured  = "captured"  // 已捕获
+	PreAuthStatusCancelled = "cancelled" // 已取消
+	PreAuthStatusExpired   = "expired"   // 已过期
+)
