@@ -44,6 +44,7 @@ type OrderService interface {
 	// 统计分析
 	GetOrderStatistics(ctx context.Context, merchantID uuid.UUID, startDate, endDate time.Time, currency string) ([]*model.OrderStatistics, error)
 	GetDailySummary(ctx context.Context, merchantID uuid.UUID, date time.Time) (map[string]interface{}, error)
+	GetOrderStats(ctx context.Context) (map[string]interface{}, error)
 }
 
 type orderService struct {
@@ -968,6 +969,74 @@ func (s *orderService) generateOrderNo() string {
 	rand.Read(randomBytes)
 	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:10]
 	return fmt.Sprintf("OD%s%s", timestamp, randomStr)
+}
+
+// GetOrderStats 获取全局订单统计（实时聚合数据库）
+func (s *orderService) GetOrderStats(ctx context.Context) (map[string]interface{}, error) {
+	var result struct {
+		TotalAmount    int64 `gorm:"column:total_amount"`
+		TotalCount     int64 `gorm:"column:total_count"`
+		PaidCount      int64 `gorm:"column:paid_count"`
+		PendingCount   int64 `gorm:"column:pending_count"`
+		CancelledCount int64 `gorm:"column:cancelled_count"`
+	}
+
+	// 全局订单统计（所有商户）
+	err := s.db.WithContext(ctx).
+		Model(&model.Order{}).
+		Select(`
+			COALESCE(SUM(total_amount), 0) as total_amount,
+			COUNT(*) as total_count,
+			COUNT(CASE WHEN status = ? THEN 1 END) as paid_count,
+			COUNT(CASE WHEN status = ? THEN 1 END) as pending_count,
+			COUNT(CASE WHEN status = ? THEN 1 END) as cancelled_count
+		`, model.OrderStatusPaid, model.OrderStatusPending, model.OrderStatusCancelled).
+		Scan(&result).Error
+
+	if err != nil {
+		logger.Error("failed to get order stats", zap.Error(err))
+		return nil, fmt.Errorf("查询订单统计失败: %w", err)
+	}
+
+	// 今日订单统计
+	var todayResult struct {
+		TodayAmount int64 `gorm:"column:today_amount"`
+		TodayCount  int64 `gorm:"column:today_count"`
+	}
+
+	today := time.Now()
+	startOfDay := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+
+	err = s.db.WithContext(ctx).
+		Model(&model.Order{}).
+		Select(`
+			COALESCE(SUM(total_amount), 0) as today_amount,
+			COUNT(*) as today_count
+		`).
+		Where("created_at >= ?", startOfDay).
+		Scan(&todayResult).Error
+
+	if err != nil {
+		logger.Error("failed to get today's order stats", zap.Error(err))
+		return nil, fmt.Errorf("查询今日订单统计失败: %w", err)
+	}
+
+	stats := map[string]interface{}{
+		"total_amount":    result.TotalAmount,
+		"total_count":     result.TotalCount,
+		"paid_count":      result.PaidCount,
+		"pending_count":   result.PendingCount,
+		"cancelled_count": result.CancelledCount,
+		"today_amount":    todayResult.TodayAmount,
+		"today_count":     todayResult.TodayCount,
+	}
+
+	logger.Info("order stats retrieved",
+		zap.Int64("total_count", result.TotalCount),
+		zap.Int64("paid_count", result.PaidCount),
+		zap.Int64("today_count", todayResult.TodayCount))
+
+	return stats, nil
 }
 
 // publishOrderEvent 发布订单事件到Kafka

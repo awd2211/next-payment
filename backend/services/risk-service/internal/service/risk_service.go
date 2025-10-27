@@ -36,6 +36,9 @@ type RiskService interface {
 	RemoveBlacklist(ctx context.Context, id uuid.UUID) error
 	CheckBlacklist(ctx context.Context, entityType, entityValue string) (bool, *model.Blacklist, error)
 	ListBlacklist(ctx context.Context, query *repository.BlacklistQuery) ([]*model.Blacklist, int64, error)
+
+	// 支付反馈（用于风控模型训练）
+	ReportPaymentResult(ctx context.Context, input *PaymentFeedbackInput) error
 }
 
 type riskService struct {
@@ -92,6 +95,13 @@ type AddBlacklistInput struct {
 	Reason      string `json:"reason" binding:"required"`
 	AddedBy     string `json:"added_by"`
 	ExpireAt    *time.Time `json:"expire_at"`
+}
+
+type PaymentFeedbackInput struct {
+	PaymentNo  string `json:"payment_no" binding:"required"`
+	Success    bool   `json:"success"`
+	Fraudulent bool   `json:"fraudulent"`
+	Notes      string `json:"notes"`
 }
 
 // Rule Management
@@ -324,7 +334,7 @@ func (s *riskService) CheckPayment(ctx context.Context, input *PaymentCheckInput
 	}
 
 	// 5. IP地理位置检查 (+10分)
-	geoRisk := s.checkIPGeolocation(ctx, input.PayerIP)
+	geoRisk, geoInfo := s.checkIPGeolocationWithInfo(ctx, input.PayerIP)
 	if geoRisk != "" {
 		riskScore += 10
 		if check.Reason != "" {
@@ -336,6 +346,12 @@ func (s *riskService) CheckPayment(ctx context.Context, input *PaymentCheckInput
 		check.CheckResult["geo_score"] = 10
 	} else {
 		check.CheckResult["geo_risk"] = "normal"
+	}
+	// 存储 GeoIP 信息供下游使用（如智能路由）
+	if geoInfo != nil {
+		check.CheckResult["geo_country_code"] = geoInfo.CountryCode
+		check.CheckResult["geo_country"] = geoInfo.Country
+		check.CheckResult["geo_city"] = geoInfo.City
 	}
 
 	// 6. 执行动态规则引擎（可能增加额外分数）
@@ -800,10 +816,16 @@ func (s *riskService) emailMatchesDomain(email, domain string) bool {
 	return false
 }
 
-// checkIPGeolocation 检查IP地理位置风险
+// checkIPGeolocation 检查IP地理位置风险（向后兼容）
 func (s *riskService) checkIPGeolocation(ctx context.Context, ip string) string {
+	riskMsg, _ := s.checkIPGeolocationWithInfo(ctx, ip)
+	return riskMsg
+}
+
+// checkIPGeolocationWithInfo 检查IP地理位置风险并返回GeoIP信息
+func (s *riskService) checkIPGeolocationWithInfo(ctx context.Context, ip string) (string, *client.GeoIPInfo) {
 	if ip == "" {
-		return ""
+		return "", nil
 	}
 
 	// 注意：这是一个简化的示例实现
@@ -821,7 +843,7 @@ func (s *riskService) checkIPGeolocation(ctx context.Context, ip string) string 
 
 	for _, prefix := range highRiskPrefixes {
 		if s.ipMatchesPrefix(ip, prefix) {
-			return fmt.Sprintf("高风险地理位置: IP段 %s", prefix)
+			return fmt.Sprintf("高风险地理位置: IP段 %s", prefix), nil
 		}
 	}
 
@@ -831,21 +853,24 @@ func (s *riskService) checkIPGeolocation(ctx context.Context, ip string) string 
 		if err == nil && geoInfo != nil {
 			// 检查高风险国家
 			if client.IsHighRiskCountry(geoInfo.CountryCode) {
-				return fmt.Sprintf("高风险国家: %s (%s)", geoInfo.Country, geoInfo.CountryCode)
+				return fmt.Sprintf("高风险国家: %s (%s)", geoInfo.Country, geoInfo.CountryCode), geoInfo
 			}
 
 			// 检查IP是否属于已知的高风险段
 			if client.IsHighRiskIP(ip) {
-				return fmt.Sprintf("高风险IP段: %s (来源: %s, %s)", ip, geoInfo.City, geoInfo.Country)
+				return fmt.Sprintf("高风险IP段: %s (来源: %s, %s)", ip, geoInfo.City, geoInfo.Country), geoInfo
 			}
 
 			// 注：ipapi.co 免费版不提供代理/VPN检测
 			// 如需此功能，可升级到付费版或集成其他服务
+
+			// 即使没有风险，也返回 GeoIP 信息供下游使用
+			return "", geoInfo
 		}
 		// GeoIP 查询失败不影响整体风控流程，继续后续检查
 	}
 
-	return ""
+	return "", nil
 }
 
 // isHighRiskCountry 判断是否为高风险国家（示例）
@@ -869,5 +894,100 @@ func (s *riskService) invalidateRuleCache(ctx context.Context, id uuid.UUID) {
 		logger.Warn("删除风控规则缓存失败", zap.String("cache_key", cacheKey), zap.Error(err))
 	} else {
 		logger.Info("风控规则缓存已失效", zap.String("cache_key", cacheKey))
+	}
+}
+
+// ReportPaymentResult 上报支付结果（用于风控模型训练）
+func (s *riskService) ReportPaymentResult(ctx context.Context, input *PaymentFeedbackInput) error {
+	// 1. 查找关联的风控检查记录
+	check, err := s.riskRepo.GetCheckByPaymentNo(ctx, input.PaymentNo)
+	if err != nil {
+		// 未找到风控检查记录，仍然记录反馈（可能是跳过风控的支付）
+		logger.Warn("未找到风控检查记录",
+			zap.String("payment_no", input.PaymentNo),
+			zap.Error(err))
+	}
+
+	// 2. 创建支付反馈记录
+	feedback := &model.PaymentFeedback{
+		PaymentNo:  input.PaymentNo,
+		Success:    input.Success,
+		Fraudulent: input.Fraudulent,
+		Notes:      input.Notes,
+	}
+
+	// 3. 如果找到风控检查记录，关联数据
+	if check != nil {
+		feedback.CheckID = check.ID
+		feedback.RiskScore = check.RiskScore
+		feedback.Decision = check.Decision
+
+		// 根据实际结果计算真实风险等级
+		if input.Fraudulent {
+			feedback.ActualRisk = model.RiskLevelCritical
+		} else if !input.Success {
+			feedback.ActualRisk = model.RiskLevelHigh
+		} else {
+			feedback.ActualRisk = model.RiskLevelLow
+		}
+	}
+
+	// 4. 保存反馈记录到数据库
+	if err := s.riskRepo.CreatePaymentFeedback(ctx, feedback); err != nil {
+		return fmt.Errorf("保存支付反馈失败: %w", err)
+	}
+
+	// 5. 记录日志用于后续分析
+	logger.Info("支付反馈已记录",
+		zap.String("payment_no", input.PaymentNo),
+		zap.Bool("success", input.Success),
+		zap.Bool("fraudulent", input.Fraudulent),
+		zap.String("actual_risk", feedback.ActualRisk),
+		zap.Int("risk_score", feedback.RiskScore))
+
+	// 6. 如果是欺诈交易，自动添加到黑名单（可选逻辑）
+	if input.Fraudulent && check != nil {
+		go s.autoBlacklistFraud(context.Background(), check)
+	}
+
+	return nil
+}
+
+// autoBlacklistFraud 自动将欺诈交易的相关信息添加到黑名单
+func (s *riskService) autoBlacklistFraud(ctx context.Context, check *model.RiskCheck) {
+	// 从检查数据中提取可疑信息
+	checkData := check.CheckData
+
+	// 添加邮箱到黑名单
+	if email, ok := checkData["payer_email"].(string); ok && email != "" {
+		s.AddBlacklist(ctx, &AddBlacklistInput{
+			EntityType:  "email",
+			EntityValue: email,
+			Reason:      "欺诈交易自动拉黑",
+			AddedBy:     "system",
+		})
+		logger.Info("欺诈邮箱已添加到黑名单", zap.String("email", email))
+	}
+
+	// 添加IP到黑名单
+	if ip, ok := checkData["payer_ip"].(string); ok && ip != "" {
+		s.AddBlacklist(ctx, &AddBlacklistInput{
+			EntityType:  "ip",
+			EntityValue: ip,
+			Reason:      "欺诈交易自动拉黑",
+			AddedBy:     "system",
+		})
+		logger.Info("欺诈IP已添加到黑名单", zap.String("ip", ip))
+	}
+
+	// 添加设备ID到黑名单
+	if deviceID, ok := checkData["device_id"].(string); ok && deviceID != "" {
+		s.AddBlacklist(ctx, &AddBlacklistInput{
+			EntityType:  "device",
+			EntityValue: deviceID,
+			Reason:      "欺诈交易自动拉黑",
+			AddedBy:     "system",
+		})
+		logger.Info("欺诈设备已添加到黑名单", zap.String("device_id", deviceID))
 	}
 }

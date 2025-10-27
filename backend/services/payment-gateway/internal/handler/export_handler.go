@@ -340,6 +340,16 @@ func (h *ExportHandler) ListExportTasks(c *gin.Context) {
 	// 分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100 // 最大限制100条/页
+	}
 
 	if page < 1 {
 		page = 1

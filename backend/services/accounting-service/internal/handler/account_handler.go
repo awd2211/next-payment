@@ -192,6 +192,16 @@ func (h *AccountHandler) ListAccounts(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	accounts, total, err := h.accountService.ListAccounts(c.Request.Context(), query)
 	if err != nil {
@@ -366,6 +376,16 @@ func (h *AccountHandler) ListTransactions(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	transactions, total, err := h.accountService.ListTransactions(c.Request.Context(), query)
 	if err != nil {
@@ -503,6 +523,16 @@ func (h *AccountHandler) ListSettlements(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	settlements, total, err := h.accountService.ListSettlements(c.Request.Context(), query)
 	if err != nil {
@@ -673,6 +703,16 @@ func (h *AccountHandler) ListWithdrawals(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	withdrawals, total, err := h.accountService.ListWithdrawals(c.Request.Context(), query)
 	if err != nil {
@@ -950,6 +990,16 @@ func (h *AccountHandler) ListInvoices(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	invoices, total, err := h.accountService.ListInvoices(c.Request.Context(), query)
 	if err != nil {
@@ -1132,6 +1182,16 @@ func (h *AccountHandler) ListReconciliations(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	reconciliations, total, err := h.accountService.ListReconciliations(c.Request.Context(), query)
 	if err != nil {
@@ -1488,6 +1548,16 @@ func (h *AccountHandler) ListCurrencyConversions(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	conversions, total, err := h.accountService.ListCurrencyConversions(c.Request.Context(), query)
 	if err != nil {

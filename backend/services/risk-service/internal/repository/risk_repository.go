@@ -30,6 +30,10 @@ type RiskRepository interface {
 	CheckBlacklist(ctx context.Context, entityType, entityValue string) (*model.Blacklist, error)
 	ListBlacklist(ctx context.Context, query *BlacklistQuery) ([]*model.Blacklist, int64, error)
 	DeleteBlacklist(ctx context.Context, id uuid.UUID) error
+
+	// 支付反馈
+	CreatePaymentFeedback(ctx context.Context, feedback *model.PaymentFeedback) error
+	GetCheckByPaymentNo(ctx context.Context, paymentNo string) (*model.RiskCheck, error)
 }
 
 type riskRepository struct {
@@ -232,4 +236,27 @@ func (r *riskRepository) ListBlacklist(ctx context.Context, query *BlacklistQuer
 // DeleteBlacklist 删除黑名单
 func (r *riskRepository) DeleteBlacklist(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&model.Blacklist{}, "id = ?", id).Error
+}
+
+// CreatePaymentFeedback 创建支付反馈记录
+func (r *riskRepository) CreatePaymentFeedback(ctx context.Context, feedback *model.PaymentFeedback) error {
+	return r.db.WithContext(ctx).Create(feedback).Error
+}
+
+// GetCheckByPaymentNo 根据支付流水号获取风控检查记录
+func (r *riskRepository) GetCheckByPaymentNo(ctx context.Context, paymentNo string) (*model.RiskCheck, error) {
+	var check model.RiskCheck
+	// 从 CheckData 的 JSONB 字段中搜索 payment_no
+	err := r.db.WithContext(ctx).
+		Where("check_data->>'payment_no' = ?", paymentNo).
+		First(&check).Error
+
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &check, nil
 }

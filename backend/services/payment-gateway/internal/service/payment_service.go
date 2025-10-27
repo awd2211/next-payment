@@ -1298,8 +1298,8 @@ func (s *paymentService) SelectChannel(ctx context.Context, payment *model.Payme
 
 	// 优先使用智能路由服务（如果已配置）
 	if s.routerService != nil {
-		// 提取客户国家/地区（从IP或其他字段）
-		country := "US" // 默认美国，TODO: 从 GeoIP 获取
+		// 提取客户国家/地区（从IP地理位置）
+		country := s.getCountryFromIP(ctx, payment.CustomerIP)
 
 		routingReq := &router.RoutingRequest{
 			Amount:   payment.Amount,
@@ -1760,4 +1760,40 @@ func (s *paymentService) fallbackToHTTPClients(payment *model.Payment, oldStatus
 			}
 		}(payment)
 	}
+}
+
+// getCountryFromIP 从IP地址获取国家代码（用于智能路由）
+func (s *paymentService) getCountryFromIP(ctx context.Context, customerIP string) string {
+	// 默认值
+	defaultCountry := "US"
+
+	if customerIP == "" {
+		return defaultCountry
+	}
+
+	// 调用 risk-service 获取 GeoIP 信息
+	if s.riskClient != nil {
+		riskResult, err := s.riskClient.CheckRisk(ctx, &client.RiskCheckRequest{
+			CustomerIP: customerIP,
+			// 其他字段可以为空，我们只需要 GeoIP 信息
+		})
+		if err == nil && riskResult != nil && riskResult.Extra != nil {
+			// 从 Extra 中提取国家代码
+			if countryCode, ok := riskResult.Extra["geo_country_code"].(string); ok && countryCode != "" {
+				logger.Debug("从 GeoIP 获取国家代码",
+					zap.String("ip", customerIP),
+					zap.String("country", countryCode))
+				return countryCode
+			}
+		}
+		// GeoIP 查询失败不影响支付流程，使用默认值
+		if err != nil {
+			logger.Warn("GeoIP 查询失败，使用默认国家",
+				zap.Error(err),
+				zap.String("ip", customerIP),
+				zap.String("default_country", defaultCountry))
+		}
+	}
+
+	return defaultCountry
 }

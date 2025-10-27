@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"payment-platform/payment-gateway/internal/adapter"
 	"payment-platform/payment-gateway/internal/client"
 	"payment-platform/payment-gateway/internal/handler"
 	localMiddleware "payment-platform/payment-gateway/internal/middleware"
@@ -185,6 +186,10 @@ func main() {
 	eventPublisher := kafka.NewEventPublisher(kafkaBrokers)
 	logger.Info("EventPublisher 初始化完成 (事件驱动架构)")
 
+	// 创建 Kafka Producer 适配器（用于 Callback Saga）
+	kafkaProducerAdapter := adapter.NewKafkaProducerAdapter(kafkaBrokers)
+	logger.Info("Kafka Producer Adapter 初始化完成")
+
 	// 6. 初始化 Saga Orchestrator（分布式事务补偿）
 	sagaOrchestrator := saga.NewSagaOrchestratorWithMetrics(
 		application.DB,
@@ -242,9 +247,8 @@ func main() {
 		sagaOrchestrator,
 		paymentRepo,
 		orderClient,
-		nil, // TODO: 需要实现 KafkaProducer 适配器
+		kafkaProducerAdapter, // ✅ 使用 Kafka Producer 适配器
 	)
-	_ = eventPublisher // 保留引用
 	logger.Info("Callback Saga Service 初始化完成")
 
 	// 7. Webhook基础URL配置（用于渠道回调）
@@ -463,7 +467,18 @@ func main() {
 
 	// 商户后台查询路由（JWT认证 - 用于商户后台界面）
 	// 创建JWT Manager用于验证token
-	jwtSecret := getConfig("JWT_SECRET", "payment-platform-secret-key-2024")
+	// ⚠️ 安全要求: JWT_SECRET必须在生产环境中设置，不能使用默认值
+	jwtSecret := getConfig("JWT_SECRET", "")
+	if jwtSecret == "" {
+		logger.Fatal("JWT_SECRET environment variable is required and cannot be empty")
+	}
+	if len(jwtSecret) < 32 {
+		logger.Fatal("JWT_SECRET must be at least 32 characters for security",
+			zap.Int("current_length", len(jwtSecret)),
+			zap.Int("minimum_length", 32))
+	}
+	logger.Info("JWT_SECRET validation passed", zap.Int("length", len(jwtSecret)))
+
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 

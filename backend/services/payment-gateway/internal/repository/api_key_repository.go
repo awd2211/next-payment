@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -141,9 +142,25 @@ func (k *APIKey) ShouldRotate() bool {
 
 // isIPInCIDR 检查IP是否在CIDR范围内
 func isIPInCIDR(clientIP, cidr string) bool {
-	// 简化实现：这里应该使用net.ParseCIDR
-	// 为了避免引入过多依赖，暂时使用简单前缀匹配
-	// TODO: 使用 net.IPNet.Contains() 实现完整CIDR支持
-	prefix := strings.Split(cidr, "/")[0]
-	return strings.HasPrefix(clientIP, prefix[:len(prefix)-2]) // 简单前缀匹配
+	// 解析客户端IP地址
+	ip := net.ParseIP(clientIP)
+	if ip == nil {
+		// 无效的IP地址
+		return false
+	}
+
+	// 解析CIDR表示法
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		// 无效的CIDR格式，降级到前缀匹配
+		// 例如：192.168.1.0/24 解析失败时，尝试前缀匹配
+		prefix := strings.Split(cidr, "/")[0]
+		if len(prefix) > 2 {
+			return strings.HasPrefix(clientIP, prefix[:len(prefix)-2])
+		}
+		return false
+	}
+
+	// 使用标准库的 Contains 方法检查IP是否在CIDR范围内
+	return ipNet.Contains(ip)
 }

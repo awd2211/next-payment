@@ -84,3 +84,23 @@ const (
 	RuleStatusActive   = "active"
 	RuleStatusInactive = "inactive"
 )
+
+// PaymentFeedback 支付反馈记录（用于风控模型训练）
+type PaymentFeedback struct {
+	ID         uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	PaymentNo  string         `gorm:"type:varchar(64);not null;index" json:"payment_no"` // 支付流水号
+	CheckID    uuid.UUID      `gorm:"type:uuid;index" json:"check_id"`                   // 关联的风控检查ID
+	Success    bool           `gorm:"type:boolean;not null" json:"success"`              // 支付是否成功
+	Fraudulent bool           `gorm:"type:boolean;default:false" json:"fraudulent"`      // 是否为欺诈交易
+	RiskScore  int            `gorm:"type:integer" json:"risk_score"`                    // 当时的风险评分
+	Decision   string         `gorm:"type:varchar(20)" json:"decision"`                  // 当时的决策
+	ActualRisk string         `gorm:"type:varchar(20)" json:"actual_risk"`               // 实际风险级别
+	Notes      string         `gorm:"type:text" json:"notes"`                            // 备注
+	ReportedAt time.Time      `gorm:"type:timestamptz;default:now()" json:"reported_at"` // 上报时间
+	CreatedAt  time.Time      `gorm:"type:timestamptz;default:now()" json:"created_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+func (PaymentFeedback) TableName() string {
+	return "payment_feedbacks"
+}

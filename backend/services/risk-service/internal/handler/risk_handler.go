@@ -132,6 +132,16 @@ func (h *RiskHandler) ListRules(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	rules, total, err := h.riskService.ListRules(c.Request.Context(), query)
 	if err != nil {
@@ -317,6 +327,7 @@ func (h *RiskHandler) ReportPaymentResult(c *gin.Context) {
 		PaymentNo  string `json:"payment_no" binding:"required"`
 		Success    bool   `json:"success"`
 		Fraudulent bool   `json:"fraudulent"`
+		Notes      string `json:"notes"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		traceID := middleware.GetRequestID(c)
@@ -325,12 +336,31 @@ func (h *RiskHandler) ReportPaymentResult(c *gin.Context) {
 		return
 	}
 
-	// TODO: 实现支付结果上报逻辑，用于风控模型训练
-	// 可以记录支付结果，用于后续的机器学习模型训练
+	// 调用 service 层记录支付反馈
+	feedbackInput := &service.PaymentFeedbackInput{
+		PaymentNo:  input.PaymentNo,
+		Success:    input.Success,
+		Fraudulent: input.Fraudulent,
+		Notes:      input.Notes,
+	}
+
+	err := h.riskService.ReportPaymentResult(c.Request.Context(), feedbackInput)
+	if err != nil {
+		traceID := middleware.GetRequestID(c)
+		if bizErr, ok := errors.GetBusinessError(err); ok {
+			resp := errors.NewErrorResponseFromBusinessError(bizErr).WithTraceID(traceID)
+			c.JSON(errors.GetHTTPStatus(bizErr.Code), resp)
+		} else {
+			resp := errors.NewErrorResponse(errors.ErrCodeInternalError, "上报支付结果失败", err.Error()).WithTraceID(traceID)
+			c.JSON(http.StatusInternalServerError, resp)
+		}
+		return
+	}
 
 	traceID := middleware.GetRequestID(c)
 	resp := errors.NewSuccessResponse(gin.H{
 		"message": "上报成功",
+		"warning": "如标记为欺诈交易，相关信息已自动添加到黑名单",
 	}).WithTraceID(traceID)
 	c.JSON(http.StatusOK, resp)
 }
@@ -396,6 +426,16 @@ func (h *RiskHandler) ListChecks(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	checks, total, err := h.riskService.ListChecks(c.Request.Context(), query)
 	if err != nil {
@@ -516,6 +556,16 @@ func (h *RiskHandler) ListBlacklist(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	blacklists, total, err := h.riskService.ListBlacklist(c.Request.Context(), query)
 	if err != nil {

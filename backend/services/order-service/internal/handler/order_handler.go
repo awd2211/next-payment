@@ -11,7 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/payment-platform/pkg/errors"
+	"github.com/payment-platform/pkg/logger"
 	"github.com/payment-platform/pkg/middleware"
+	"go.uber.org/zap"
 )
 
 // OrderHandler 订单处理器
@@ -218,6 +220,16 @@ func (h *OrderHandler) QueryOrders(c *gin.Context) {
 
 	query.Page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
 	query.PageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// 验证并限制分页参数（防止DoS攻击）
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100 // 最大限制100条/页
+	}
 
 	orders, total, err := h.orderService.QueryOrders(c.Request.Context(), query)
 	if err != nil {
@@ -795,23 +807,30 @@ func ErrorResponse(message string) Response {
 	}
 }
 
-// GetOrderStats 获取订单统计（临时占位API）
+// GetOrderStats 获取订单统计（实时数据库聚合）
 // @Summary 获取订单统计
+// @Description 获取全局订单统计数据（总金额、总订单数、已支付/待支付/已取消订单数、今日订单数据）
 // @Tags Order
 // @Produce json
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} map[string]interface{} "订单统计数据"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router /api/v1/orders/stats [get]
 func (h *OrderHandler) GetOrderStats(c *gin.Context) {
-	// TODO: 从数据库聚合真实订单统计数据
+	ctx := c.Request.Context()
 	traceID := middleware.GetRequestID(c)
-	resp := errors.NewSuccessResponse(gin.H{
-		"total_amount":    0,
-		"total_count":     0,
-		"paid_count":      0,
-		"pending_count":   0,
-		"cancelled_count": 0,
-		"today_amount":    0,
-		"today_count":     0,
-	}).WithTraceID(traceID)
+
+	// 调用service层获取真实统计数据
+	stats, err := h.orderService.GetOrderStats(ctx)
+	if err != nil {
+		logger.Error("failed to get order stats", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, errors.NewErrorResponse(
+			errors.ErrCodeInternalError,
+			"获取订单统计失败",
+			err.Error(),
+		).WithTraceID(traceID))
+		return
+	}
+
+	resp := errors.NewSuccessResponse(stats).WithTraceID(traceID)
 	c.JSON(http.StatusOK, resp)
 }
