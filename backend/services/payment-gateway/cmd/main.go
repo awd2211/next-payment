@@ -156,18 +156,21 @@ func main() {
 	riskServiceURL := getConfig("RISK_SERVICE_URL", "http://localhost:40006")
 	notificationServiceURL := getConfig("NOTIFICATION_SERVICE_URL", "http://localhost:40008")
 	analyticsServiceURL := getConfig("ANALYTICS_SERVICE_URL", "http://localhost:40009")
+	merchantConfigServiceURL := getConfig("MERCHANT_CONFIG_SERVICE_URL", "http://localhost:40012")
 
 	orderClient := client.NewOrderClient(orderServiceURL)
 	channelClient := client.NewChannelClient(channelServiceURL)
 	riskClient := client.NewRiskClient(riskServiceURL)
 	notificationClient := client.NewNotificationClient(notificationServiceURL)
 	analyticsClient := client.NewAnalyticsClient(analyticsServiceURL)
+	merchantConfigClient := client.NewMerchantConfigClient(merchantConfigServiceURL)
 
 	logger.Info(fmt.Sprintf("Order Service URL: %s", orderServiceURL))
 	logger.Info(fmt.Sprintf("Channel Service URL: %s", channelServiceURL))
 	logger.Info(fmt.Sprintf("Risk Service URL: %s", riskServiceURL))
 	logger.Info(fmt.Sprintf("Notification Service URL: %s", notificationServiceURL))
 	logger.Info(fmt.Sprintf("Analytics Service URL: %s", analyticsServiceURL))
+	logger.Info(fmt.Sprintf("Merchant Config Service URL: %s", merchantConfigServiceURL))
 
 	// 5. 初始化Kafka Brokers（可选，如果未配置则为nil）
 	var kafkaBrokers []string
@@ -320,6 +323,7 @@ func main() {
 	webhookNotificationService := service.NewWebhookNotificationService(
 		webhookNotificationRepo,
 		application.Redis,
+		merchantConfigClient,
 	)
 	logger.Info("Webhook 通知服务已初始化")
 

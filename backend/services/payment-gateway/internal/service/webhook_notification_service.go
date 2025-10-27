@@ -11,6 +11,7 @@ import (
 	"github.com/payment-platform/pkg/webhook"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"payment-platform/payment-gateway/internal/client"
 	"payment-platform/payment-gateway/internal/model"
 	"payment-platform/payment-gateway/internal/repository"
 )
@@ -29,18 +30,21 @@ type WebhookNotificationService interface {
 }
 
 type webhookNotificationService struct {
-	repo    repository.WebhookNotificationRepository
-	retrier *webhook.WebhookRetrier
+	repo                 repository.WebhookNotificationRepository
+	retrier              *webhook.WebhookRetrier
+	merchantConfigClient client.MerchantConfigClient
 }
 
 // NewWebhookNotificationService 创建 Webhook 通知服务
 func NewWebhookNotificationService(
 	repo repository.WebhookNotificationRepository,
 	redisClient *redis.Client,
+	merchantConfigClient client.MerchantConfigClient,
 ) WebhookNotificationService {
 	return &webhookNotificationService{
-		repo:    repo,
-		retrier: webhook.NewWebhookRetrier(webhook.DefaultRetryConfig(), redisClient),
+		repo:                 repo,
+		retrier:              webhook.NewWebhookRetrier(webhook.DefaultRetryConfig(), redisClient),
+		merchantConfigClient: merchantConfigClient,
 	}
 }
 
@@ -174,8 +178,18 @@ func (s *webhookNotificationService) RetryFailedNotifications(ctx context.Contex
 			continue
 		}
 
-		// TODO: 从数据库或缓存获取 merchant secret
-		secret := "merchant-secret-key" // 临时占位
+		// 从merchant-config-service获取商户的webhook密钥
+		secret, err := s.merchantConfigClient.GetWebhookSecret(ctx, notification.MerchantID)
+		if err != nil {
+			logger.Error("获取商户webhook密钥失败",
+				zap.Error(err),
+				zap.String("merchant_id", notification.MerchantID.String()),
+				zap.String("notification_id", notification.ID.String()))
+			// 获取密钥失败,标记为失败并继续下一个
+			notification.Status = model.WebhookStatusFailed
+			s.repo.Update(ctx, notification)
+			continue
+		}
 
 		// 更新状态为重试中
 		notification.Status = model.WebhookStatusRetrying
