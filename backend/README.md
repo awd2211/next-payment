@@ -198,12 +198,44 @@ backend/
 
 ### 基础设施端口
 
-- PostgreSQL: 40432（docker）/ 5432（本地）
-- Redis: 40379（docker）/ 6379（本地）
-- Kafka: 40092（docker）/ 9092（本地）
-- Prometheus: 40090
-- Grafana: 40300（admin/admin）
-- Jaeger UI: 50686
+#### 核心数据存储
+- **PostgreSQL**: 40432（主数据库）
+- **Redis**: 40379（缓存）
+- **Kong PostgreSQL**: 40433（Kong 配置数据库）
+
+#### 消息队列
+- **Kafka**: 40092（内部）/ 40093（外部）
+- **Zookeeper**: 42181（Kafka 协调）
+- **Kafka UI**: 40084（Kafka 可视化管理）
+
+#### API 网关
+- **Kong Gateway**: 40080（API 代理）
+- **Kong Admin API**: 40081（管理接口）
+- **Konga UI**: 50001（Kong 可视化管理）
+
+#### 监控和可观测性
+- **Prometheus**: 40090（指标收集）
+- **Grafana**: 40300（可视化仪表板，admin/admin）
+- **Jaeger UI**: 50686（分布式追踪）
+- **Jaeger Collector**: 50268（HTTP）/ 50250（gRPC）
+- **OTLP**: 50317（gRPC）/ 50318（HTTP）
+
+#### 日志聚合（ELK Stack）
+- **Elasticsearch**: 40920（HTTP）/ 40930（TCP）
+- **Kibana**: 40561（日志可视化）
+- **Logstash**: 40514（TCP）/ 40515（UDP）/ 40944（监控）
+
+#### 监控 Exporters
+- **PostgreSQL Exporter**: 40187（数据库指标）
+- **Redis Exporter**: 40121（缓存指标）
+- **Kafka Exporter**: 40308（消息队列指标）
+- **cAdvisor**: 40180（容器监控）
+- **Node Exporter**: 40100（主机监控）
+
+#### 开发工具
+- **本地 PostgreSQL**: 5432
+- **本地 Redis**: 6379
+- **本地 Kafka**: 9092
 
 ---
 
