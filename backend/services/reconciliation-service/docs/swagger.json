@@ -1,0 +1,995 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "对账服务 - 自动对账、差异检测和报表生成",
+        "title": "Reconciliation Service API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "email": "support@payment-platform.com"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:40020",
+    "basePath": "/api/v1",
+    "paths": {
+        "/reconciliation/records": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "查询差异记录列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "task_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "差异类型",
+                        "name": "diff_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "是否已解决",
+                        "name": "is_resolved",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_service.RecordListResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/records/{record_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "获取差异记录详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "记录ID",
+                        "name": "record_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationRecord"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/records/{record_id}/resolve": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "标记差异已解决",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "记录ID",
+                        "name": "record_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "解决记录请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.ResolveRecordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/reports/{task_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "生成对账报告",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/settlement-files": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "查询文件列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "支付渠道",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结算日期 (YYYY-MM-DD)",
+                        "name": "settlement_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "文件状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始日期 (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (YYYY-MM-DD)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_service.FileListResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/settlement-files/download": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "下载渠道账单文件",
+                "parameters": [
+                    {
+                        "description": "下载文件请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.DownloadFileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/settlement-files/{file_no}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "获取文件详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "文件编号",
+                        "name": "file_no",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/tasks": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "查询任务列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务日期 (YYYY-MM-DD)",
+                        "name": "task_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "支付渠道",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "任务状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始日期 (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (YYYY-MM-DD)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_service.TaskListResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "创建对账任务",
+                "parameters": [
+                    {
+                        "description": "创建任务请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.CreateTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationTask"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/tasks/{task_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "获取任务详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/internal_handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/payment-platform_reconciliation-service_internal_service.TaskDetails"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/tasks/{task_id}/execute": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "执行对账任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/reconciliation/tasks/{task_id}/retry": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reconciliation"
+                ],
+                "summary": "重试失败的任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "internal_handler.CreateTaskRequest": {
+            "type": "object",
+            "required": [
+                "channel",
+                "task_date",
+                "task_type"
+            ],
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "task_date": {
+                    "type": "string"
+                },
+                "task_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.DownloadFileRequest": {
+            "type": "object",
+            "required": [
+                "channel",
+                "settlement_date"
+            ],
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "settlement_date": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.ResolveRecordRequest": {
+            "type": "object",
+            "required": [
+                "resolved_by"
+            ],
+            "properties": {
+                "note": {
+                    "type": "string"
+                },
+                "resolved_by": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.Response": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "data": {},
+                "message": {
+                    "type": "string"
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_model.ChannelSettlementFile": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "downloaded_at": {
+                    "description": "时间戳",
+                    "type": "string"
+                },
+                "file_hash": {
+                    "type": "string"
+                },
+                "file_no": {
+                    "type": "string"
+                },
+                "file_size": {
+                    "type": "integer"
+                },
+                "file_url": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "imported_at": {
+                    "type": "string"
+                },
+                "parsed_at": {
+                    "type": "string"
+                },
+                "record_count": {
+                    "description": "统计信息",
+                    "type": "integer"
+                },
+                "settlement_date": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "状态信息",
+                    "type": "string"
+                },
+                "total_amount": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_model.ReconciliationRecord": {
+            "type": "object",
+            "properties": {
+                "channel_amount": {
+                    "type": "integer"
+                },
+                "channel_status": {
+                    "type": "string"
+                },
+                "channel_trade_no": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "时间戳",
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "diff_amount": {
+                    "type": "integer"
+                },
+                "diff_reason": {
+                    "type": "string"
+                },
+                "diff_type": {
+                    "type": "string"
+                },
+                "extra": {
+                    "description": "扩展信息",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_resolved": {
+                    "description": "处理信息",
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "type": "string"
+                },
+                "order_no": {
+                    "type": "string"
+                },
+                "payment_no": {
+                    "description": "订单信息",
+                    "type": "string"
+                },
+                "platform_amount": {
+                    "description": "金额信息",
+                    "type": "integer"
+                },
+                "platform_status": {
+                    "description": "状态信息",
+                    "type": "string"
+                },
+                "resolution_note": {
+                    "type": "string"
+                },
+                "resolved_at": {
+                    "type": "string"
+                },
+                "resolved_by": {
+                    "type": "string"
+                },
+                "task_id": {
+                    "type": "string"
+                },
+                "task_no": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_model.ReconciliationTask": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "channel_amount": {
+                    "type": "integer"
+                },
+                "channel_count": {
+                    "type": "integer"
+                },
+                "channel_file_url": {
+                    "description": "文件信息",
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "diff_amount": {
+                    "type": "integer"
+                },
+                "diff_count": {
+                    "type": "integer"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "matched_amount": {
+                    "type": "integer"
+                },
+                "matched_count": {
+                    "type": "integer"
+                },
+                "platform_amount": {
+                    "type": "integer"
+                },
+                "platform_count": {
+                    "description": "统计信息",
+                    "type": "integer"
+                },
+                "progress": {
+                    "type": "integer"
+                },
+                "report_file_url": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "description": "时间戳",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "状态信息",
+                    "type": "string"
+                },
+                "task_date": {
+                    "type": "string"
+                },
+                "task_no": {
+                    "type": "string"
+                },
+                "task_type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_service.FileListResult": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_service.RecordListResult": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationRecord"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_service.TaskDetails": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile"
+                },
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationRecord"
+                    }
+                },
+                "summary": {
+                    "$ref": "#/definitions/payment-platform_reconciliation-service_internal_service.TaskSummary"
+                },
+                "task": {
+                    "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationTask"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_service.TaskListResult": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationTask"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "payment-platform_reconciliation-service_internal_service.TaskSummary": {
+            "type": "object",
+            "properties": {
+                "amount_diff_count": {
+                    "type": "integer"
+                },
+                "channel_only_count": {
+                    "type": "integer"
+                },
+                "diff_count": {
+                    "type": "integer"
+                },
+                "match_rate": {
+                    "type": "number"
+                },
+                "matched_count": {
+                    "type": "integer"
+                },
+                "platform_only_count": {
+                    "type": "integer"
+                },
+                "status_diff_count": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "unresolved_count": {
+                    "type": "integer"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and JWT token.",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

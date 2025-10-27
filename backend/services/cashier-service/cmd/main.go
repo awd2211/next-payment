@@ -15,7 +15,26 @@ import (
 	"payment-platform/cashier-service/internal/model"
 	"payment-platform/cashier-service/internal/repository"
 	"payment-platform/cashier-service/internal/service"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	_ "payment-platform/cashier-service/docs" // Swagger文档
 )
+
+//	@title						Cashier Service API
+//	@version					1.0
+//	@description				收银台服务 - 提供支付页面配置和模板管理
+//	@termsOfService				http://swagger.io/terms/
+//	@contact.name				API Support
+//	@contact.email				support@payment-platform.com
+//	@license.name				Apache 2.0
+//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+//	@host						localhost:40016
+//	@BasePath					/api/v1
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
 	// 1. 使用 Bootstrap 框架初始化应用
@@ -84,14 +103,19 @@ func main() {
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	authMiddleware := middleware.AuthMiddleware(jwtManager)
 
-	// 6. 注册路由 (需要认证)
+	// 6. 注册 Swagger 文档路由 (公开访问)
+	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// 7. 注册路由 (需要认证)
 	api := application.Router.Group("/api/v1")
 	api.Use(authMiddleware)
 	{
 		cashierHandler.RegisterRoutes(api)
 	}
 
-	// 7. 启动服务（优雅关闭）
+	logger.Info("Swagger文档已启用", zap.String("url", "http://localhost:40016/swagger/index.html"))
+
+	// 8. 启动服务（优雅关闭）
 	if err := application.RunWithGracefulShutdown(); err != nil {
 		logger.Fatal("服务启动失败: " + err.Error())
 	}

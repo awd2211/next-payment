@@ -1652,8 +1652,7 @@ func (s *accountService) CreateCurrencyConversion(ctx context.Context, input *Cr
 		}
 	}
 
-	// 5. 获取实时汇率（TODO: 调用 channel-adapter 的汇率API）
-	// 临时使用固定汇率，生产环境需要调用汇率服务
+	// 5. 获取实时汇率（通过 channel-adapter 的汇率API或降级到备用汇率）
 	exchangeRate := s.getExchangeRate(input.SourceCurrency, input.TargetCurrency)
 	if exchangeRate <= 0 {
 		return nil, fmt.Errorf("无法获取汇率: %s -> %s", input.SourceCurrency, input.TargetCurrency)

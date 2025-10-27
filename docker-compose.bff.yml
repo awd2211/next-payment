@@ -1,67 +1,92 @@
+# ============================================================================
+# Docker Compose - BFF Services (Admin + Merchant)
+# ============================================================================
+# 生成时间: 2025-10-27
+# 特性:
+# - 内网域名: admin-bff-service.payment-network, merchant-bff-service.payment-network
+# - mTLS启用: HTTPS + 证书挂载
+# - 聚合器模式: 18个微服务(Admin), 15个微服务(Merchant)
+# - 安全增强: RBAC, 2FA, 审计日志, 数据脱敏
+# ============================================================================
+
 version: '3.8'
 
-# ============================================================================
-# BFF Services Docker Compose Configuration
-# Admin BFF 和 Merchant BFF 服务配置
-# ============================================================================
-
 services:
-  # Admin BFF Service
-  admin-bff:
+  # ==========================================================================
+  # Admin BFF Service - 管理后台聚合服务
+  # ==========================================================================
+  admin-bff-service:
     build:
       context: ./backend
       dockerfile: services/admin-bff-service/Dockerfile
     container_name: payment-admin-bff
+    image: payment-platform/admin-bff-service:latest
+    hostname: admin-bff-service.payment-network
     ports:
       - "40001:40001"
     environment:
-      # 服务配置
+      # 基础配置
       - ENV=production
-      - PORT=40001
       - SERVICE_NAME=admin-bff-service
+      - PORT=40001
+      - DB_NAME=payment_admin
+      - GIN_MODE=release
 
-      # JWT配置
-      - JWT_SECRET=${JWT_SECRET:-payment-platform-secret-key-2024}
-
-      # 数据库配置（Admin BFF 需要数据库支持审计日志）
-      - DB_HOST=postgres
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
       - DB_PORT=5432
       - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=payment_admin
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
       - DB_MAX_IDLE_CONNS=10
       - DB_MAX_OPEN_CONNS=100
       - DB_CONN_MAX_LIFETIME=3600
 
-      # Redis配置（可选，用于速率限制）
-      - REDIS_HOST=redis
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=0
 
-      # 后端服务 URLs（18个微服务）
-      - CONFIG_SERVICE_URL=http://config-service:8010
-      - RISK_SERVICE_URL=http://risk-service:8006
-      - KYC_SERVICE_URL=http://kyc-service:8015
-      - MERCHANT_SERVICE_URL=http://merchant-service:8002
-      - ANALYTICS_SERVICE_URL=http://analytics-service:8009
-      - LIMIT_SERVICE_URL=http://limit-service:8022
-      - CHANNEL_SERVICE_URL=http://channel-adapter:8005
-      - CASHIER_SERVICE_URL=http://cashier-service:8016
-      - ORDER_SERVICE_URL=http://order-service:8004
-      - ACCOUNTING_SERVICE_URL=http://accounting-service:8007
-      - DISPUTE_SERVICE_URL=http://dispute-service:8021
-      - MERCHANT_AUTH_SERVICE_URL=http://merchant-auth-service:8011
-      - MERCHANT_CONFIG_SERVICE_URL=http://merchant-config-service:8012
-      - NOTIFICATION_SERVICE_URL=http://notification-service:8008
-      - PAYMENT_GATEWAY_URL=http://payment-gateway:8003
-      - RECONCILIATION_SERVICE_URL=http://reconciliation-service:8020
-      - SETTLEMENT_SERVICE_URL=http://settlement-service:8013
-      - WITHDRAWAL_SERVICE_URL=http://withdrawal-service:8014
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
 
-      # 可观测性配置
-      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/admin-bff-service/admin-bff-service.crt
+      - TLS_KEY_FILE=/app/certs/services/admin-bff-service/admin-bff-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/admin-bff-service/admin-bff-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/admin-bff-service/admin-bff-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+
+      # 下游服务URL (使用内网域名 + HTTPS) - 18个微服务
+      - CONFIG_SERVICE_URL=https://config-service.payment-network:40010
+      - RISK_SERVICE_URL=https://risk-service.payment-network:40006
+      - KYC_SERVICE_URL=https://kyc-service.payment-network:40015
+      - MERCHANT_SERVICE_URL=https://merchant-bff-service.payment-network:40023
+      - ANALYTICS_SERVICE_URL=https://analytics-service.payment-network:40009
+      - LIMIT_SERVICE_URL=https://merchant-quota-service.payment-network:40024
+      - CHANNEL_SERVICE_URL=https://channel-adapter.payment-network:40005
+      - CASHIER_SERVICE_URL=https://cashier-service.payment-network:40016
+      - ORDER_SERVICE_URL=https://order-service.payment-network:40004
+      - ACCOUNTING_SERVICE_URL=https://accounting-service.payment-network:40007
+      - DISPUTE_SERVICE_URL=https://dispute-service.payment-network:40021
+      - MERCHANT_AUTH_SERVICE_URL=https://merchant-auth-service.payment-network:40011
+      - MERCHANT_CONFIG_SERVICE_URL=https://merchant-policy-service.payment-network:40022
+      - NOTIFICATION_SERVICE_URL=https://notification-service.payment-network:40008
+      - PAYMENT_SERVICE_URL=https://payment-gateway.payment-network:40003
+      - RECONCILIATION_SERVICE_URL=https://reconciliation-service.payment-network:40020
+      - SETTLEMENT_SERVICE_URL=https://settlement-service.payment-network:40013
+      - WITHDRAWAL_SERVICE_URL=https://withdrawal-service.payment-network:40014
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
       - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
       - LOG_LEVEL=info
 
       # SMTP配置（邮件通知）
@@ -70,23 +95,23 @@ services:
       - SMTP_USERNAME=${SMTP_USERNAME:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM=${SMTP_FROM:-noreply@payment-platform.com}
-      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Payment Platform}
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - admin-bff-service.payment-network
 
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-    networks:
-      - payment-network
-
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:40001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      kafka:
+        condition: service_started
 
     deploy:
       resources:
@@ -100,6 +125,22 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
     labels:
       - "service.type=bff"
@@ -107,64 +148,91 @@ services:
       - "security.level=enterprise"
       - "metrics.prometheus=true"
 
-  # Merchant BFF Service
-  merchant-bff:
+  # ==========================================================================
+  # Merchant BFF Service - 商户门户聚合服务
+  # ==========================================================================
+  merchant-bff-service:
     build:
       context: ./backend
       dockerfile: services/merchant-bff-service/Dockerfile
     container_name: payment-merchant-bff
+    image: payment-platform/merchant-bff-service:latest
+    hostname: merchant-bff-service.payment-network
     ports:
       - "40023:40023"
     environment:
-      # 服务配置
+      # 基础配置
       - ENV=production
-      - PORT=40023
       - SERVICE_NAME=merchant-bff-service
+      - PORT=40023
+      - DB_NAME=payment_merchant
+      - GIN_MODE=release
 
-      # JWT配置
-      - JWT_SECRET=${JWT_SECRET:-payment-platform-secret-key-2024}
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
 
-      # Merchant BFF 不需要数据库
-
-      # Redis配置（可选）
-      - REDIS_HOST=redis
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
       - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
 
-      # 后端服务 URLs（15个微服务）
-      - PAYMENT_GATEWAY_URL=http://payment-gateway:8003
-      - ORDER_SERVICE_URL=http://order-service:8004
-      - SETTLEMENT_SERVICE_URL=http://settlement-service:8013
-      - WITHDRAWAL_SERVICE_URL=http://withdrawal-service:8014
-      - ACCOUNTING_SERVICE_URL=http://accounting-service:8007
-      - ANALYTICS_SERVICE_URL=http://analytics-service:8009
-      - KYC_SERVICE_URL=http://kyc-service:8015
-      - MERCHANT_AUTH_SERVICE_URL=http://merchant-auth-service:8011
-      - MERCHANT_CONFIG_SERVICE_URL=http://merchant-config-service:8012
-      - MERCHANT_LIMIT_SERVICE_URL=http://limit-service:8022
-      - NOTIFICATION_SERVICE_URL=http://notification-service:8008
-      - RISK_SERVICE_URL=http://risk-service:8006
-      - DISPUTE_SERVICE_URL=http://dispute-service:8021
-      - RECONCILIATION_SERVICE_URL=http://reconciliation-service:8020
-      - CASHIER_SERVICE_URL=http://cashier-service:8016
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
 
-      # 可观测性配置
-      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/merchant-bff-service/merchant-bff-service.crt
+      - TLS_KEY_FILE=/app/certs/services/merchant-bff-service/merchant-bff-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/merchant-bff-service/merchant-bff-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/merchant-bff-service/merchant-bff-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+
+      # 下游服务URL (使用内网域名 + HTTPS) - 15个微服务
+      - PAYMENT_SERVICE_URL=https://payment-gateway.payment-network:40003
+      - ORDER_SERVICE_URL=https://order-service.payment-network:40004
+      - SETTLEMENT_SERVICE_URL=https://settlement-service.payment-network:40013
+      - WITHDRAWAL_SERVICE_URL=https://withdrawal-service.payment-network:40014
+      - ACCOUNTING_SERVICE_URL=https://accounting-service.payment-network:40007
+      - ANALYTICS_SERVICE_URL=https://analytics-service.payment-network:40009
+      - KYC_SERVICE_URL=https://kyc-service.payment-network:40015
+      - MERCHANT_AUTH_SERVICE_URL=https://merchant-auth-service.payment-network:40011
+      - MERCHANT_CONFIG_SERVICE_URL=https://merchant-policy-service.payment-network:40022
+      - MERCHANT_LIMIT_SERVICE_URL=https://merchant-quota-service.payment-network:40024
+      - NOTIFICATION_SERVICE_URL=https://notification-service.payment-network:40008
+      - RISK_SERVICE_URL=https://risk-service.payment-network:40006
+      - DISPUTE_SERVICE_URL=https://dispute-service.payment-network:40021
+      - RECONCILIATION_SERVICE_URL=https://reconciliation-service.payment-network:40020
+      - CASHIER_SERVICE_URL=https://cashier-service.payment-network:40016
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
       - JAEGER_SAMPLING_RATE=10
       - LOG_LEVEL=info
 
-    depends_on:
-      redis:
-        condition: service_healthy
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
 
     networks:
-      - payment-network
+      payment-network:
+        aliases:
+          - merchant-bff-service.payment-network
 
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:40023/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
 
     deploy:
       resources:
@@ -179,33 +247,57 @@ services:
         delay: 5s
         max_attempts: 3
 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40023/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     labels:
       - "service.type=bff"
       - "service.name=merchant-bff"
       - "security.level=tenant-isolation"
       - "metrics.prometheus=true"
 
+# ============================================================================
+# 持久化卷
+# ============================================================================
+volumes:
+  logs:
+    driver: local
+    name: payment-logs
+
+# ============================================================================
+# 网络配置
+# ============================================================================
 networks:
   payment-network:
     external: true  # 使用主 docker-compose.yml 创建的网络
 
 # ============================================================================
-# 使用说明:
+# 使用说明
+# ============================================================================
+# 1. 确保主 docker-compose.yml 已启动（创建 payment-network 网络）:
+#    docker-compose up -d
 #
-# 1. 启动 BFF 服务（需要先启动主 docker-compose.yml）:
-#    docker-compose -f docker-compose.yml up -d
+# 2. 启动 BFF 服务:
 #    docker-compose -f docker-compose.bff.yml up -d
 #
-# 2. 查看日志:
-#    docker-compose -f docker-compose.bff.yml logs -f admin-bff
-#    docker-compose -f docker-compose.bff.yml logs -f merchant-bff
+# 3. 查看日志:
+#    docker-compose -f docker-compose.bff.yml logs -f admin-bff-service
+#    docker-compose -f docker-compose.bff.yml logs -f merchant-bff-service
 #
-# 3. 停止服务:
+# 4. 停止服务:
 #    docker-compose -f docker-compose.bff.yml down
-#
-# 4. 重启服务:
-#    docker-compose -f docker-compose.bff.yml restart admin-bff
-#    docker-compose -f docker-compose.bff.yml restart merchant-bff
 #
 # 5. 访问服务:
 #    Admin BFF Swagger:    http://localhost:40001/swagger/index.html

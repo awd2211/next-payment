@@ -1,0 +1,44 @@
+basePath: /api/v1
+host: localhost:40021
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 争议处理服务 - 处理支付争议、退单和Chargeback
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Dispute Service API
+  version: "1.0"
+paths:
+  /webhooks/stripe/disputes:
+    post:
+      consumes:
+      - application/json
+      description: 自动接收Stripe dispute.created, dispute.updated等事件
+      parameters:
+      - description: Stripe签名
+        in: header
+        name: Stripe-Signature
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: 接收Stripe争议webhook
+      tags:
+      - Webhooks
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

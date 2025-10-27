@@ -1,78 +1,83 @@
-# ============================================================
+# ============================================================================
 # Dockerfile for analytics-service
-# ============================================================
+# ============================================================================
+# 基于统一模板构建
+# ============================================================================
 
-# ============================================================
-# 阶段 1: 构建阶段
-# ============================================================
-FROM golang:1.21-alpine AS builder
+# ============================================================================
+# Stage 1: Builder
+# ============================================================================
+FROM golang:1.24-alpine AS builder
 
 # 安装构建依赖
 RUN apk add --no-cache git ca-certificates tzdata
 
+# 设置工作目录
 WORKDIR /build
 
-# 复制 Go Workspace 和依赖
-COPY go.work go.work.sum ./
+# 复制go.work和go.mod (利用Docker层缓存)
+COPY go.work go.work.sum* ./
 COPY pkg/go.mod pkg/go.sum ./pkg/
-COPY services/analytics-service/go.mod services/analytics-service/go.sum ./services/analytics-service/
+COPY proto/go.mod proto/go.sum* ./proto/
+COPY services/analytics-service/go.mod services/analytics-service/go.sum* ./services/analytics-service/
 
 # 下载依赖
-RUN cd services/analytics-service && go mod download
+WORKDIR /build/services/analytics-service
+RUN go mod download
 
-# 复制源码
+# 复制源代码
+WORKDIR /build
 COPY pkg/ ./pkg/
+COPY proto/ ./proto/
 COPY services/analytics-service/ ./services/analytics-service/
 
-# 构建二进制文件
-RUN cd services/analytics-service && \
-    CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w" \
+# 编译服务
+WORKDIR /build/services/analytics-service
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -trimpath \
-    -o /app/analytics-service \
+    -ldflags="-s -w" \
+    -o /app/service \
     ./cmd/main.go
 
-# ============================================================
-# 阶段 2: 运行阶段
-# ============================================================
+# ============================================================================
+# Stage 2: Runtime
+# ============================================================================
 FROM alpine:3.19
 
 # 安装运行时依赖
-RUN apk add --no-cache ca-certificates tzdata curl && \
-    rm -rf /var/cache/apk/*
+RUN apk add --no-cache ca-certificates tzdata curl bash \
+    && addgroup -g 1000 appgroup \
+    && adduser -D -u 1000 -G appgroup appuser
 
-ENV TZ=UTC
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
-# 创建非 root 用户
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser && \
-    mkdir -p /app/logs && \
-    chown -R appuser:appuser /app
+# 创建必要的目录
+RUN mkdir -p /app/logs /app/tmp /app/certs \
+    && chown -R appuser:appgroup /app
 
+# 从builder复制二进制文件
+COPY --from=builder --chown=appuser:appgroup /app/service /app/service
+
+# 设置工作目录
 WORKDIR /app
 
-# 复制二进制文件
-COPY --from=builder --chown=appuser:appuser /app/analytics-service /app/analytics-service
-
-# 确保可执行
-RUN chmod +x /app/analytics-service
-
-# 切换用户
+# 切换到非root用户
 USER appuser
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:40009/health || exit 1
 
 # 暴露端口
 EXPOSE 40009
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:40009/health || exit 1
-
-# 镜像元数据
-LABEL service.name="analytics-service" \
-      service.port="40009" \
-      org.opencontainers.image.title="analytics-service" \
-      org.opencontainers.image.description="Payment Platform analytics-service" \
-      org.opencontainers.image.vendor="Payment Platform"
+# 环境变量
+ENV SERVICE_NAME=analytics-service \
+    PORT=40009 \
+    DB_NAME=payment_analytics \
+    GIN_MODE=release
 
 # 启动服务
-ENTRYPOINT ["/app/analytics-service"]
+CMD ["/app/service"]

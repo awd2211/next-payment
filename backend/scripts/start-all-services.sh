@@ -101,11 +101,10 @@ export KAFKA_BROKERS=localhost:40092
 echo -e "${GREEN}✓ 环境变量配置完成 (DB_PORT=40432, mTLS=enabled)${NC}"
 echo ""
 
-# 服务列表和端口
+# 服务列表和端口（19个微服务）
 declare -A SERVICES=(
-    ["config-service"]=40010
-    ["admin-service"]=40001
-    ["merchant-service"]=40002
+    ["admin-bff-service"]=40001
+    ["merchant-bff-service"]=40023
     ["payment-gateway"]=40003
     ["order-service"]=40004
     ["channel-adapter"]=40005
@@ -113,14 +112,16 @@ declare -A SERVICES=(
     ["accounting-service"]=40007
     ["notification-service"]=40008
     ["analytics-service"]=40009
+    ["config-service"]=40010
     ["merchant-auth-service"]=40011
-    ["merchant-config-service"]=40012
+    ["merchant-policy-service"]=40012
     ["settlement-service"]=40013
     ["withdrawal-service"]=40014
     ["kyc-service"]=40015
+    ["cashier-service"]=40016
     ["reconciliation-service"]=40020
     ["dispute-service"]=40021
-    ["merchant-limit-service"]=40022
+    ["merchant-quota-service"]=40022
 )
 
 # 日志目录
@@ -145,33 +146,33 @@ start_service() {
         return 1
     fi
 
-    # 设置服务专用的 mTLS 证书（使用绝对路径）
-    export TLS_CERT_FILE="/home/eric/payment/backend/certs/services/$service/cert.pem"
-    export TLS_KEY_FILE="/home/eric/payment/backend/certs/services/$service/key.pem"
+    # 设置服务专用的 mTLS 证书（使用绝对路径和新的命名格式）
+    export TLS_CERT_FILE="/home/eric/payment/backend/certs/services/$service/$service.crt"
+    export TLS_KEY_FILE="/home/eric/payment/backend/certs/services/$service/$service.key"
     export TLS_CLIENT_CERT="$TLS_CERT_FILE"
     export TLS_CLIENT_KEY="$TLS_KEY_FILE"
 
-    # 设置数据库名称
+    # 设置数据库名称（19个服务）
     case "$service" in
-        "config-service") export DB_NAME=payment_config ;;
-        "admin-service") export DB_NAME=payment_admin ;;
-        "merchant-auth-service") export DB_NAME=payment_merchant_auth ;;
-        "merchant-service") export DB_NAME=payment_merchant ;;
-        "risk-service") export DB_NAME=payment_risk ;;
-        "channel-adapter") export DB_NAME=payment_channel ;;
-        "order-service") export DB_NAME=payment_order ;;
+        "admin-bff-service") export DB_NAME=payment_admin ;;
+        "merchant-bff-service") export DB_NAME=payment_merchant ;;
         "payment-gateway") export DB_NAME=payment_gateway ;;
+        "order-service") export DB_NAME=payment_order ;;
+        "channel-adapter") export DB_NAME=payment_channel ;;
+        "risk-service") export DB_NAME=payment_risk ;;
         "accounting-service") export DB_NAME=payment_accounting ;;
+        "notification-service") export DB_NAME=payment_notification ;;
         "analytics-service") export DB_NAME=payment_analytics ;;
-        "notification-service") export DB_NAME=payment_notify ;;
+        "config-service") export DB_NAME=payment_config ;;
+        "merchant-auth-service") export DB_NAME=payment_merchant_auth ;;
+        "merchant-policy-service") export DB_NAME=payment_merchant_config ;;
         "settlement-service") export DB_NAME=payment_settlement ;;
         "withdrawal-service") export DB_NAME=payment_withdrawal ;;
         "kyc-service") export DB_NAME=payment_kyc ;;
         "cashier-service") export DB_NAME=payment_cashier ;;
-        "merchant-config-service") export DB_NAME=payment_merchant_config ;;
         "reconciliation-service") export DB_NAME=payment_reconciliation ;;
         "dispute-service") export DB_NAME=payment_dispute ;;
-        "merchant-limit-service") export DB_NAME=payment_merchant_limit ;;
+        "merchant-quota-service") export DB_NAME=payment_merchant_limit ;;
     esac
 
     # payment-gateway 需要配置下游服务的 HTTPS 地址
@@ -181,10 +182,89 @@ start_service() {
         export CHANNEL_SERVICE_URL="https://localhost:40005"
     fi
 
-    echo -e "${YELLOW}启动 $service (端口: $port, DB: $DB_NAME, mTLS: true)...${NC}"
+    # admin-bff-service 需要知道所有18个微服务的URL（使用HTTPS进行mTLS通信）
+    if [ "$service" == "admin-bff-service" ]; then
+        export CONFIG_SERVICE_URL="https://localhost:40010"
+        export RISK_SERVICE_URL="https://localhost:40006"
+        export KYC_SERVICE_URL="https://localhost:40015"
+        export MERCHANT_SERVICE_URL="https://localhost:40002"
+        export ANALYTICS_SERVICE_URL="https://localhost:40009"
+        export LIMIT_SERVICE_URL="https://localhost:40022"
+        export CHANNEL_SERVICE_URL="https://localhost:40005"
+        export CASHIER_SERVICE_URL="https://localhost:40016"
+        export ORDER_SERVICE_URL="https://localhost:40004"
+        export ACCOUNTING_SERVICE_URL="https://localhost:40007"
+        export DISPUTE_SERVICE_URL="https://localhost:40021"
+        export MERCHANT_AUTH_SERVICE_URL="https://localhost:40011"
+        export MERCHANT_CONFIG_SERVICE_URL="https://localhost:40012"
+        export NOTIFICATION_SERVICE_URL="https://localhost:40008"
+        export PAYMENT_SERVICE_URL="https://localhost:40003"
+        export RECONCILIATION_SERVICE_URL="https://localhost:40020"
+        export SETTLEMENT_SERVICE_URL="https://localhost:40013"
+        export WITHDRAWAL_SERVICE_URL="https://localhost:40014"
+    fi
+
+    # merchant-bff-service 也需要知道所有15个微服务的URL（使用HTTPS进行mTLS通信）
+    if [ "$service" == "merchant-bff-service" ]; then
+        export PAYMENT_SERVICE_URL="https://localhost:40003"
+        export ORDER_SERVICE_URL="https://localhost:40004"
+        export SETTLEMENT_SERVICE_URL="https://localhost:40013"
+        export WITHDRAWAL_SERVICE_URL="https://localhost:40014"
+        export ACCOUNTING_SERVICE_URL="https://localhost:40007"
+        export ANALYTICS_SERVICE_URL="https://localhost:40009"
+        export KYC_SERVICE_URL="https://localhost:40015"
+        export MERCHANT_AUTH_SERVICE_URL="https://localhost:40011"
+        export MERCHANT_CONFIG_SERVICE_URL="https://localhost:40012"
+        export LIMIT_SERVICE_URL="https://localhost:40022"
+        export NOTIFICATION_SERVICE_URL="https://localhost:40008"
+        export RISK_SERVICE_URL="https://localhost:40006"
+        export DISPUTE_SERVICE_URL="https://localhost:40021"
+        export RECONCILIATION_SERVICE_URL="https://localhost:40020"
+        export CASHIER_SERVICE_URL="https://localhost:40016"
+    fi
+
+    echo -e "${YELLOW}启动 $service (端口: $port, DB: $DB_NAME, mTLS: $ENABLE_MTLS)...${NC}"
 
     cd "$service_dir"
-    nohup ~/go/bin/air -c .air.toml > "$LOG_DIR/$service.log" 2>&1 &
+
+    # 启动 air 并传递所有环境变量
+    # 注意：使用 env 命令确保环境变量被正确传递
+    nohup env \
+        PORT=$port \
+        DB_NAME=$DB_NAME \
+        DB_HOST=$DB_HOST \
+        DB_PORT=$DB_PORT \
+        DB_USER=$DB_USER \
+        DB_PASSWORD=$DB_PASSWORD \
+        REDIS_HOST=$REDIS_HOST \
+        REDIS_PORT=$REDIS_PORT \
+        JWT_SECRET=$JWT_SECRET \
+        ENABLE_MTLS=$ENABLE_MTLS \
+        TLS_CERT_FILE=$TLS_CERT_FILE \
+        TLS_KEY_FILE=$TLS_KEY_FILE \
+        TLS_CLIENT_CERT=$TLS_CLIENT_CERT \
+        TLS_CLIENT_KEY=$TLS_CLIENT_KEY \
+        TLS_CA_FILE=$TLS_CA_FILE \
+        ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-} \
+        RISK_SERVICE_URL=${RISK_SERVICE_URL:-} \
+        CHANNEL_SERVICE_URL=${CHANNEL_SERVICE_URL:-} \
+        CONFIG_SERVICE_URL=${CONFIG_SERVICE_URL:-} \
+        KYC_SERVICE_URL=${KYC_SERVICE_URL:-} \
+        MERCHANT_SERVICE_URL=${MERCHANT_SERVICE_URL:-} \
+        ANALYTICS_SERVICE_URL=${ANALYTICS_SERVICE_URL:-} \
+        LIMIT_SERVICE_URL=${LIMIT_SERVICE_URL:-} \
+        CASHIER_SERVICE_URL=${CASHIER_SERVICE_URL:-} \
+        ACCOUNTING_SERVICE_URL=${ACCOUNTING_SERVICE_URL:-} \
+        DISPUTE_SERVICE_URL=${DISPUTE_SERVICE_URL:-} \
+        MERCHANT_AUTH_SERVICE_URL=${MERCHANT_AUTH_SERVICE_URL:-} \
+        MERCHANT_CONFIG_SERVICE_URL=${MERCHANT_CONFIG_SERVICE_URL:-} \
+        NOTIFICATION_SERVICE_URL=${NOTIFICATION_SERVICE_URL:-} \
+        PAYMENT_SERVICE_URL=${PAYMENT_SERVICE_URL:-} \
+        RECONCILIATION_SERVICE_URL=${RECONCILIATION_SERVICE_URL:-} \
+        SETTLEMENT_SERVICE_URL=${SETTLEMENT_SERVICE_URL:-} \
+        WITHDRAWAL_SERVICE_URL=${WITHDRAWAL_SERVICE_URL:-} \
+        ~/go/bin/air -c .air.toml > "$LOG_DIR/$service.log" 2>&1 &
+
     local pid=$!
     echo $pid > "$LOG_DIR/$service.pid"
 

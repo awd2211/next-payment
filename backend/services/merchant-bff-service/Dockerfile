@@ -1,77 +1,83 @@
 # ============================================================================
-# Merchant BFF Service Dockerfile
-# Multi-stage build for minimal image size
+# Dockerfile for merchant-bff-service
+# ============================================================================
+# 基于统一模板构建
 # ============================================================================
 
+# ============================================================================
 # Stage 1: Builder
-FROM golang:1.21-alpine AS builder
+# ============================================================================
+FROM golang:1.24-alpine AS builder
 
-# 安装必要的构建工具
-RUN apk add --no-cache git make gcc musl-dev
+# 安装构建依赖
+RUN apk add --no-cache git ca-certificates tzdata
 
 # 设置工作目录
 WORKDIR /build
 
-# 复制 go.work 和所有 go.mod/go.sum
+# 复制go.work和go.mod (利用Docker层缓存)
 COPY go.work go.work.sum* ./
 COPY pkg/go.mod pkg/go.sum ./pkg/
-COPY services/merchant-bff-service/go.mod services/merchant-bff-service/go.sum ./services/merchant-bff-service/
+COPY proto/go.mod proto/go.sum* ./proto/
+COPY services/merchant-bff-service/go.mod services/merchant-bff-service/go.sum* ./services/merchant-bff-service/
 
 # 下载依赖
-RUN cd services/merchant-bff-service && go mod download
+WORKDIR /build/services/merchant-bff-service
+RUN go mod download
 
 # 复制源代码
+WORKDIR /build
 COPY pkg/ ./pkg/
+COPY proto/ ./proto/
 COPY services/merchant-bff-service/ ./services/merchant-bff-service/
 
-# 编译
+# 编译服务
 WORKDIR /build/services/merchant-bff-service
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -o /app/merchant-bff-service \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /app/service \
     ./cmd/main.go
 
+# ============================================================================
 # Stage 2: Runtime
-FROM alpine:latest
+# ============================================================================
+FROM alpine:3.19
 
 # 安装运行时依赖
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata \
-    wget \
-    && update-ca-certificates
+RUN apk add --no-cache ca-certificates tzdata curl bash \
+    && addgroup -g 1000 appgroup \
+    && adduser -D -u 1000 -G appgroup appuser
 
 # 设置时区
 ENV TZ=Asia/Shanghai
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
-# 创建非 root 用户
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# 创建必要的目录
+RUN mkdir -p /app/logs /app/tmp /app/certs \
+    && chown -R appuser:appgroup /app
+
+# 从builder复制二进制文件
+COPY --from=builder --chown=appuser:appgroup /app/service /app/service
 
 # 设置工作目录
 WORKDIR /app
 
-# 从 builder 复制二进制文件
-COPY --from=builder /app/merchant-bff-service /app/merchant-bff-service
-
-# 修改权限
-RUN chown -R appuser:appuser /app
-
-# 切换到非 root 用户
+# 切换到非root用户
 USER appuser
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:40023/health || exit 1
 
 # 暴露端口
 EXPOSE 40023
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:40023/health || exit 1
+# 环境变量
+ENV SERVICE_NAME=merchant-bff-service \
+    PORT=40023 \
+    DB_NAME=payment_merchant \
+    GIN_MODE=release
 
 # 启动服务
-ENTRYPOINT ["/app/merchant-bff-service"]
-
-# 元数据
-LABEL maintainer="Payment Platform Team"
-LABEL service="merchant-bff-service"
-LABEL version="1.0.0"
-LABEL description="Merchant BFF Service with Tenant Isolation"
+CMD ["/app/service"]

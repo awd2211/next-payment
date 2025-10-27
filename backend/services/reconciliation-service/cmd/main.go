@@ -17,7 +17,26 @@ import (
 	"payment-platform/reconciliation-service/internal/report"
 	"payment-platform/reconciliation-service/internal/repository"
 	"payment-platform/reconciliation-service/internal/service"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	_ "payment-platform/reconciliation-service/docs" // Swagger文档
 )
+
+//	@title						Reconciliation Service API
+//	@version					1.0
+//	@description				对账服务 - 自动对账、差异检测和报表生成
+//	@termsOfService				http://swagger.io/terms/
+//	@contact.name				API Support
+//	@contact.email				support@payment-platform.com
+//	@license.name				Apache 2.0
+//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+//	@host						localhost:40020
+//	@BasePath					/api/v1
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Type "Bearer" followed by a space and JWT token.
 
 func main() {
 	// Use Bootstrap framework for service initialization
@@ -104,9 +123,14 @@ func main() {
 	jwtManager := auth.NewJWTManager(jwtSecret, 24*time.Hour)
 	_ = jwtManager // 预留给需要认证的路由使用
 
+	// Register Swagger documentation (public access)
+	application.Router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// Register routes
 	api := application.Router.Group("/api/v1")
 	reconHandler.RegisterRoutes(api)
+
+	application.Logger.Info("Swagger documentation enabled", zap.String("url", "http://localhost:40020/swagger/index.html"))
 
 	// ✅ Automation Infrastructure Ready:
 	// - AlertNotifier: Fully implemented (email alerts for differences, critical alerts, daily reports)

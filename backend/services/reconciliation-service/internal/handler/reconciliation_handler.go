@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	_ "payment-platform/reconciliation-service/internal/model" // imported for Swagger
 	"payment-platform/reconciliation-service/internal/service"
 )
 

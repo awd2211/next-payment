@@ -1,0 +1,632 @@
+basePath: /api/v1
+definitions:
+  internal_handler.CreateTaskRequest:
+    properties:
+      channel:
+        type: string
+      task_date:
+        type: string
+      task_type:
+        type: string
+    required:
+    - channel
+    - task_date
+    - task_type
+    type: object
+  internal_handler.DownloadFileRequest:
+    properties:
+      channel:
+        type: string
+      settlement_date:
+        type: string
+    required:
+    - channel
+    - settlement_date
+    type: object
+  internal_handler.ResolveRecordRequest:
+    properties:
+      note:
+        type: string
+      resolved_by:
+        type: string
+    required:
+    - resolved_by
+    type: object
+  internal_handler.Response:
+    properties:
+      code:
+        type: string
+      data: {}
+      message:
+        type: string
+      trace_id:
+        type: string
+    type: object
+  payment-platform_reconciliation-service_internal_model.ChannelSettlementFile:
+    properties:
+      channel:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      downloaded_at:
+        description: 时间戳
+        type: string
+      file_hash:
+        type: string
+      file_no:
+        type: string
+      file_size:
+        type: integer
+      file_url:
+        type: string
+      id:
+        type: string
+      imported_at:
+        type: string
+      parsed_at:
+        type: string
+      record_count:
+        description: 统计信息
+        type: integer
+      settlement_date:
+        type: string
+      status:
+        description: 状态信息
+        type: string
+      total_amount:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  payment-platform_reconciliation-service_internal_model.ReconciliationRecord:
+    properties:
+      channel_amount:
+        type: integer
+      channel_status:
+        type: string
+      channel_trade_no:
+        type: string
+      created_at:
+        description: 时间戳
+        type: string
+      currency:
+        type: string
+      diff_amount:
+        type: integer
+      diff_reason:
+        type: string
+      diff_type:
+        type: string
+      extra:
+        description: 扩展信息
+        type: string
+      id:
+        type: string
+      is_resolved:
+        description: 处理信息
+        type: boolean
+      merchant_id:
+        type: string
+      order_no:
+        type: string
+      payment_no:
+        description: 订单信息
+        type: string
+      platform_amount:
+        description: 金额信息
+        type: integer
+      platform_status:
+        description: 状态信息
+        type: string
+      resolution_note:
+        type: string
+      resolved_at:
+        type: string
+      resolved_by:
+        type: string
+      task_id:
+        type: string
+      task_no:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  payment-platform_reconciliation-service_internal_model.ReconciliationTask:
+    properties:
+      channel:
+        type: string
+      channel_amount:
+        type: integer
+      channel_count:
+        type: integer
+      channel_file_url:
+        description: 文件信息
+        type: string
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      diff_amount:
+        type: integer
+      diff_count:
+        type: integer
+      error_message:
+        type: string
+      id:
+        type: string
+      matched_amount:
+        type: integer
+      matched_count:
+        type: integer
+      platform_amount:
+        type: integer
+      platform_count:
+        description: 统计信息
+        type: integer
+      progress:
+        type: integer
+      report_file_url:
+        type: string
+      started_at:
+        description: 时间戳
+        type: string
+      status:
+        description: 状态信息
+        type: string
+      task_date:
+        type: string
+      task_no:
+        type: string
+      task_type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  payment-platform_reconciliation-service_internal_service.FileListResult:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  payment-platform_reconciliation-service_internal_service.RecordListResult:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      records:
+        items:
+          $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationRecord'
+        type: array
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  payment-platform_reconciliation-service_internal_service.TaskDetails:
+    properties:
+      file:
+        $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile'
+      records:
+        items:
+          $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationRecord'
+        type: array
+      summary:
+        $ref: '#/definitions/payment-platform_reconciliation-service_internal_service.TaskSummary'
+      task:
+        $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationTask'
+    type: object
+  payment-platform_reconciliation-service_internal_service.TaskListResult:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      tasks:
+        items:
+          $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationTask'
+        type: array
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  payment-platform_reconciliation-service_internal_service.TaskSummary:
+    properties:
+      amount_diff_count:
+        type: integer
+      channel_only_count:
+        type: integer
+      diff_count:
+        type: integer
+      match_rate:
+        type: number
+      matched_count:
+        type: integer
+      platform_only_count:
+        type: integer
+      status_diff_count:
+        type: integer
+      total_count:
+        type: integer
+      unresolved_count:
+        type: integer
+    type: object
+host: localhost:40020
+info:
+  contact:
+    email: support@payment-platform.com
+    name: API Support
+  description: 对账服务 - 自动对账、差异检测和报表生成
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Reconciliation Service API
+  version: "1.0"
+paths:
+  /reconciliation/records:
+    get:
+      parameters:
+      - description: 任务ID
+        in: query
+        name: task_id
+        type: string
+      - description: 差异类型
+        in: query
+        name: diff_type
+        type: string
+      - description: 是否已解决
+        in: query
+        name: is_resolved
+        type: boolean
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_service.RecordListResult'
+              type: object
+      summary: 查询差异记录列表
+      tags:
+      - Reconciliation
+  /reconciliation/records/{record_id}:
+    get:
+      parameters:
+      - description: 记录ID
+        in: path
+        name: record_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationRecord'
+              type: object
+      summary: 获取差异记录详情
+      tags:
+      - Reconciliation
+  /reconciliation/records/{record_id}/resolve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 记录ID
+        in: path
+        name: record_id
+        required: true
+        type: string
+      - description: 解决记录请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ResolveRecordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      summary: 标记差异已解决
+      tags:
+      - Reconciliation
+  /reconciliation/reports/{task_id}:
+    get:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+      summary: 生成对账报告
+      tags:
+      - Reconciliation
+  /reconciliation/settlement-files:
+    get:
+      parameters:
+      - description: 支付渠道
+        in: query
+        name: channel
+        type: string
+      - description: 结算日期 (YYYY-MM-DD)
+        in: query
+        name: settlement_date
+        type: string
+      - description: 文件状态
+        in: query
+        name: status
+        type: string
+      - description: 开始日期 (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: 结束日期 (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_service.FileListResult'
+              type: object
+      summary: 查询文件列表
+      tags:
+      - Reconciliation
+  /reconciliation/settlement-files/{file_no}:
+    get:
+      parameters:
+      - description: 文件编号
+        in: path
+        name: file_no
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile'
+              type: object
+      summary: 获取文件详情
+      tags:
+      - Reconciliation
+  /reconciliation/settlement-files/download:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 下载文件请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.DownloadFileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ChannelSettlementFile'
+              type: object
+      summary: 下载渠道账单文件
+      tags:
+      - Reconciliation
+  /reconciliation/tasks:
+    get:
+      parameters:
+      - description: 任务日期 (YYYY-MM-DD)
+        in: query
+        name: task_date
+        type: string
+      - description: 支付渠道
+        in: query
+        name: channel
+        type: string
+      - description: 任务状态
+        in: query
+        name: status
+        type: string
+      - description: 开始日期 (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: 结束日期 (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_service.TaskListResult'
+              type: object
+      summary: 查询任务列表
+      tags:
+      - Reconciliation
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建任务请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_model.ReconciliationTask'
+              type: object
+      summary: 创建对账任务
+      tags:
+      - Reconciliation
+  /reconciliation/tasks/{task_id}:
+    get:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/payment-platform_reconciliation-service_internal_service.TaskDetails'
+              type: object
+      summary: 获取任务详情
+      tags:
+      - Reconciliation
+  /reconciliation/tasks/{task_id}/execute:
+    post:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      summary: 执行对账任务
+      tags:
+      - Reconciliation
+  /reconciliation/tasks/{task_id}/retry:
+    post:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.Response'
+      summary: 重试失败的任务
+      tags:
+      - Reconciliation
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

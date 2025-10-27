@@ -1,0 +1,1869 @@
+# ============================================================================
+# Docker Compose - 19个微服务完整配置
+# ============================================================================
+# 生成时间: 2025-10-27 05:39:52
+# 特性:
+# - 内网域名格式: <service-name>.payment-network
+# - mTLS启用: HTTPS + 证书挂载
+# - 持久化: logs卷, certs卷(只读)
+# - 网络: payment-network (172.28.0.0/16)
+# - 健康检查: HTTP /health 端点
+# - 资源限制: CPU/内存配额
+# - 日志管理: JSON格式, 10MB轮转
+# ============================================================================
+
+version: '3.8'
+
+services:
+
+  # ==========================================================================
+  # payment-gateway - Port 40003
+  # ==========================================================================
+  payment-gateway:
+    build:
+      context: ./backend
+      dockerfile: services/payment-gateway/Dockerfile
+    container_name: payment-payment-gateway
+    image: payment-platform/payment-gateway:latest
+    hostname: payment-gateway.payment-network
+    ports:
+      - "40003:40003"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=payment-gateway
+      - PORT=40003
+      - DB_NAME=payment_gateway
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=payment-gateway-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/payment-gateway/payment-gateway.crt
+      - TLS_KEY_FILE=/app/certs/services/payment-gateway/payment-gateway.key
+      - TLS_CLIENT_CERT=/app/certs/services/payment-gateway/payment-gateway.crt
+      - TLS_CLIENT_KEY=/app/certs/services/payment-gateway/payment-gateway.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 下游服务URL (内网域名 + HTTPS)
+      - ORDER_SERVICE_URL=https://order-service.payment-network:40004
+      - CHANNEL_SERVICE_URL=https://channel-adapter.payment-network:40005
+      - RISK_SERVICE_URL=https://risk-service.payment-network:40006
+      - ACCOUNTING_SERVICE_URL=https://accounting-service.payment-network:40007
+      - NOTIFICATION_SERVICE_URL=https://notification-service.payment-network:40008
+
+      # Stripe配置
+      - STRIPE_API_KEY=${STRIPE_API_KEY:-sk_test_...}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-whsec_...}
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - payment-gateway.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40003/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # order-service - Port 40004
+  # ==========================================================================
+  order-service:
+    build:
+      context: ./backend
+      dockerfile: services/order-service/Dockerfile
+    container_name: payment-order-service
+    image: payment-platform/order-service:latest
+    hostname: order-service.payment-network
+    ports:
+      - "40004:40004"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=order-service
+      - PORT=40004
+      - DB_NAME=payment_order
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=order-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/order-service/order-service.crt
+      - TLS_KEY_FILE=/app/certs/services/order-service/order-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/order-service/order-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/order-service/order-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - order-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40004/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # channel-adapter - Port 40005
+  # ==========================================================================
+  channel-adapter:
+    build:
+      context: ./backend
+      dockerfile: services/channel-adapter/Dockerfile
+    container_name: payment-channel-adapter
+    image: payment-platform/channel-adapter:latest
+    hostname: channel-adapter.payment-network
+    ports:
+      - "40005:40005"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=channel-adapter
+      - PORT=40005
+      - DB_NAME=payment_channel
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=channel-adapter-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/channel-adapter/channel-adapter.crt
+      - TLS_KEY_FILE=/app/certs/services/channel-adapter/channel-adapter.key
+      - TLS_CLIENT_CERT=/app/certs/services/channel-adapter/channel-adapter.crt
+      - TLS_CLIENT_KEY=/app/certs/services/channel-adapter/channel-adapter.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - channel-adapter.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40005/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # risk-service - Port 40006
+  # ==========================================================================
+  risk-service:
+    build:
+      context: ./backend
+      dockerfile: services/risk-service/Dockerfile
+    container_name: payment-risk-service
+    image: payment-platform/risk-service:latest
+    hostname: risk-service.payment-network
+    ports:
+      - "40006:40006"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=risk-service
+      - PORT=40006
+      - DB_NAME=payment_risk
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=risk-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/risk-service/risk-service.crt
+      - TLS_KEY_FILE=/app/certs/services/risk-service/risk-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/risk-service/risk-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/risk-service/risk-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - risk-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40006/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # accounting-service - Port 40007
+  # ==========================================================================
+  accounting-service:
+    build:
+      context: ./backend
+      dockerfile: services/accounting-service/Dockerfile
+    container_name: payment-accounting-service
+    image: payment-platform/accounting-service:latest
+    hostname: accounting-service.payment-network
+    ports:
+      - "40007:40007"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=accounting-service
+      - PORT=40007
+      - DB_NAME=payment_accounting
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=accounting-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/accounting-service/accounting-service.crt
+      - TLS_KEY_FILE=/app/certs/services/accounting-service/accounting-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/accounting-service/accounting-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/accounting-service/accounting-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - accounting-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40007/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # notification-service - Port 40008
+  # ==========================================================================
+  notification-service:
+    build:
+      context: ./backend
+      dockerfile: services/notification-service/Dockerfile
+    container_name: payment-notification-service
+    image: payment-platform/notification-service:latest
+    hostname: notification-service.payment-network
+    ports:
+      - "40008:40008"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=notification-service
+      - PORT=40008
+      - DB_NAME=payment_notification
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=notification-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/notification-service/notification-service.crt
+      - TLS_KEY_FILE=/app/certs/services/notification-service/notification-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/notification-service/notification-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/notification-service/notification-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - notification-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40008/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # analytics-service - Port 40009
+  # ==========================================================================
+  analytics-service:
+    build:
+      context: ./backend
+      dockerfile: services/analytics-service/Dockerfile
+    container_name: payment-analytics-service
+    image: payment-platform/analytics-service:latest
+    hostname: analytics-service.payment-network
+    ports:
+      - "40009:40009"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=analytics-service
+      - PORT=40009
+      - DB_NAME=payment_analytics
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=analytics-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/analytics-service/analytics-service.crt
+      - TLS_KEY_FILE=/app/certs/services/analytics-service/analytics-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/analytics-service/analytics-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/analytics-service/analytics-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - analytics-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40009/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # config-service - Port 40010
+  # ==========================================================================
+  config-service:
+    build:
+      context: ./backend
+      dockerfile: services/config-service/Dockerfile
+    container_name: payment-config-service
+    image: payment-platform/config-service:latest
+    hostname: config-service.payment-network
+    ports:
+      - "40010:40010"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=config-service
+      - PORT=40010
+      - DB_NAME=payment_config
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=config-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/config-service/config-service.crt
+      - TLS_KEY_FILE=/app/certs/services/config-service/config-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/config-service/config-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/config-service/config-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - config-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40010/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # merchant-auth-service - Port 40011
+  # ==========================================================================
+  merchant-auth-service:
+    build:
+      context: ./backend
+      dockerfile: services/merchant-auth-service/Dockerfile
+    container_name: payment-merchant-auth-service
+    image: payment-platform/merchant-auth-service:latest
+    hostname: merchant-auth-service.payment-network
+    ports:
+      - "40011:40011"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=merchant-auth-service
+      - PORT=40011
+      - DB_NAME=payment_merchant_auth
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=merchant-auth-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/merchant-auth-service/merchant-auth-service.crt
+      - TLS_KEY_FILE=/app/certs/services/merchant-auth-service/merchant-auth-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/merchant-auth-service/merchant-auth-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/merchant-auth-service/merchant-auth-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - merchant-auth-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40011/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # settlement-service - Port 40013
+  # ==========================================================================
+  settlement-service:
+    build:
+      context: ./backend
+      dockerfile: services/settlement-service/Dockerfile
+    container_name: payment-settlement-service
+    image: payment-platform/settlement-service:latest
+    hostname: settlement-service.payment-network
+    ports:
+      - "40013:40013"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=settlement-service
+      - PORT=40013
+      - DB_NAME=payment_settlement
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=settlement-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/settlement-service/settlement-service.crt
+      - TLS_KEY_FILE=/app/certs/services/settlement-service/settlement-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/settlement-service/settlement-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/settlement-service/settlement-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 下游服务URL (内网域名 + HTTPS)
+      - ACCOUNTING_SERVICE_URL=https://accounting-service.payment-network:40007
+      - WITHDRAWAL_SERVICE_URL=https://withdrawal-service.payment-network:40014
+      - MERCHANT_CONFIG_SERVICE_URL=https://merchant-policy-service.payment-network:40022
+      - NOTIFICATION_SERVICE_URL=https://notification-service.payment-network:40008
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - settlement-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40013/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # withdrawal-service - Port 40014
+  # ==========================================================================
+  withdrawal-service:
+    build:
+      context: ./backend
+      dockerfile: services/withdrawal-service/Dockerfile
+    container_name: payment-withdrawal-service
+    image: payment-platform/withdrawal-service:latest
+    hostname: withdrawal-service.payment-network
+    ports:
+      - "40014:40014"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=withdrawal-service
+      - PORT=40014
+      - DB_NAME=payment_withdrawal
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=withdrawal-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/withdrawal-service/withdrawal-service.crt
+      - TLS_KEY_FILE=/app/certs/services/withdrawal-service/withdrawal-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/withdrawal-service/withdrawal-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/withdrawal-service/withdrawal-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - withdrawal-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40014/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # kyc-service - Port 40015
+  # ==========================================================================
+  kyc-service:
+    build:
+      context: ./backend
+      dockerfile: services/kyc-service/Dockerfile
+    container_name: payment-kyc-service
+    image: payment-platform/kyc-service:latest
+    hostname: kyc-service.payment-network
+    ports:
+      - "40015:40015"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=kyc-service
+      - PORT=40015
+      - DB_NAME=payment_kyc
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=kyc-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/kyc-service/kyc-service.crt
+      - TLS_KEY_FILE=/app/certs/services/kyc-service/kyc-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/kyc-service/kyc-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/kyc-service/kyc-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - kyc-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40015/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # cashier-service - Port 40016
+  # ==========================================================================
+  cashier-service:
+    build:
+      context: ./backend
+      dockerfile: services/cashier-service/Dockerfile
+    container_name: payment-cashier-service
+    image: payment-platform/cashier-service:latest
+    hostname: cashier-service.payment-network
+    ports:
+      - "40016:40016"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=cashier-service
+      - PORT=40016
+      - DB_NAME=payment_cashier
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=cashier-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/cashier-service/cashier-service.crt
+      - TLS_KEY_FILE=/app/certs/services/cashier-service/cashier-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/cashier-service/cashier-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/cashier-service/cashier-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - cashier-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40016/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # reconciliation-service - Port 40020
+  # ==========================================================================
+  reconciliation-service:
+    build:
+      context: ./backend
+      dockerfile: services/reconciliation-service/Dockerfile
+    container_name: payment-reconciliation-service
+    image: payment-platform/reconciliation-service:latest
+    hostname: reconciliation-service.payment-network
+    ports:
+      - "40020:40020"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=reconciliation-service
+      - PORT=40020
+      - DB_NAME=payment_reconciliation
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=reconciliation-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/reconciliation-service/reconciliation-service.crt
+      - TLS_KEY_FILE=/app/certs/services/reconciliation-service/reconciliation-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/reconciliation-service/reconciliation-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/reconciliation-service/reconciliation-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 下游服务URL (内网域名 + HTTPS)
+      - PAYMENT_SERVICE_URL=https://payment-gateway.payment-network:40003
+      - ACCOUNTING_SERVICE_URL=https://accounting-service.payment-network:40007
+      - NOTIFICATION_SERVICE_URL=https://notification-service.payment-network:40008
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - reconciliation-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40020/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # dispute-service - Port 40021
+  # ==========================================================================
+  dispute-service:
+    build:
+      context: ./backend
+      dockerfile: services/dispute-service/Dockerfile
+    container_name: payment-dispute-service
+    image: payment-platform/dispute-service:latest
+    hostname: dispute-service.payment-network
+    ports:
+      - "40021:40021"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=dispute-service
+      - PORT=40021
+      - DB_NAME=payment_dispute
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=dispute-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/dispute-service/dispute-service.crt
+      - TLS_KEY_FILE=/app/certs/services/dispute-service/dispute-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/dispute-service/dispute-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/dispute-service/dispute-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - dispute-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40021/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # merchant-policy-service - Port 40022
+  # ==========================================================================
+  merchant-policy-service:
+    build:
+      context: ./backend
+      dockerfile: services/merchant-policy-service/Dockerfile
+    container_name: payment-merchant-policy-service
+    image: payment-platform/merchant-policy-service:latest
+    hostname: merchant-policy-service.payment-network
+    ports:
+      - "40022:40022"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=merchant-policy-service
+      - PORT=40022
+      - DB_NAME=payment_merchant_policy
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=merchant-policy-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/merchant-policy-service/merchant-policy-service.crt
+      - TLS_KEY_FILE=/app/certs/services/merchant-policy-service/merchant-policy-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/merchant-policy-service/merchant-policy-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/merchant-policy-service/merchant-policy-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - merchant-policy-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40022/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # merchant-quota-service - Port 40024
+  # ==========================================================================
+  merchant-quota-service:
+    build:
+      context: ./backend
+      dockerfile: services/merchant-quota-service/Dockerfile
+    container_name: payment-merchant-quota-service
+    image: payment-platform/merchant-quota-service:latest
+    hostname: merchant-quota-service.payment-network
+    ports:
+      - "40024:40024"
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=merchant-quota-service
+      - PORT=40024
+      - DB_NAME=payment_merchant_quota
+      - GIN_MODE=release
+
+      # 数据库配置 (使用内网域名)
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSLMODE=disable
+      - DB_MAX_IDLE_CONNS=10
+      - DB_MAX_OPEN_CONNS=100
+      - DB_CONN_MAX_LIFETIME=3600
+
+      # Redis配置 (使用内网域名)
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+
+      # Kafka配置 (使用内网域名)
+      - KAFKA_BROKERS=kafka.payment-network:9092
+      - KAFKA_GROUP_ID=merchant-quota-service-group
+
+      # JWT密钥
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # mTLS配置 (启用HTTPS)
+      - ENABLE_MTLS=true
+      - ENABLE_HTTPS=true
+      - TLS_CERT_FILE=/app/certs/services/merchant-quota-service/merchant-quota-service.crt
+      - TLS_KEY_FILE=/app/certs/services/merchant-quota-service/merchant-quota-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/merchant-quota-service/merchant-quota-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/merchant-quota-service/merchant-quota-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+      - TLS_VERIFY=true
+
+      # 监控配置 (使用内网域名)
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+      - PROMETHEUS_PUSH_GATEWAY=prometheus.payment-network:9091
+      - LOG_LEVEL=info
+
+    volumes:
+      - logs:/app/logs
+      - ./backend/certs:/app/certs:ro
+
+    networks:
+      payment-network:
+        aliases:
+          - merchant-quota-service.payment-network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40024/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================================
+# 持久化卷
+# ============================================================================
+volumes:
+  logs:
+    driver: local
+    name: payment-logs
+
+# ============================================================================
+# 网络配置
+# ============================================================================
+networks:
+  payment-network:
+    external: true  # 使用主 docker-compose.yml 创建的网络
+
+# ============================================================================
+# 使用说明
+# ============================================================================
+# 1. 确保主 docker-compose.yml 已启动（创建 payment-network 网络）:
+#    docker-compose up -d
+#
+# 2. 启动所有微服务:
+#    docker-compose -f docker-compose.services.yml up -d
+#
+# 3. 查看服务状态:
+#    docker-compose -f docker-compose.services.yml ps
+#
+# 4. 查看特定服务日志:
+#    docker-compose -f docker-compose.services.yml logs -f payment-gateway
+#
+# 5. 停止所有服务:
+#    docker-compose -f docker-compose.services.yml down
+#
+# 6. 重启特定服务:
+#    docker-compose -f docker-compose.services.yml restart payment-gateway
+#
+# 7. 扩展服务实例:
+#    docker-compose -f docker-compose.services.yml up -d --scale payment-gateway=3
+#
+# 8. 访问服务健康检查:
+#    curl http://localhost:40003/health  # Payment Gateway
+#    curl http://localhost:40004/health  # Order Service
+#    ...
+# ============================================================================

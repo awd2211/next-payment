@@ -1,0 +1,125 @@
+# ============================================================================
+# Docker Compose配置 - reconciliation-service
+# ============================================================================
+# 使用方式:
+#   docker-compose -f docker-compose/reconciliation-service.yml up -d
+#   docker-compose -f docker-compose/reconciliation-service.yml logs -f
+#   docker-compose -f docker-compose/reconciliation-service.yml down
+# ============================================================================
+
+version: '3.8'
+
+services:
+  reconciliation-service:
+    build:
+      context: ../backend
+      dockerfile: services/reconciliation-service/Dockerfile
+      args:
+        SERVICE_NAME: reconciliation-service
+        SERVICE_PORT: 40020
+    image: payment-platform/reconciliation-service:latest
+    container_name: reconciliation-service
+    hostname: reconciliation-service.payment-network
+    restart: unless-stopped
+    networks:
+      payment-network:
+        aliases:
+          - reconciliation-service.payment-network
+
+    ports:
+      - "40020:40020"
+
+    environment:
+      # 基础配置
+      - ENV=production
+      - SERVICE_NAME=reconciliation-service
+      - PORT=40020
+      - DB_NAME=payment_reconciliation
+
+      # 数据库配置
+      - DB_HOST=postgres.payment-network
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+
+      # Redis配置
+      - REDIS_HOST=redis.payment-network
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+      # Kafka配置
+      - KAFKA_BROKERS=kafka.payment-network:9092
+
+      # mTLS配置
+      - ENABLE_MTLS=true
+      - TLS_CERT_FILE=/app/certs/services/reconciliation-service/reconciliation-service.crt
+      - TLS_KEY_FILE=/app/certs/services/reconciliation-service/reconciliation-service.key
+      - TLS_CLIENT_CERT=/app/certs/services/reconciliation-service/reconciliation-service.crt
+      - TLS_CLIENT_KEY=/app/certs/services/reconciliation-service/reconciliation-service.key
+      - TLS_CA_FILE=/app/certs/ca/ca-cert.pem
+
+      # JWT配置
+      - JWT_SECRET=${JWT_SECRET:-payment-platform-super-secret-jwt-key-change-in-production}
+
+      # 可观测性配置
+      - JAEGER_ENDPOINT=http://jaeger.payment-network:14268/api/traces
+      - JAEGER_SAMPLING_RATE=10
+
+      # 下游服务URLs (HTTPS + mTLS)
+      - RECONCILIATION_SERVICE_URL=https://reconciliation-service.payment-network:40020
+      - ACCOUNTING_SERVICE_URL=https://accounting-service.payment-network:40007
+      - ADMIN_BFF_SERVICE_URL=https://admin-bff-service.payment-network:40001
+      - SETTLEMENT_SERVICE_URL=https://settlement-service.payment-network:40013
+      - MERCHANT_QUOTA_SERVICE_URL=https://merchant-quota-service.payment-network:40024
+      - CHANNEL_ADAPTER_URL=https://channel-adapter.payment-network:40005
+      - PAYMENT_GATEWAY_URL=https://payment-gateway.payment-network:40003
+      - MERCHANT_BFF_SERVICE_URL=https://merchant-bff-service.payment-network:40023
+      - MERCHANT_POLICY_SERVICE_URL=https://merchant-policy-service.payment-network:40022
+      - ORDER_SERVICE_URL=https://order-service.payment-network:40004
+      - NOTIFICATION_SERVICE_URL=https://notification-service.payment-network:40008
+      - KYC_SERVICE_URL=https://kyc-service.payment-network:40015
+      - DISPUTE_SERVICE_URL=https://dispute-service.payment-network:40021
+      - WITHDRAWAL_SERVICE_URL=https://withdrawal-service.payment-network:40014
+      - CONFIG_SERVICE_URL=https://config-service.payment-network:40010
+      - CASHIER_SERVICE_URL=https://cashier-service.payment-network:40016
+      - MERCHANT_AUTH_SERVICE_URL=https://merchant-auth-service.payment-network:40011
+      - ANALYTICS_SERVICE_URL=https://analytics-service.payment-network:40009
+      - RISK_SERVICE_URL=https://risk-service.payment-network:40006
+
+    volumes:
+      # 日志持久化
+      - reconciliation-service-logs:/app/logs
+
+      # mTLS证书 (只读)
+      - ../backend/certs:/app/certs:ro
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+# ============================================================================
+# 网络配置
+# ============================================================================
+networks:
+  payment-network:
+    external: true
+    name: payment_payment-network
+
+# ============================================================================
+# 数据卷配置
+# ============================================================================
+volumes:
+  reconciliation-service-logs:
+    driver: local

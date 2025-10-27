@@ -1,120 +1,96 @@
-# ============================================================
-# 多阶段构建 Dockerfile 模板
-# 用于构建所有 Go 微服务的 Docker 镜像
-#
-# 使用方法:
-#   docker build -f Dockerfile.template \
-#     --build-arg SERVICE_NAME=admin-service \
-#     --build-arg PORT=40001 \
-#     -t payment-platform/admin-service:latest \
-#     .
-# ============================================================
+# ============================================================================
+# Multi-stage Dockerfile Template for Payment Platform Microservices
+# ============================================================================
+# Stage 1: Builder - 编译Go二进制
+# Stage 2: Runtime - 最小化运行时镜像
+# ============================================================================
 
-# ============================================================
-# 阶段 1: 构建阶段 (Builder)
-# ============================================================
-FROM golang:1.21-alpine AS builder
+# ============================================================================
+# Stage 1: Builder
+# ============================================================================
+FROM golang:1.24-alpine AS builder
 
-# 安装必要的构建工具
-# git: 用于 go mod download
-# ca-certificates: HTTPS 连接
-RUN apk add --no-cache git ca-certificates tzdata
+# 安装构建依赖
+RUN apk add --no-cache \
+    git \
+    ca-certificates \
+    tzdata
 
 # 设置工作目录
 WORKDIR /build
 
-# ARG: 服务名称（构建时必须传入）
-ARG SERVICE_NAME
-
-# 复制 Go Workspace 配置和 pkg 模块
-COPY go.work go.work.sum ./
+# 复制go.work和go.mod (利用Docker层缓存)
+COPY go.work go.work.sum* ./
 COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY proto/go.mod proto/go.sum* ./proto/
 
-# 复制服务的 go.mod（利用 Docker 缓存层）
-COPY services/${SERVICE_NAME}/go.mod services/${SERVICE_NAME}/go.sum ./services/${SERVICE_NAME}/
+# 复制服务的go.mod
+ARG SERVICE_NAME
+COPY services/${SERVICE_NAME}/go.mod services/${SERVICE_NAME}/go.sum* ./services/${SERVICE_NAME}/
 
-# 下载所有依赖（单独一层，最大化缓存效率）
-RUN cd services/${SERVICE_NAME} && go mod download
+# 下载依赖 (这层会被缓存)
+RUN go mod download
 
-# 复制 pkg 源码
+# 复制源代码
 COPY pkg/ ./pkg/
-
-# 复制服务源码
+COPY proto/ ./proto/
 COPY services/${SERVICE_NAME}/ ./services/${SERVICE_NAME}/
 
-# 构建二进制文件
-# - CGO_ENABLED=0: 静态链接，不依赖 libc
-# - GOOS=linux: 目标操作系统 Linux
-# - -ldflags="-s -w": 去除调试信息和符号表，减小文件大小 (~30%)
-# - -trimpath: 去除文件系统路径信息，提高安全性
-RUN cd services/${SERVICE_NAME} && \
-    CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w" \
+# 编译服务
+WORKDIR /build/services/${SERVICE_NAME}
+
+# CGO_ENABLED=0: 静态链接,无需C库
+# -trimpath: 移除文件系统路径信息
+# -ldflags="-s -w": 去除调试信息和符号表,减小体积
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -trimpath \
+    -ldflags="-s -w" \
     -o /app/service \
     ./cmd/main.go
 
-# 验证构建结果
-RUN ls -lh /app/service && file /app/service
+# 验证二进制文件
+RUN chmod +x /app/service
 
-# ============================================================
-# 阶段 2: 运行阶段 (Runtime)
-# ============================================================
+# ============================================================================
+# Stage 2: Runtime
+# ============================================================================
 FROM alpine:3.19
 
 # 安装运行时依赖
-# - ca-certificates: HTTPS 连接
-# - tzdata: 时区数据
-# - curl: 健康检查
-RUN apk add --no-cache ca-certificates tzdata curl && \
-    rm -rf /var/cache/apk/*
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    curl \
+    && addgroup -g 1000 appgroup \
+    && adduser -D -u 1000 -G appgroup appuser
 
-# 设置时区为 UTC（生产环境建议）
-ENV TZ=UTC
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
-# 创建非 root 用户运行服务（安全最佳实践）
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser && \
-    mkdir -p /app/logs && \
-    chown -R appuser:appuser /app
+# 创建必要的目录
+RUN mkdir -p /app/logs /app/tmp /app/certs && \
+    chown -R appuser:appgroup /app
+
+# 从builder复制二进制文件
+COPY --from=builder --chown=appuser:appgroup /app/service /app/service
 
 # 设置工作目录
 WORKDIR /app
 
-# 从构建阶段复制二进制文件
-COPY --from=builder --chown=appuser:appuser /app/service /app/service
-
-# 确保二进制文件可执行
-RUN chmod +x /app/service
-
-# 切换到非 root 用户
+# 切换到非root用户
 USER appuser
 
-# ARG: 服务端口（默认 8000）
-ARG PORT=8000
-ENV PORT=${PORT}
+# 健康检查
+ARG SERVICE_PORT
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:${SERVICE_PORT}/health || exit 1
 
 # 暴露端口
-EXPOSE ${PORT}
+EXPOSE ${SERVICE_PORT}
 
-# 健康检查（每 30 秒检查一次，启动后 10 秒开始）
-# 注意：mTLS 模式下健康检查可能需要调整
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
-
-# 标签（镜像元数据）
-ARG SERVICE_NAME
-ARG VERSION=latest
-ARG BUILD_DATE
-ARG GIT_COMMIT
-
-LABEL org.opencontainers.image.title="${SERVICE_NAME}" \
-      org.opencontainers.image.description="Payment Platform ${SERVICE_NAME}" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.revision="${GIT_COMMIT}" \
-      org.opencontainers.image.vendor="Payment Platform" \
-      maintainer="payment-platform@example.com"
+# 设置环境变量
+ENV GIN_MODE=release
 
 # 启动服务
-ENTRYPOINT ["/app/service"]
+CMD ["/app/service"]

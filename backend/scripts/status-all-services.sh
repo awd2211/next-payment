@@ -17,10 +17,10 @@ echo ""
 # 日志目录
 LOG_DIR="/home/eric/payment/backend/logs"
 
-# 服务列表和端口（按端口排序）
+# 服务列表和端口（按端口排序）- 所有19个微服务
 declare -A SERVICES=(
-    ["admin-service"]=40001
-    ["merchant-service"]=40002
+    ["admin-bff-service"]=40001
+    ["merchant-bff-service"]=40023
     ["payment-gateway"]=40003
     ["order-service"]=40004
     ["channel-adapter"]=40005
@@ -30,13 +30,14 @@ declare -A SERVICES=(
     ["analytics-service"]=40009
     ["config-service"]=40010
     ["merchant-auth-service"]=40011
-    ["merchant-config-service"]=40012
+    ["merchant-policy-service"]=40012
     ["settlement-service"]=40013
     ["withdrawal-service"]=40014
     ["kyc-service"]=40015
+    ["cashier-service"]=40016
     ["reconciliation-service"]=40020
     ["dispute-service"]=40021
-    ["merchant-limit-service"]=40022
+    ["merchant-quota-service"]=40022
 )
 
 # 统计

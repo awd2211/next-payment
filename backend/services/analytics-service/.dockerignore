@@ -1,0 +1,49 @@
+# IDE files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/tmp/
+/bin/
+
+# Air hot reload
+.air.toml
+tmp/
+
+# Test files
+*_test.go
+testdata/
+
+# Documentation
+*.md
+docs/
+
+# Git
+.git
+.gitignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+
+# Coverage
+coverage.out
+*.cover

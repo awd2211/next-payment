@@ -19,8 +19,8 @@ LOG_DIR="/home/eric/payment/backend/logs"
 
 # 服务列表（所有19个微服务）
 SERVICES=(
-    "admin-service"
-    "merchant-service"
+    "admin-bff-service"
+    "merchant-bff-service"
     "payment-gateway"
     "order-service"
     "channel-adapter"
@@ -30,13 +30,14 @@ SERVICES=(
     "analytics-service"
     "config-service"
     "merchant-auth-service"
-    "merchant-config-service"
+    "merchant-policy-service"
     "settlement-service"
     "withdrawal-service"
     "kyc-service"
+    "cashier-service"
     "reconciliation-service"
     "dispute-service"
-    "merchant-limit-service"
+    "merchant-quota-service"
 )
 
 # 停止函数
