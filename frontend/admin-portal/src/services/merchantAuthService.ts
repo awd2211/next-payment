@@ -62,11 +62,11 @@ export interface UpdateSecuritySettingsRequest {
 export const merchantAuthService = {
   // API Key Management
   createAPIKey: (data: CreateAPIKeyRequest) => {
-    return request.post<{ data: APIKey }>('/api-keys', data)
+    return request.post<{ data: APIKey }>('/api/v1/admin/merchant-auth/api-keys', data)
   },
 
   listAPIKeys: (merchantId?: string) => {
-    return request.get<{ data: APIKey[] }>('/api-keys', {
+    return request.get<{ data: APIKey[] }>('/api/v1/admin/merchant-auth/api-keys', {
       params: { merchant_id: merchantId }
     })
   },
@@ -85,7 +85,7 @@ export const merchantAuthService = {
 
   // Session Management
   createSession: (merchantId: string, password: string) => {
-    return request.post<{ data: AuthSession }>('/auth/sessions', {
+    return request.post<{ data: AuthSession }>('/api/v1/admin/merchant-auth/sessions', {
       merchant_id: merchantId,
       password
     })
@@ -101,21 +101,21 @@ export const merchantAuthService = {
 
   // Security Settings
   getSecuritySettings: (merchantId?: string) => {
-    return request.get<{ data: SecuritySettings }>('/security/settings', {
+    return request.get<{ data: SecuritySettings }>('/api/v1/admin/merchant-auth/security', {
       params: { merchant_id: merchantId }
     })
   },
 
   updateSecuritySettings: (data: UpdateSecuritySettingsRequest) => {
-    return request.put<{ data: SecuritySettings }>('/security/settings', data)
+    return request.put<{ data: SecuritySettings }>('/api/v1/admin/merchant-auth/security', data)
   },
 
   enable2FA: (method: string) => {
-    return request.post('/security/2fa/enable', { method })
+    return request.post('/api/v1/admin/merchant-auth/2fa/enable', { method })
   },
 
   disable2FA: () => {
-    return request.post('/security/2fa/disable')
+    return request.post('/api/v1/admin/merchant-auth/2fa/disable')
   },
 
   // Signature Validation (Internal - for testing)
@@ -125,7 +125,7 @@ export const merchantAuthService = {
     signature: string
     body: string
   }) => {
-    return request.post('/auth/validate-signature', data)
+    return request.post('/api/v1/admin/merchant-auth/validate-signature', data)
   },
 }
 

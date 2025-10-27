@@ -82,7 +82,7 @@ export const withdrawalService = {
    * 获取提现申请列表
    */
   list: (params: ListWithdrawalsParams) => {
-    return request.get<ListWithdrawalsResponse>('/api/v1/withdrawals', { params })
+    return request.get<ListWithdrawalsResponse>('/api/v1/admin/withdrawals', { params })
   },
 
   /**
@@ -131,21 +131,21 @@ export const withdrawalService = {
    * 获取提现统计信息 - 注意: 后端需要实现此接口
    */
   getStats: (params?: { start_time?: string; end_time?: string; currency?: string }) => {
-    return request.get<{ data: WithdrawalStats }>('/api/v1/withdrawals/stats', { params })
+    return request.get<{ data: WithdrawalStats }>('/api/v1/admin/withdrawals/stats', { params })
   },
 
   /**
    * 批量批准提现申请 - 注意: 后端需要实现此接口
    */
   batchApprove: (ids: string[], remark?: string) => {
-    return request.post('/api/v1/withdrawals/batch/approve', { ids, remark })
+    return request.post('/api/v1/admin/withdrawals/batch/approve', { ids, remark })
   },
 
   /**
    * 导出提现记录 - 注意: 后端需要实现此接口
    */
   export: (params: ListWithdrawalsParams) => {
-    return request.download('/api/v1/withdrawals/export', 'withdrawals.xlsx', { params })
+    return request.download('/api/v1/admin/withdrawals/export', 'withdrawals.xlsx', { params })
   },
 }
 

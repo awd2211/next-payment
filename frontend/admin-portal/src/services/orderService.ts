@@ -56,32 +56,6 @@ export interface OrderStatsParams {
   end_time?: string
 }
 
-export interface CreateOrderRequest {
-  merchant_id: string
-  merchant_order_no: string
-  product_name: string
-  amount: number
-  currency: string
-  customer_id?: string
-  customer_email?: string
-  customer_phone?: string
-  notify_url?: string
-  return_url?: string
-  client_ip?: string
-  metadata?: any
-  expires_in?: number // seconds
-}
-
-export interface DailySummary {
-  date: string
-  total_count: number
-  total_amount: number
-  paid_count: number
-  paid_amount: number
-  cancelled_count: number
-  cancelled_amount: number
-}
-
 export interface OrderStatistics {
   merchant_id?: string
   currency?: string
@@ -98,68 +72,29 @@ export interface OrderStatistics {
 }
 
 export const orderService = {
-  // Order Management
-  create: (data: CreateOrderRequest) => {
-    return request.post<{ data: Order }>('/orders', data)
-  },
-
-  get: (orderNo: string) => {
-    return request.get<{ data: Order }>(`/orders/${orderNo}`)
-  },
-
+  // 获取订单列表 (管理员通过admin-bff-service)
   list: (params: OrderListParams) => {
-    return request.get<OrderListResponse>('/orders', { params })
+    return request.get<OrderListResponse>('/api/v1/admin/orders', { params })
   },
 
-  batchGet: (orderNos: string[]) => {
-    return request.post<{ data: Order[] }>('/orders/batch', { order_nos: orderNos })
+  // 获取订单详情
+  get: (orderNo: string) => {
+    return request.get<{ data: Order }>(\`/api/v1/admin/orders/\${orderNo}\`)
   },
 
-  // Order Status Operations
-  cancel: (orderNo: string, reason?: string) => {
-    return request.post(`/orders/${orderNo}/cancel`, { reason })
+  // 获取指定商户的订单
+  getMerchantOrders: (merchantId: string, params?: { page?: number; page_size?: number }) => {
+    return request.get<OrderListResponse>(\`/api/v1/admin/orders/merchant/\${merchantId}\`, { params })
   },
 
-  markAsPaid: (orderNo: string, data?: { payment_no?: string; paid_at?: string }) => {
-    return request.post(`/orders/${orderNo}/pay`, data)
+  // 获取订单统计信息
+  getStatistics: (params?: OrderStatsParams) => {
+    return request.get<{ data: OrderStatistics }>('/api/v1/admin/orders/statistics', { params })
   },
 
-  refund: (orderNo: string, data: { amount?: number; reason?: string }) => {
-    return request.post(`/orders/${orderNo}/refund`, data)
-  },
-
-  ship: (orderNo: string, data: { tracking_no?: string; carrier?: string }) => {
-    return request.post(`/orders/${orderNo}/ship`, data)
-  },
-
-  complete: (orderNo: string) => {
-    return request.post(`/orders/${orderNo}/complete`)
-  },
-
-  updateStatus: (orderNo: string, status: string) => {
-    return request.put(`/orders/${orderNo}/status`, { status })
-  },
-
-  // Statistics & Reports
-  getStats: (params: OrderStatsParams) => {
-    return request.get<{ data: OrderStats }>('/orders/stats', { params })
-  },
-
-  getStatistics: (params: {
-    merchant_id?: string
-    start_time?: string
-    end_time?: string
-    currency?: string
-  }) => {
-    return request.get<{ data: OrderStatistics }>('/statistics/orders', { params })
-  },
-
-  getDailySummary: (params: {
-    merchant_id?: string
-    date?: string
-    currency?: string
-  }) => {
-    return request.get<{ data: DailySummary }>('/statistics/daily-summary', { params })
+  // 获取订单状态摘要
+  getStatusSummary: (params?: { merchant_id?: string }) => {
+    return request.get('/api/v1/admin/orders/status-summary', { params })
   },
 }
 

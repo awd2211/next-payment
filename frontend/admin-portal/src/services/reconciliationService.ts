@@ -103,7 +103,7 @@ export const reconciliationService = {
    * Get reconciliation records list
    */
   list: (params: ListReconciliationParams) => {
-    return request.get<ListReconciliationResponse>('/api/v1/reconciliation/tasks', { params })
+    return request.get<ListReconciliationResponse>('/api/v1/admin/reconciliation/tasks', { params })
   },
 
   /**
@@ -132,7 +132,7 @@ export const reconciliationService = {
     formData.append('recon_date', data.recon_date)
     if (data.file) formData.append('file', data.file)
 
-    return request.post<CreateReconciliationResponse>('/api/v1/reconciliation/tasks', formData, {
+    return request.post<CreateReconciliationResponse>('/api/v1/admin/reconciliation/tasks', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -166,7 +166,7 @@ export const reconciliationService = {
    * Export reconciliation records - 注意: 后端需要实现此接口
    */
   export: (params: ListReconciliationParams) => {
-    return request.get('/api/v1/reconciliation/tasks/export', {
+    return request.get('/api/v1/admin/reconciliation/tasks/export', {
       params,
       responseType: 'blob',
     })
@@ -176,7 +176,7 @@ export const reconciliationService = {
    * Get reconciliation statistics - 注意: 后端需要实现此接口
    */
   getStats: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get('/api/v1/reconciliation/stats', { params })
+    return request.get('/api/v1/admin/reconciliation/stats', { params })
   },
 
   /**

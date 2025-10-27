@@ -86,7 +86,7 @@ export const disputeService = {
    * Get disputes list with filters
    */
   list: (params: ListDisputesParams) => {
-    return request.get<ListDisputesResponse>('/api/v1/disputes', { params })
+    return request.get<ListDisputesResponse>('/api/v1/admin/disputes', { params })
   },
 
   /**
@@ -137,7 +137,7 @@ export const disputeService = {
    * Export disputes report - 注意: 后端需要实现此接口
    */
   export: (params: ListDisputesParams) => {
-    return request.get('/api/v1/disputes/export', {
+    return request.get('/api/v1/admin/disputes/export', {
       params,
       responseType: 'blob',
     })
@@ -147,6 +147,6 @@ export const disputeService = {
    * Get dispute statistics (对应后端的statistics接口)
    */
   getStats: (params?: { start_date?: string; end_date?: string }) => {
-    return request.get('/api/v1/disputes/statistics', { params })
+    return request.get('/api/v1/admin/disputes/statistics', { params })
   },
 }

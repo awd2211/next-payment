@@ -151,87 +151,73 @@ export interface KYCStatistics {
 // ===== API Service =====
 
 export const kycService = {
-  // ===== 文档管理 API =====
+  // ===== 文档管理 API (管理员通过BFF) =====
 
   /**
-   * 获取KYC文档列表
+   * 获取所有KYC文档列表 (管理员)
    */
   listDocuments: (params: ListDocumentsParams) => {
-    return request.get<ListDocumentsResponse>('/api/v1/kyc/documents', { params })
+    return request.get<ListDocumentsResponse>('/api/v1/admin/kyc/documents', { params })
   },
 
   /**
    * 获取单个文档详情
    */
   getDocument: (id: string) => {
-    return request.get<{ data: KYCDocument }>(`/api/v1/kyc/documents/${id}`)
-  },
-
-  /**
-   * 提交KYC文档
-   */
-  submitDocument: (data: Partial<KYCDocument>) => {
-    return request.post('/api/v1/kyc/documents', data)
+    return request.get<{ data: KYCDocument }>(`/api/v1/admin/kyc/documents/${id}`)
   },
 
   /**
    * 批准文档
    */
   approveDocument: (id: string, remark?: string) => {
-    return request.post(`/api/v1/kyc/documents/${id}/approve`, { remark })
+    return request.post(`/api/v1/admin/kyc/documents/${id}/approve`, { remark })
   },
 
   /**
    * 拒绝文档
    */
   rejectDocument: (id: string, reason: string, remark?: string) => {
-    return request.post(`/api/v1/kyc/documents/${id}/reject`, { reason, remark })
+    return request.post(`/api/v1/admin/kyc/documents/${id}/reject`, { reason, remark })
   },
 
-  // ===== 资质审核 API =====
+  // ===== 资质审核 API (管理员通过BFF) =====
 
   /**
-   * 获取资质列表
+   * 获取所有资质列表 (管理员)
    */
   listQualifications: (params: ListQualificationsParams) => {
-    return request.get<ListQualificationsResponse>('/api/v1/kyc/qualifications', { params })
+    return request.get<ListQualificationsResponse>('/api/v1/admin/kyc/qualifications', { params })
   },
 
   /**
    * 获取商户资质
    */
   getQualificationByMerchant: (merchantId: string) => {
-    return request.get<{ data: BusinessQualification }>(`/api/v1/kyc/qualifications/merchant/${merchantId}`)
-  },
-
-  /**
-   * 提交企业资质
-   */
-  submitQualification: (data: Partial<BusinessQualification>) => {
-    return request.post('/api/v1/kyc/qualifications', data)
+    return request.get<{ data: BusinessQualification }>(`/api/v1/admin/kyc/qualifications/${merchantId}`)
   },
 
   /**
    * 批准资质
    */
   approveQualification: (id: string, remark?: string) => {
-    return request.post(`/api/v1/kyc/qualifications/${id}/approve`, { remark })
+    return request.post(`/api/v1/admin/kyc/qualifications/${id}/approve`, { remark })
   },
 
   /**
    * 拒绝资质
    */
   rejectQualification: (id: string, reason: string, remark?: string) => {
-    return request.post(`/api/v1/kyc/qualifications/${id}/reject`, { reason, remark })
+    return request.post(`/api/v1/admin/kyc/qualifications/${id}/reject`, { reason, remark })
   },
 
-  // ===== 商户等级 API =====
+  // ===== 商户等级 API (管理员通过BFF) =====
 
   /**
    * 获取商户等级信息
    */
   getMerchantLevel: (merchantId: string) => {
-    return request.get<{ data: MerchantLevel }>(`/api/v1/kyc/levels/${merchantId}`)
+    return request.get<{ data: MerchantLevel }>(`/api/v1/admin/kyc/levels/${merchantId}`)
   },
 
   /**
@@ -239,33 +225,47 @@ export const kycService = {
    */
   checkEligibility: (merchantId: string) => {
     return request.get<{ data: { eligible: boolean; requirements: string[] } }>(
-      `/api/v1/kyc/levels/${merchantId}/eligibility`
+      `/api/v1/admin/kyc/levels/${merchantId}/eligibility`
     )
   },
 
-  // ===== 风险预警 API =====
+  /**
+   * 升级商户等级
+   */
+  upgradeLevel: (merchantId: string, data: { target_level: string; reason?: string }) => {
+    return request.post(`/api/v1/admin/kyc/levels/${merchantId}/upgrade`, data)
+  },
+
+  /**
+   * 降级商户等级
+   */
+  downgradeLevel: (merchantId: string, data: { target_level: string; reason: string }) => {
+    return request.post(`/api/v1/admin/kyc/levels/${merchantId}/downgrade`, data)
+  },
+
+  // ===== 风险预警 API (管理员通过BFF) =====
 
   /**
    * 获取预警列表
    */
   listAlerts: (params: ListAlertsParams) => {
-    return request.get<ListAlertsResponse>('/api/v1/kyc/alerts', { params })
+    return request.get<ListAlertsResponse>('/api/v1/admin/kyc/alerts', { params })
   },
 
   /**
-   * 解决预警 - 注意: 后端需要实现此接口
+   * 解决预警
    */
   resolveAlert: (id: string, resolutionNote: string) => {
-    return request.post(`/api/v1/kyc/alerts/${id}/resolve`, { resolution_note: resolutionNote })
+    return request.post(`/api/v1/admin/kyc/alerts/${id}/resolve`, { resolution_note: resolutionNote })
   },
 
-  // ===== 统计信息 API =====
+  // ===== 统计信息 API (管理员通过BFF) =====
 
   /**
-   * 获取KYC统计信息 - 注意: 后端需要实现此接口
+   * 获取KYC等级统计信息
    */
   getStatistics: () => {
-    return request.get<{ data: KYCStatistics }>('/api/v1/kyc/statistics')
+    return request.get<{ data: KYCStatistics }>('/api/v1/admin/kyc/levels/statistics')
   },
 }
 

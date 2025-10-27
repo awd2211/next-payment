@@ -57,7 +57,7 @@ export interface SettlementStatsParams {
 export const settlementService = {
   // 获取结算列表
   list: (params: SettlementListParams) => {
-    return request.get<SettlementListResponse>('/api/v1/settlements', { params })
+    return request.get<SettlementListResponse>('/api/v1/admin/settlements', { params })
   },
 
   // 获取结算详情
@@ -67,12 +67,12 @@ export const settlementService = {
 
   // 获取结算统计 (注意: 后端需要实现此接口)
   getStats: (params: SettlementStatsParams) => {
-    return request.get<{ data: SettlementStats }>('/api/v1/settlements/stats', { params })
+    return request.get<{ data: SettlementStats }>('/api/v1/admin/settlements/stats', { params })
   },
 
   // 创建结算单
   create: (data: Partial<Settlement>) => {
-    return request.post<Settlement>('/api/v1/settlements', data)
+    return request.post<Settlement>('/api/v1/admin/settlements', data)
   },
 
   // 更新结算单 (注意: 后端不支持PUT更新，使用approve/reject/execute代替)
@@ -97,7 +97,7 @@ export const settlementService = {
 
   // 导出结算数据 (注意: 后端需要实现此接口)
   export: (params: SettlementListParams) => {
-    return request.get('/api/v1/settlements/export', { params, responseType: 'blob' })
+    return request.get('/api/v1/admin/settlements/export', { params, responseType: 'blob' })
   },
 }
 
