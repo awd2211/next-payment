@@ -326,13 +326,13 @@ func (s *SettlementServer) GetSettlementStats(ctx context.Context, req *pb.GetSe
 			MerchantId:              req.MerchantId,
 			TotalSettledAmount:      report.TotalSettlement,
 			TotalSettledFee:         report.TotalFee,
-			PendingSettlementAmount: 0, // TODO: Calculate pending amount
+			PendingSettlementAmount: report.PendingAmount,
 			SettlementCount:         int32(report.CompletedCount),
 			PendingCount:            int32(report.PendingCount),
 			ByStatus: []*pb.SettlementByStatus{
 				{Status: "completed", Count: int32(report.CompletedCount), Amount: report.TotalSettlement},
-				{Status: "pending", Count: int32(report.PendingCount), Amount: 0},
-				{Status: "rejected", Count: int32(report.RejectedCount), Amount: 0},
+				{Status: "pending", Count: int32(report.PendingCount), Amount: report.PendingAmount},
+				{Status: "rejected", Count: int32(report.RejectedCount), Amount: report.RejectedAmount},
 			},
 		},
 	}, nil

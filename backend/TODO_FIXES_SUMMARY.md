@@ -1,6 +1,6 @@
 # TODO 修复总结报告
 
-## 已完成修复 (3个高优先级)
+## 已完成修复 (6个高优先级 + 中优先级)
 
 ### 1. ✅ merchant-auth-service: API Key 归属验证 (安全修复)
 
@@ -73,17 +73,79 @@ go get github.com/oschwald/geoip2-golang
 
 ---
 
+### 4. ✅ channel-adapter: 预授权渠道选择 (数据追踪)
+
+**文件新增**:
+- `internal/model/transaction.go`
+  - 新增 `PreAuthRecord` 模型
+  - 支持预授权记录的渠道跟踪
+
+- `internal/repository/pre_auth_repository.go`
+  - 新增 `PreAuthRepository` 接口和实现
+  - 提供 `GetByChannelPreAuthNo()` 查询方法
+
+**文件修改**:
+- `internal/service/channel_service.go`
+  - 修改 `CreatePreAuth()`: 保存预授权记录到数据库
+  - 修改 `QueryPreAuth()`: 从数据库查询渠道信息
+  - 移除 `CapturePreAuth()` 和 `CancelPreAuth()` 的手动渠道参数
+
+- `cmd/main.go`
+  - 添加 `PreAuthRecord` 到数据库自动迁移
+  - 注入 `preAuthRepo` 到 `channelService`
+
+**功能改进**:
+- ✅ 自动记录预授权的支付渠道
+- ✅ 查询预授权时无需手动指定渠道
+- ✅ 支持预授权过期时间和金额跟踪
+
+**测试结果**: ✅ 编译通过
+
+---
+
+### 5. ✅ accounting-service: 实时汇率API集成 (已完成)
+
+**文件修改**:
+- `internal/service/account_service.go`
+  - 更新TODO注释: 已实现汇率API调用
+  - 已集成 `channelAdapterClient.GetExchangeRate()`
+  - 已实现降级策略(备用汇率表)
+
+**功能验证**:
+- ✅ `getExchangeRate()` 方法已完整实现
+- ✅ 优先调用 channel-adapter 汇率API
+- ✅ 失败时降级到数据库备用汇率
+- ✅ 包含完整的错误处理和日志记录
+
+**修改内容**: 仅更新了代码注释,移除过时的TODO标记
+
+**测试结果**: ✅ 编译通过
+
+---
+
+### 6. ✅ settlement-service: 待结算金额计算
+
+**文件修改**:
+- `internal/service/settlement_service.go`
+  - 修改 `SettlementReport` 结构:添加 `PendingAmount` 和 `RejectedAmount` 字段
+  - 修改 `GetSettlementReport()`: 在循环中累加待结算和已拒绝金额
+
+- `internal/grpc/settlement_server.go`
+  - 修改 `GetSettlementStats()`: 使用 `report.PendingAmount` 替代硬编码0
+  - 更新 `ByStatus` 数组: 填充待处理和已拒绝的金额
+
+**功能改进**:
+- ✅ 统计报表包含待结算金额
+- ✅ 统计报表包含已拒绝金额
+- ✅ 按状态分组显示金额明细
+
+**测试结果**: ✅ 编译通过
+
+---
+
 ## 待完成 TODO
 
-### 中优先级 (2个)
-
-1. **channel-adapter**: 预授权渠道选择
-   - 文件: `internal/service/channel_service.go:728`
-   - 需求: 预授权完成时需要知道原始支付渠道
-
-2. **accounting-service**: 实时汇率API调用
-   - 文件: `internal/service/account_service.go:1655`
-   - 需求: 跨币种核算需要实时汇率
+### 中优先级 (0个) - 全部完成 ✅
 
 ### 低优先级 (17个)
 
@@ -109,7 +171,10 @@ go get github.com/oschwald/geoip2-golang
 |------|---------|---------|---------|---------|
 | merchant-auth-service | 0 | 2 | 18 | 2 |
 | payment-gateway | 1 | 3 | 85 | 3 |
-| **总计** | 1 | 5 | 103 | 5 |
+| channel-adapter | 1 | 2 | 92 | 8 |
+| accounting-service | 0 | 1 | 1 | 1 |
+| settlement-service | 0 | 2 | 6 | 3 |
+| **总计** | 2 | 10 | 202 | 17 |
 
 ---
 
@@ -120,14 +185,22 @@ go get github.com/oschwald/geoip2-golang
 - [ ] 集成 GeoIP2 库实现真实的IP地理位置查询
 - [ ] 添加单元测试覆盖新增代码
 
-### Phase 2: 中优先级TODO (2-3天)
-- [ ] channel-adapter: 实现预授权渠道记录查询
-- [ ] accounting-service: 集成channel-adapter汇率API
+### Phase 2: 中优先级TODO - ✅ 已全部完成!
+- [x] merchant-auth-service: API Key归属验证 (安全修复)
+- [x] payment-gateway: Webhook密钥动态获取
+- [x] payment-gateway: 国家判断逻辑
+- [x] channel-adapter: 预授权渠道选择
+- [x] accounting-service: 实时汇率API集成
+- [x] settlement-service: 待结算金额计算
 
 ### Phase 3: 低优先级TODO (按需)
-- [ ] admin-bff-service: 商户审核流程
-- [ ] analytics-service: 报表功能
-- [ ] 日志聚合集成(Loki)
+- [ ] config-service: Health checker状态更新逻辑
+- [ ] kyc-service: 邮箱/手机验证集成 (2个TODO)
+- [ ] admin-bff-service: 商户审核流程 (3个TODO)
+- [ ] admin-bff-service & merchant-bff-service: Loki日志集成
+- [ ] risk-service: 规则匹配详情和反馈机制
+- [ ] analytics-service: 跨商户统计和报表生成 (4个TODO)
+- [ ] merchant-policy-service: 渠道策略仓储实现
 
 ---
 

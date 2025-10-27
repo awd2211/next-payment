@@ -598,13 +598,15 @@ func (s *settlementService) GenerateAutoSettlement(ctx context.Context, merchant
 
 // SettlementReport 结算报表
 type SettlementReport struct {
-	TotalAmount       int64 `json:"total_amount"`
-	TotalCount        int   `json:"total_count"`
-	TotalFee          int64 `json:"total_fee"`
-	TotalSettlement   int64 `json:"total_settlement"`
-	CompletedCount    int   `json:"completed_count"`
-	PendingCount      int   `json:"pending_count"`
-	RejectedCount     int   `json:"rejected_count"`
+	TotalAmount         int64 `json:"total_amount"`
+	TotalCount          int   `json:"total_count"`
+	TotalFee            int64 `json:"total_fee"`
+	TotalSettlement     int64 `json:"total_settlement"`
+	PendingAmount       int64 `json:"pending_amount"`        // 待结算金额
+	RejectedAmount      int64 `json:"rejected_amount"`       // 已拒绝金额
+	CompletedCount      int   `json:"completed_count"`
+	PendingCount        int   `json:"pending_count"`
+	RejectedCount       int   `json:"rejected_count"`
 	AvgSettlementAmount int64 `json:"avg_settlement_amount"`
 }
 
@@ -635,8 +637,10 @@ func (s *settlementService) GetSettlementReport(ctx context.Context, merchantID 
 			report.CompletedCount++
 		case model.SettlementStatusPending:
 			report.PendingCount++
+			report.PendingAmount += settlement.SettlementAmount
 		case model.SettlementStatusRejected:
 			report.RejectedCount++
+			report.RejectedAmount += settlement.SettlementAmount
 		}
 	}
 
